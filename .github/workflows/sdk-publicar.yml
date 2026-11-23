@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: publicacion-sdk
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: sdk-${{ needs.verificar.outputs.version }}
           path: artefactos
@@ -121,7 +121,7 @@ jobs:
       contents: read
       id-token: write # procedencia (provenance) del paquete
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: sdk-${{ needs.verificar.outputs.version }}
           path: artefactos
@@ -147,7 +147,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: sdk-${{ needs.verificar.outputs.version }}
           path: artefactos
