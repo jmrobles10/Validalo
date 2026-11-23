@@ -1,46 +1,46 @@
 <Project>
   <ItemGroup>
-    <PackageVersion Include="Marten" Version="9.58.0" />
-    <PackageVersion Include="JasperFx.Events" Version="2.101.0" />
-    <PackageVersion Include="JasperFx.Events.SourceGenerator" Version="2.101.0" />
+    <PackageVersion Include="Marten" Version="9.62.0" />
+    <PackageVersion Include="JasperFx.Events" Version="2.102.0" />
+    <PackageVersion Include="JasperFx.Events.SourceGenerator" Version="2.102.0" />
     <PackageVersion Include="WolverineFx" Version="6.62.0" />
-    <PackageVersion Include="WolverineFx.Http" Version="6.63.0" />
-    <PackageVersion Include="WolverineFx.Marten" Version="6.63.0" />
-    <PackageVersion Include="WolverineFx.RuntimeCompilation" Version="6.63.0" />
+    <PackageVersion Include="WolverineFx.Http" Version="6.64.2" />
+    <PackageVersion Include="WolverineFx.Marten" Version="6.64.2" />
+    <PackageVersion Include="WolverineFx.RuntimeCompilation" Version="6.64.2" />
     <PackageVersion Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
     <!-- Alinea la versión transitiva de JwtBearer con JsonWebTokens: IdentityModel exige la misma versión en todos sus paquetes. -->
     <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.23.0" />
-    <PackageVersion Include="Scalar.AspNetCore" Version="2.19.0" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.21.0" />
     <!-- Passkeys (WebAuthn) del ingreso sin contraseñas (ING-2; MIT): verificación de registro y de aserción en el servidor. -->
-    <PackageVersion Include="Fido2" Version="4.3.2" />
+    <PackageVersion Include="Fido2" Version="4.3.3" />
     <!-- Fido2 4.3.2 arrastra System.Formats.Cbor 9.0.0, con una vulnerabilidad conocida (NU1902, corregida desde la 10.0.15): las pruebas de integración fijan la corregida; la API usa la del framework. -->
     <PackageVersion Include="System.Formats.Cbor" Version="10.0.15" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="MailKit" Version="4.18.2" />
     <!-- Almacenamiento de binarios compatible con S3 (MinIO en desarrollo y on-premise; S3 en la nube). -->
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.104.11" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.1.2" />
     <!-- Certificados (CE-4, CE-6): sello Ed25519 (.NET 10 no lo trae; ya llegaba transitivo por MailKit/MimeKit, MIT) y QR (MIT). -->
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
-    <PackageVersion Include="QRCoder" Version="1.8.1" />
+    <PackageVersion Include="QRCoder" Version="1.9.0" />
     <!-- Recorte de páginas de los PDF que se envían al análisis con IA (IA-5; Apache-2.0). -->
     <PackageVersion Include="PdfPig" Version="0.1.16" />
     <!-- Lectura de la BD del Portal de Proveedores en el importador de la ficha (F4, FM-39; MIT). -->
-    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.1" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.8" />
     <!-- SqlClient 6.1.1 arrastra Pkcs 9.0.4, con vulnerabilidades conocidas (NU1902/NU1903): se fija la versión corregida que ya usa el resto de la solución. -->
-    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
     <!-- Pruebas -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
-    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.1" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <!-- Anotaciones de las pruebas fallidas en el check run de GitHub Actions (MIT): se activa con el logger GitHubActions en ci.yml. -->
     <PackageVersion Include="GitHubActionsTestLogger" Version="3.0.5" />
     <PackageVersion Include="Alba" Version="8.5.3" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.17.0" />
     <PackageVersion Include="Testcontainers.Minio" Version="4.15.0" />
   </ItemGroup>
 </Project>
