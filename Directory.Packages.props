@@ -13,7 +13,7 @@
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
     <!-- Alinea la versión transitiva de JwtBearer con JsonWebTokens: IdentityModel exige la misma versión en todos sus paquetes. -->
     <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.23.0" />
-    <PackageVersion Include="Scalar.AspNetCore" Version="2.19.0" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="3.2.0" />
     <!-- Passkeys (WebAuthn) del ingreso sin contraseñas (ING-2; MIT): verificación de registro y de aserción en el servidor. -->
     <PackageVersion Include="Fido2" Version="4.3.2" />
     <!-- Fido2 4.3.2 arrastra System.Formats.Cbor 9.0.0, con una vulnerabilidad conocida (NU1902, corregida desde la 10.0.15): las pruebas de integración fijan la corregida; la API usa la del framework. -->
