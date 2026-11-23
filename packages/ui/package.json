@@ -11,9 +11,9 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@mui/x-date-pickers": "9.17.0",
+    "@mui/x-date-pickers": "9.18.0",
     "dayjs": "1.11.23",
-    "lucide-react": "^1.70.0"
+    "lucide-react": "^1.77.0"
   },
   "peerDependencies": {
     "@emotion/react": "^11.14.0",
