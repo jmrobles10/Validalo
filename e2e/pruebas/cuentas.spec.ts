@@ -34,20 +34,16 @@ test('el proveedor designa su cuenta para Norte y queda designada cuando la apru
   await nueva.getByLabel('Número de cuenta').fill('031-123456-78');
   await nueva.getByLabel('Titular de la cuenta').fill('Ferretería El Tornillo S.A.S.');
   await nueva.getByLabel('Identificación del titular').fill('NIT 900123456');
+  // Cada cuenta se registra con su certificación bancaria (CB-1): sin el archivo no se guarda.
   await nueva.getByRole('button', { name: 'Guardar cuenta' }).click();
-  await expect(page.getByText(/· \*\*\*\*5678 ·/)).toBeVisible();
+  await expect(nueva).toContainText('Adjunta la certificación bancaria de esta cuenta.');
+  await nueva.getByTestId('entrada-archivo').setInputFiles(pdf('Certificacion Bancolombia Tornillo'));
+  await nueva.getByRole('button', { name: 'Guardar cuenta' }).click();
+  await expect(page.getByText(/· \*\*\*\*5678 ·/)).toBeVisible({ timeout: 30_000 });
+  // La certificación quedó en la tarjeta de su cuenta, y con ella ya se puede designar.
+  await expect(page.getByRole('region', { name: 'Certificación bancaria' })).toContainText('Versión 1');
 
-  // Sin certificación bancaria no puede designarla: la pantalla lo lleva a subirla.
   const porEmpresa = page.getByRole('region', { name: 'En qué cuenta te paga cada empresa' }).or(page.locator('section', { hasText: 'En qué cuenta te paga cada empresa' }));
-  await porEmpresa.getByRole('button', { name: 'Elegir cuenta' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Designar cuenta' }).click();
-  await page.getByRole('link', { name: 'Subir certificación bancaria' }).click();
-  const selector = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Elegir archivo' }).click();
-  await (await selector).setFiles(pdf('Certificacion Bancolombia Tornillo'));
-  await expect(page.getByText(/Es tu versión 1 de Certificación bancaria/)).toBeVisible({ timeout: 30_000 });
-
-  await page.goto('/cuentas');
   await porEmpresa.getByRole('button', { name: 'Elegir cuenta' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Designar cuenta' }).click();
   await expect(page.getByText(`Pendiente de aprobación de ${e.norte.nombre}`)).toBeVisible();

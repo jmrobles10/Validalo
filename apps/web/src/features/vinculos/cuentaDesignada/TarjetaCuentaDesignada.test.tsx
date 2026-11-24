@@ -2,7 +2,16 @@ import { ThemeProvider } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { configurarCliente, reiniciarCliente, SCOPES, type CuentaDesignadaDelVinculoDto, type CuentaDesignadaDto } from '@validalo/api-client';
+import {
+  configurarCliente,
+  reiniciarCliente,
+  SCOPES,
+  type CampoCruzadoDto,
+  type CertificacionDeCuentaDelVinculoDto,
+  type CruceDeSeccionDto,
+  type CuentaDesignadaDelVinculoDto,
+  type CuentaDesignadaDto,
+} from '@validalo/api-client';
 import { createValidaloTheme } from '@validalo/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAvisos } from '../../../shared/useAvisos';
@@ -130,5 +139,101 @@ describe('Cuenta bancaria designada del vínculo', () => {
     expect(screen.queryByText('00123454321')).not.toBeInTheDocument();
     expect(screen.getByText('Solo quien aprueba cuentas ve el número completo.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Aprobar' })).not.toBeInTheDocument();
+  });
+});
+
+/** La certificación de la cuenta cruzada con ella (CB-1): el número va enmascarado en el cruce, el completo solo aparece en los datos de la cuenta. */
+const campo = (campo: string, etiqueta: string, declarado: string, extraido: string, resultado: 'Coincide' | 'Discrepa', critico: boolean): CampoCruzadoDto => ({
+  campo,
+  etiqueta,
+  declarado,
+  extraido,
+  resultado,
+  critico,
+  detalle: null,
+});
+
+const cruce = (campos: CampoCruzadoDto[]): CruceDeSeccionDto => ({
+  documentoId: 'doc-1',
+  versionDocumento: 2,
+  tipoDocumento: 'CERTIFICACION_BANCARIA',
+  nombreDocumento: 'Certificación bancaria · Bancolombia ****4321',
+  confianza: 0.93,
+  legible: true,
+  fecha: '2026-11-10T10:00:00Z',
+  coincidencias: campos.filter((c) => c.resultado === 'Coincide').length,
+  discrepancias: campos.filter((c) => c.resultado === 'Discrepa').length,
+  noVerificables: 0,
+  discrepanciaCritica: campos.some((c) => c.critico && c.resultado === 'Discrepa'),
+  campos,
+});
+
+const certificacion = (cambios: Partial<CertificacionDeCuentaDelVinculoDto>): CertificacionDeCuentaDelVinculoDto => ({
+  documentoId: 'doc-1',
+  version: 2,
+  cargadaEn: '2026-11-10T09:00:00Z',
+  verificacion: 'Coincide',
+  sinAnalisis: false,
+  discrepanciaCritica: false,
+  cruce: null,
+  ...cambios,
+});
+
+describe('La certificación de la cuenta junto a la cuenta designada', () => {
+  it('muestra la versión que recibió la empresa y lo que la IA leyó frente a lo que declaró el tercero, con el número enmascarado', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
+    const campos = [campo('numero', 'Número de la cuenta', '****4321', '****4321', 'Coincide', true), campo('titular', 'Titular de la cuenta', 'Ferretería El Tornillo', 'FERRETERIA EL TORNILLO', 'Coincide', true)];
+    montar({ ...CON_PROPUESTA, propuesta: { ...CUENTA, certificacion: certificacion({ cruce: cruce(campos) }) } });
+
+    const region = await screen.findByRole('region', { name: 'Certificación bancaria de la cuenta' });
+    expect(region.querySelector('[data-estado="Aprobado"]')).toHaveTextContent('Coincide');
+    expect(region).toHaveTextContent('Versión 2 · subida el');
+    expect(within(region).getByRole('table', { name: /Cruce con Certificación bancaria/ })).toBeInTheDocument();
+    expect(within(region).queryByRole('alert')).not.toBeInTheDocument();
+    // El número completo está en los datos de la cuenta (para cotejarlo), no en el cruce.
+    expect(within(region).queryByText('00123454321')).not.toBeInTheDocument();
+    expect(screen.getByText('00123454321')).toBeInTheDocument();
+  });
+
+  it('una diferencia en lo crítico va destacada en la propuesta y al aprobar, sin bloquear la aprobación', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
+    const usuario = userEvent.setup();
+    const campos = [campo('numero', 'Número de la cuenta', '****4321', '****9999', 'Discrepa', true), campo('banco', 'Banco', 'Bancolombia', 'Bancolombia', 'Coincide', false)];
+    const peticiones = montar(
+      { ...CON_PROPUESTA, propuesta: { ...CUENTA, certificacion: certificacion({ verificacion: 'Discrepa', discrepanciaCritica: true, cruce: cruce(campos) }) } },
+      (url, metodo) => (metodo === 'POST' && url.endsWith('/aprobar') ? { ...CON_PROPUESTA, puedesAprobar: false } : null),
+    );
+
+    const region = await screen.findByRole('region', { name: 'Certificación bancaria de la cuenta' });
+    expect(within(region).getByText('No coincide')).toBeInTheDocument();
+    expect(within(region).getByRole('alert')).toHaveTextContent('La certificación no coincide con la cuenta en lo crítico: Número de la cuenta.');
+    expect(within(region).getByRole('row', { name: 'Número de la cuenta: Difiere' })).toBeInTheDocument();
+
+    // Al aprobar, el diálogo repite la advertencia, pero no impide confirmar.
+    await usuario.click(screen.getByRole('button', { name: 'Aprobar' }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(dialogo).toHaveTextContent('La certificación de esta cuenta no coincide en lo crítico (Número de la cuenta).');
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Aprobar' }));
+    await waitFor(() => expect(peticiones).toContainEqual({ url: '/api/v1/vinculos/v1/cuenta-designada/aprobar', metodo: 'POST', cuerpo: null }));
+  });
+
+  it('sin la lectura de la empresa avisa que se coteja a mano y sin certificación propia dice que no hay con qué cotejar', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
+    const usuario = userEvent.setup();
+    montar({
+      ...CON_PROPUESTA,
+      actual: { ...CUENTA, cuentaId: 'c0', estado: 'Aprobada', aprobadaEn: '2026-11-01T10:00:00Z', certificacion: null, sinCertificacion: true },
+      propuesta: { ...CUENTA, certificacion: certificacion({ verificacion: 'SinAnalisis', sinAnalisis: true }) },
+    });
+
+    expect(await screen.findByText(/no tiene certificación bancaria propia/)).toBeInTheDocument();
+    const region = screen.getByRole('region', { name: 'Certificación bancaria de la cuenta' });
+    expect(within(region).getByText('Sin lectura')).toBeInTheDocument();
+    expect(region).toHaveTextContent('Tu empresa no recibió la lectura automática de la versión 2 de la certificación');
+    expect(within(region).queryByRole('table')).not.toBeInTheDocument();
+
+    // La propuesta sin lectura no se destaca como discrepancia: el botón de aprobar sigue normal.
+    await usuario.click(screen.getByRole('button', { name: 'Aprobar' }));
+    expect(within(await screen.findByRole('dialog')).queryByText(/no coincide en lo crítico/)).not.toBeInTheDocument();
   });
 });

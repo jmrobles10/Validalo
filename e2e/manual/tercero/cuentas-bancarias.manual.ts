@@ -68,36 +68,31 @@ recorrido(
     await nueva.getByLabel('Número de cuenta').fill('031-123456-78');
     await nueva.getByLabel('Titular de la cuenta').fill('Ferretería El Tornillo S.A.S.');
     await nueva.getByLabel('Identificación del titular').fill('NIT 900123456');
+    await nueva.getByTestId('entrada-archivo').setInputFiles(pdf('Certificacion Bancolombia Tornillo'));
     await paso(page, {
-      titulo: 'Registra tu cuenta bancaria',
+      titulo: 'Registra tu cuenta bancaria con su certificación',
       explicacion:
         'En «Agregar cuenta bancaria» eliges el banco de la lista, el tipo de cuenta y escribes el número, el titular y su identificación. ' +
-        'Al guardar, la cuenta queda registrada y solo ves sus últimos cuatro dígitos. Puedes tener varias cuentas y usar una u otra con cada empresa.',
+        'Cada cuenta lleva su propia certificación bancaria, la que expide tu banco para esa cuenta: la adjuntas aquí y sin ella no se guarda. La usamos para verificar que los datos que escribiste son los del banco. ' +
+        'Al guardar, la cuenta queda registrada y solo ves sus últimos cuatro dígitos. Puedes tener varias cuentas, cada una con la suya, y usar una u otra con cada empresa.',
       resaltar: nueva,
     });
     await nueva.getByRole('button', { name: 'Guardar cuenta' }).click();
-    await expect(page.getByText(/· \*\*\*\*5678 ·/)).toBeVisible();
+    await expect(page.getByText(/· \*\*\*\*5678 ·/)).toBeVisible({ timeout: 30_000 });
 
-    // 2. Designarla exige certificación bancaria.
-    const porEmpresa = page.getByRole('region', { name: 'En qué cuenta te paga cada empresa' }).or(page.locator('section', { hasText: 'En qué cuenta te paga cada empresa' }));
-    await porEmpresa.getByRole('button', { name: 'Elegir cuenta' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Designar cuenta' }).click();
-    await expect(page.getByRole('link', { name: 'Subir certificación bancaria' })).toBeVisible();
+    // 2. La certificación queda en la tarjeta de la cuenta.
+    const certificacion = page.getByRole('region', { name: 'Certificación bancaria' });
+    await expect(certificacion).toContainText('Versión 1');
     await paso(page, {
-      titulo: 'Sube la certificación bancaria para designarla',
+      titulo: 'Mira la certificación de tu cuenta',
       explicacion:
-        'Para designar una cuenta la empresa necesita la certificación que expide tu banco, a tu nombre. Si no la tienes en tu bóveda, la pantalla te lleva a subirla desde aquí. ' +
-        'Con el documento aprobado, la cuenta puede designarse para cada empresa que la pida.',
-      resaltar: page.getByRole('link', { name: 'Subir certificación bancaria' }),
+        'La tarjeta de la cuenta muestra su certificación: la versión y la fecha. Cuando una empresa la recibe al designar la cuenta, la leemos y te decimos si coincide con lo que registraste; ' +
+        'si algo no coincide, ves qué campo es y qué hacer. Con «Reemplazar» subes una versión nueva de esa cuenta sin tocar las demás.',
+      resaltar: certificacion,
     });
-    const selector = page.waitForEvent('filechooser');
-    await page.getByRole('link', { name: 'Subir certificación bancaria' }).click();
-    await page.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf('Certificacion Bancolombia Tornillo'));
-    await expect(page.getByText(/Es tu versión 1 de Certificación bancaria/)).toBeVisible({ timeout: 30_000 });
 
     // 3. Designar: queda pendiente de la aprobación de la empresa.
-    await page.goto('/cuentas');
+    const porEmpresa = page.getByRole('region', { name: 'En qué cuenta te paga cada empresa' }).or(page.locator('section', { hasText: 'En qué cuenta te paga cada empresa' }));
     await porEmpresa.getByRole('button', { name: 'Elegir cuenta' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Designar cuenta' }).click();
     await expect(page.getByText(`Pendiente de aprobación de ${e.norte.nombre}`)).toBeVisible();

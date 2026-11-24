@@ -31,8 +31,20 @@ export const cuentas = {
   rechazar: 'Rechazar',
   aprobarTitulo: 'Aprobar la cuenta del tercero',
   aprobarUltima:
-    'Coteja el número con la certificación bancaria. Con tu aprobación se completan las {{total}}: la cuenta queda designada y reemplaza a la anterior.',
-  aprobarPrimera: 'Coteja el número con la certificación bancaria. Después de ti, falta que la apruebe otra persona para que quede designada.',
+    'Coteja el número con la certificación bancaria de la cuenta. Con tu aprobación se completan las {{total}}: la cuenta queda designada y reemplaza a la anterior.',
+  aprobarPrimera: 'Coteja el número con la certificación bancaria de la cuenta. Después de ti, falta que la apruebe otra persona para que quede designada.',
+  certificacion: {
+    titulo: 'Certificación bancaria de la cuenta',
+    version: 'Versión {{n}} · subida el {{fecha}}',
+    chip: { SinAnalisis: 'Sin lectura', Coincide: 'Coincide', Discrepa: 'No coincide', NoVerificable: 'Sin verificar', NoSeLee: 'No se lee' },
+    sin: 'Esta cuenta no tiene certificación bancaria propia (se designó antes de que cada cuenta llevara la suya): no hay con qué cotejarla. Pídele al tercero que la suba en su portal.',
+    sinAnalisis:
+      'Tu empresa no recibió la lectura automática de la versión {{n}} de la certificación: coteja a mano el número, el titular y su identificación con el documento.',
+    criticas: 'La certificación no coincide con la cuenta en lo crítico: {{campos}}. Revísalo antes de aprobar; nada se bloquea solo.',
+    aprobarConDiscrepancia:
+      'La certificación de esta cuenta no coincide en lo crítico ({{campos}}). Aprueba solo si tienes con qué explicar la diferencia; si no, rechaza la cuenta con el motivo.',
+    aprobarSinCertificacion: 'Esta cuenta no tiene certificación bancaria propia: no hay con qué cotejarla.',
+  },
   aprobada: 'Aprobaste la cuenta; falta que la apruebe otra persona.',
   designada: 'La cuenta quedó designada.',
   rechazarTitulo: 'Rechazar la cuenta del tercero',
