@@ -59,12 +59,12 @@ recorrido(
 
     // 3. Si no tienes el soporte, lo subes desde la misma sección.
     await abrirSeccion(page, 'general', 'Información general');
-    const subir = page.getByRole('link', { name: 'Subir un soporte' });
+    const subir = page.getByRole('button', { name: 'Subir un soporte' });
     await expect(subir).toBeVisible();
     await paso(page, {
       titulo: 'Sube un soporte si no lo tienes',
       explicacion:
-        'Si el documento que necesitas no está en tu bóveda, usa «Subir» dentro del mismo recuadro. Antes de salir, guarda tus cambios: al volver a la sección los encuentras guardados y ya puedes elegir el archivo que subiste.',
+        'Si el documento que necesitas no está en tu bóveda, usa «Subir un soporte» dentro del mismo recuadro. Se abre una ventana para subirlo sin salir de la sección, así que tus cambios sin guardar siguen ahí; al terminar, eliges el archivo que subiste en la lista del recuadro.',
       resaltar: subir,
     });
   },

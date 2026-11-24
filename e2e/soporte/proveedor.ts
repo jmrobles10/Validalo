@@ -75,22 +75,165 @@ export interface OpcionesSubida {
 }
 
 /**
- * Desde «Tu revisión con …», sube el documento del requisito `nombre` (subir, otra versión o versión corregida),
- * llena los campos que pida y vuelve a la revisión. Comprueba la versión que quedó en la bóveda.
+ * Desde «Tu revisión con …», sube el documento del requisito `nombre` (subir, otra versión o versión corregida) en el diálogo de subida,
+ * llena los campos que pida y lo cierra con «Listo»: el tercero no sale de su revisión. Comprueba la versión que quedó en la bóveda.
  */
 export async function subirDocumento(page: Page, nombre: string, archivo: Archivo, { version = 1, campos = {} }: OpcionesSubida = {}): Promise<void> {
-  await tarjeta(page, nombre).getByRole('link', { name: /^Subir/ }).click();
-  await expect(page.getByRole('heading', { level: 1, name: `Subir ${nombre}` })).toBeVisible();
+  await tarjeta(page, nombre).getByRole('button', { name: /^Subir/ }).click();
+  const dialogo = page.getByRole('dialog', { name: `Subir ${nombre}` });
+  await expect(dialogo).toBeVisible();
   for (const [etiqueta, valor] of Object.entries(campos)) {
     // Una fecha (`aaaa-mm-dd`) se escribe en el selector de fecha por secciones; lo demás es texto.
-    if (esFechaIso(valor)) await escribirFecha(page, new RegExp(escapar(etiqueta)), valor);
-    else await page.getByLabel(new RegExp(escapar(etiqueta))).fill(valor);
+    if (esFechaIso(valor)) await escribirFecha(page, new RegExp(escapar(etiqueta)), valor, dialogo);
+    else await dialogo.getByLabel(new RegExp(escapar(etiqueta))).fill(valor);
   }
+  await elegirArchivoEnElDialogo(page, archivo, `Es tu versión ${String(version)} de ${nombre}`);
+}
+
+/**
+ * En el diálogo de subida abierto: elige el archivo, espera el resultado `resultado` («Es tu versión 2 de …») y lo cierra con «Listo».
+ * Quien necesite fotografiar el resultado antes de cerrar usa `elegirArchivo` y cierra después con `cerrarDialogoDeSubida`.
+ */
+export async function elegirArchivoEnElDialogo(page: Page, archivo: Archivo, resultado: string): Promise<void> {
+  await elegirArchivo(page, archivo, resultado);
+  await cerrarDialogoDeSubida(page);
+}
+
+/** En el diálogo de subida abierto: elige el archivo y espera el resultado (el diálogo sigue abierto, mostrándolo). */
+export async function elegirArchivo(page: Page, archivo: Archivo, resultado: string): Promise<void> {
+  const dialogo = page.getByRole('dialog');
   const selector = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Elegir archivo' }).click();
+  await dialogo.getByRole('button', { name: 'Elegir archivo' }).click();
   await (await selector).setFiles(archivo);
-  await expect(page.getByText(`Es tu versión ${String(version)} de ${nombre}`)).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('link', { name: 'Volver a mi revisión' }).click();
+  await expect(dialogo.getByText(resultado)).toBeVisible({ timeout: 30_000 });
+}
+
+/** Cierra el diálogo de subida con «Listo» (el resultado ya se vio) y espera a que desaparezca. */
+export async function cerrarDialogoDeSubida(page: Page): Promise<void> {
+  const dialogo = page.getByRole('dialog');
+  await dialogo.getByRole('button', { name: 'Listo' }).click();
+  await expect(dialogo).toBeHidden();
+}
+
+/** Desde «Mi bóveda», sube una versión nueva del documento `documento` en el diálogo de subida y lo cierra con «Listo». */
+export async function subirVersionDesdeLaBoveda(page: Page, documento: string, archivo: Archivo, version: number): Promise<void> {
+  await page.getByRole('article', { name: documento }).getByRole('button', { name: 'Subir versión' }).click();
+  await expect(page.getByRole('dialog', { name: `Nueva versión de ${documento}` })).toBeVisible();
+  await elegirArchivoEnElDialogo(page, archivo, `Es tu versión ${String(version)} de ${documento}`);
+}
+
+/** Nombre del requisito «Certificación bancaria» tal como lo ve el tercero en «Tu revisión con …». */
+export const REQUISITO_CERTIFICACION_BANCARIA = 'Certificación bancaria';
+
+/** Una cuenta bancaria como se escribe en «Agregar cuenta bancaria». */
+export interface DatosDeCuenta {
+  /** Nombre del banco en el catálogo (se busca y se elige de la lista). */
+  banco: string;
+  tipo: 'Ahorros' | 'Corriente';
+  numero: string;
+  titular: string;
+  identificacion: string;
+}
+
+/** La cuenta con la que se prueba: sale como «Bancolombia ****5678» y su número completo es `03112345678`. */
+export const CUENTA_DE_PRUEBA: DatosDeCuenta = {
+  banco: 'Bancolombia',
+  tipo: 'Ahorros',
+  numero: '031-123456-78',
+  titular: 'Ferretería El Tornillo S.A.S.',
+  identificacion: 'NIT 900123456',
+};
+
+/** En el diálogo «Agregar cuenta bancaria» abierto: llena la cuenta, adjunta su certificación (cada cuenta se guarda con la suya, CB-5) y la guarda. */
+async function guardarCuentaConCertificacion(page: Page, datos: DatosDeCuenta, certificacion: Archivo): Promise<void> {
+  const dialogo = page.getByRole('dialog', { name: 'Agregar cuenta bancaria' });
+  // El banco sale del catálogo (con su código de compensación y SWIFT, que viajan al ERP): se busca y se elige de la lista.
+  await dialogo.getByRole('combobox', { name: 'Banco' }).fill(datos.banco);
+  await page.getByRole('option', { name: datos.banco }).click();
+  await dialogo.getByRole('radio', { name: datos.tipo }).check();
+  await dialogo.getByLabel('Número de cuenta').fill(datos.numero);
+  await dialogo.getByLabel('Titular de la cuenta').fill(datos.titular);
+  await dialogo.getByLabel('Identificación del titular').fill(datos.identificacion);
+  await dialogo.getByTestId('entrada-archivo').setInputFiles(certificacion);
+  await dialogo.getByRole('button', { name: 'Guardar cuenta' }).click();
+}
+
+/**
+ * Desde «Mis cuentas», registra una cuenta con su certificación bancaria y espera a que la tarjeta de la cuenta muestre su versión 1. No la designa para ninguna empresa:
+ * la certificación se queda en el tercero (sin leer) hasta que una empresa la reciba al designar la cuenta con ella (CB-6).
+ */
+export async function registrarCuentaConCertificacion(page: Page, certificacion: Archivo, cuenta: Partial<DatosDeCuenta> = {}): Promise<void> {
+  const datos = { ...CUENTA_DE_PRUEBA, ...cuenta };
+  await page.goto('/cuentas');
+  await page.getByRole('button', { name: 'Agregar cuenta' }).first().click();
+  await guardarCuentaConCertificacion(page, datos, certificacion);
+  const ultimos = datos.numero.replace(/\D/g, '').slice(-4);
+  await expect(page.getByText(`· ****${ultimos} ·`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('region', { name: 'Certificación bancaria' })).toContainText('Versión 1', { timeout: 30_000 });
+}
+
+export interface OpcionesCertificacionDeCuenta {
+  /**
+   * Una cuenta que el tercero ya tiene (texto o patrón de como se lista al elegir, p. ej. `/Bancolombia · Ahorros/`): se elige en vez de registrar otra. Si le falta su certificación
+   * se sube `archivo`; si ya la tiene, pasa directo a proponerla a la empresa y `archivo` no se sube.
+   */
+  existente?: string | RegExp;
+  /** Datos de la cuenta nueva; lo que no se indique sale de {@link CUENTA_DE_PRUEBA}. */
+  cuenta?: Partial<DatosDeCuenta>;
+  /** Propone la cuenta a la empresa («Designar con …»). Con `false` responde «Ahora no»: la cuenta queda con su certificación, sin designar. Por omisión, sí. */
+  designar?: boolean;
+}
+
+/**
+ * Desde «Tu revisión con …», cubre el requisito «Certificación bancaria»: ya no es un documento suelto sino la certificación de una cuenta (CB-8). Elige una cuenta que el
+ * tercero ya tiene (`existente`) o registra una nueva (con la primera cuenta se arranca directo en «Agregar cuenta», que exige su certificación), sube la certificación de ESA
+ * cuenta y propone designarla para la empresa: la empresa recibe el documento (y su IA lo lee, ADR-0012) al designarla, no antes. Pensada para una empresa que aún no tiene cuenta
+ * con el tercero. El expediente pasa a «En revisión» cuando la empresa recibe la certificación, por una cola: quien necesite verlo espera con {@link esperarEstadoDelTercero}.
+ */
+export async function subirCertificacionDeCuenta(page: Page, archivo: Archivo, { existente, cuenta = {}, designar = true }: OpcionesCertificacionDeCuenta = {}): Promise<void> {
+  await tarjeta(page, REQUISITO_CERTIFICACION_BANCARIA).getByRole('button', { name: /^Subir (certificación|otra versión)/ }).click();
+  // Mientras se piden las cuentas, el diálogo tiene el mismo título con un esqueleto: «elegir» es el que ya trae su acción «Continuar».
+  const elegir = page.getByRole('dialog', { name: /^Certificación bancaria para / }).filter({ has: page.getByRole('button', { name: 'Continuar' }) });
+  const agregar = page.getByRole('dialog', { name: 'Agregar cuenta bancaria' });
+  const subir = page.getByRole('dialog', { name: /^(Certificación|Reemplazar la certificación) de / });
+  const proponer = page.getByRole('dialog', { name: /^¿Designar esta cuenta para / });
+
+  // Con cuentas activas primero se elige de cuál es la certificación; sin ellas arranca directo en «Agregar cuenta».
+  await expect(elegir.or(agregar)).toBeVisible();
+  if (await elegir.isVisible()) {
+    if (existente === undefined) {
+      await elegir.getByRole('button', { name: 'Agregar otra cuenta' }).click();
+    } else {
+      await elegir.getByRole('radio', { name: existente }).check();
+      await elegir.getByRole('button', { name: 'Continuar' }).click();
+    }
+    await expect(agregar.or(subir).or(proponer)).toBeVisible();
+  }
+  if (await agregar.isVisible()) {
+    // Se guarda la cuenta y enseguida se le sube la certificación, en el mismo diálogo.
+    await guardarCuentaConCertificacion(page, { ...CUENTA_DE_PRUEBA, ...cuenta }, archivo);
+  } else if (await subir.isVisible()) {
+    await subir.getByTestId('entrada-archivo').setInputFiles(archivo);
+  }
+
+  // La cuenta ya tiene su certificación: se propone designarla para esta empresa.
+  await expect(proponer).toBeVisible({ timeout: 30_000 });
+  await proponer.getByRole('button', { name: designar ? /^Designar con / : 'Ahora no' }).click();
+  await expect(proponer).toBeHidden();
+}
+
+/**
+ * Desde «Mis cuentas», sube una versión nueva de la certificación de la cuenta `cuenta` (texto o patrón de su tarjeta): las empresas con las que está designada la reciben y la IA la
+ * vuelve a leer. Comprueba la versión que quedó en la tarjeta. Una certificación de cuenta no vive en la bóveda: allí no se reemplaza.
+ */
+export async function subirVersionDeCertificacionDeCuenta(page: Page, cuenta: string | RegExp, archivo: Archivo, version: number): Promise<void> {
+  await page.goto('/cuentas');
+  const tarjetaDeCuenta = page.getByRole('article').filter({ hasText: cuenta });
+  await tarjetaDeCuenta.getByRole('button', { name: /^Reemplazar:/ }).click();
+  const dialogo = page.getByRole('dialog', { name: /^Reemplazar la certificación de / });
+  await dialogo.getByTestId('entrada-archivo').setInputFiles(archivo);
+  await expect(dialogo).toBeHidden({ timeout: 30_000 });
+  await expect(tarjetaDeCuenta.getByRole('region', { name: 'Certificación bancaria' })).toContainText(`Versión ${String(version)}`, { timeout: 30_000 });
 }
 
 export type EstadoDelTercero = 'Abierto' | 'EnRevision' | 'Observado' | 'Aprobado' | 'Rechazado';
@@ -138,14 +281,34 @@ export async function responder(page: Page, explicacion?: string): Promise<void>
   if (!(await fraseDeEstado(page, 'EnRevision').isVisible())) throw new Error(`No se pudo enviar la respuesta: ${await error.first().innerText()}`);
 }
 
+/** Un documento que pide el flujo: su requisito (`nombre`), el archivo y los campos de su formulario, si los tiene. */
+export interface DocumentoDelRequisito {
+  nombre: string;
+  archivo: Archivo;
+  campos?: Record<string, string>;
+  /** Solo para «Certificación bancaria»: los datos de la cuenta que se registra con ella (lo que falte sale de {@link CUENTA_DE_PRUEBA}). */
+  cuenta?: Partial<DatosDeCuenta>;
+}
+
 /**
- * El tercero completa su lado de una invitación: entra por el correo, acepta y sube cada documento pedido; espera a
- * que el expediente quede «En revisión».
+ * Sube cada documento desde «Tu revisión con …», en orden. «Certificación bancaria» no es un documento suelto: se cubre registrando una cuenta con su certificación y
+ * designándola para la empresa ({@link subirCertificacionDeCuenta}); los demás, con {@link subirDocumento}.
  */
-export async function completarInvitacion(page: Page, invitacion: Invitacion, documentos: { nombre: string; archivo: Archivo; campos?: Record<string, string> }[]): Promise<void> {
+export async function subirRequisitos(page: Page, documentos: readonly DocumentoDelRequisito[]): Promise<void> {
+  for (const d of documentos) {
+    if (d.nombre === REQUISITO_CERTIFICACION_BANCARIA) await subirCertificacionDeCuenta(page, d.archivo, { cuenta: d.cuenta });
+    else await subirDocumento(page, d.nombre, d.archivo, { campos: d.campos ?? {} });
+  }
+}
+
+/**
+ * El tercero completa su lado de una invitación: entra por el correo, acepta y sube cada documento pedido (la certificación bancaria, con su cuenta: ver
+ * {@link subirRequisitos}); espera a que el expediente quede «En revisión».
+ */
+export async function completarInvitacion(page: Page, invitacion: Invitacion, documentos: readonly DocumentoDelRequisito[]): Promise<void> {
   await entrarPorInvitacion(page, invitacion);
   await aceptarInvitacion(page, invitacion);
-  for (const d of documentos) await subirDocumento(page, d.nombre, d.archivo, { campos: d.campos ?? {} });
+  await subirRequisitos(page, documentos);
   await esperarEstadoDelTercero(page, 'EnRevision');
 }
 
@@ -154,14 +317,10 @@ export async function completarInvitacion(page: Page, invitacion: Invitacion, do
  * Automático el expediente puede aprobarse al segundo de llegar a revisión (el procesador corre cada segundo), antes de que la
  * página alcance a mostrar «En revisión». Espera a que se vea «En revisión» o ya «Aprobado».
  */
-export async function completarInvitacionYEsperarRevisionOAprobacion(
-  page: Page,
-  invitacion: Invitacion,
-  documentos: { nombre: string; archivo: Archivo; campos?: Record<string, string> }[],
-): Promise<void> {
+export async function completarInvitacionYEsperarRevisionOAprobacion(page: Page, invitacion: Invitacion, documentos: readonly DocumentoDelRequisito[]): Promise<void> {
   await entrarPorInvitacion(page, invitacion);
   await aceptarInvitacion(page, invitacion);
-  for (const d of documentos) await subirDocumento(page, d.nombre, d.archivo, { campos: d.campos ?? {} });
+  await subirRequisitos(page, documentos);
   await expect(async () => {
     await page.reload();
     await expect(page.getByRole('heading', { level: 1, name: /^Tu revisión con / })).toBeVisible();

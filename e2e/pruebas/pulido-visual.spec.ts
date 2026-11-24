@@ -7,7 +7,7 @@ import { pdf } from '../soporte/archivos';
 import { irASeccion } from '../soporte/empresa';
 import { abrirConsolaDePlataforma } from '../soporte/plataforma';
 import { escribirFecha } from '../soporte/fechas';
-import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, tarjeta } from '../soporte/proveedor';
+import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, subirVersionDesdeLaBoveda, tarjeta } from '../soporte/proveedor';
 import { activarIa, crearEscenario, invitar, nuevoTercero, publicarFlujoConFicha, SST } from '../soporte/semilla';
 
 /**
@@ -50,11 +50,7 @@ async function diligenciarGeneral(page: Page): Promise<void> {
 /** Sube una versión nueva desde la bóveda. */
 async function subirVersionNueva(page: Page, nombre: string, archivo: ReturnType<typeof pdf>, version: number): Promise<void> {
   await page.goto('/boveda');
-  await page.getByRole('article', { name: nombre }).getByRole('link', { name: 'Subir versión' }).click();
-  const selector = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Elegir archivo' }).click();
-  await (await selector).setFiles(archivo);
-  await expect(page.getByText(`Es tu versión ${String(version)} de ${nombre}`)).toBeVisible({ timeout: 30_000 });
+  await subirVersionDesdeLaBoveda(page, nombre, archivo, version);
 }
 
 /** Los botones (`Button` de MUI) visibles de la página más altos que `maximo` px, como «nombre: alto». */
@@ -284,20 +280,23 @@ test('el formulario de un documento con fecha usa el mismo selector (sin <input 
   const invitacion = await invitar(e, e.sur, nuevoTercero('Pernos Fecha S.A.S.'));
   await entrarPorInvitacion(page, invitacion);
   await aceptarInvitacion(page, invitacion);
-  await tarjeta(page, SST.nombre).getByRole('link', { name: /^Subir/ }).click();
-  await expect(page.getByRole('heading', { level: 1, name: `Subir ${SST.nombre}` })).toBeVisible();
-  const fecha = page.getByRole('group', { name: /^Fecha de expedición/ });
+  await tarjeta(page, SST.nombre).getByRole('button', { name: /^Subir/ }).click();
+  const dialogo = page.getByRole('dialog', { name: `Subir ${SST.nombre}` });
+  await expect(dialogo).toBeVisible();
+  const fecha = dialogo.getByRole('group', { name: /^Fecha de expedición/ });
   await expect(fecha).toBeVisible();
-  expect(await page.locator(NATIVOS).count()).toBe(0);
+  expect(await dialogo.locator(NATIVOS).count()).toBe(0);
 
   // Una fecha futura no se admite; el aviso va en el campo y el botón de elegir archivo sigue deshabilitado.
   const manana = new Date(Date.now() + 3 * 86_400_000);
-  await escribirFecha(page, /^Fecha de expedición/, new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(manana));
-  await expect(page.getByRole('button', { name: 'Elegir archivo' })).toBeDisabled();
+  await escribirFecha(page, /^Fecha de expedición/, new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(manana), dialogo);
+  await expect(dialogo.getByRole('button', { name: 'Elegir archivo' })).toBeDisabled();
   await fecha.getByRole('button', { name: /^Elegir fecha/ }).click();
-  await expect(page.getByRole('dialog').getByRole('button', { name: 'Hoy' })).toBeVisible();
+  // El calendario es otro diálogo, sobre el de la subida: se distingue por su botón «Hoy».
+  const calendario = page.getByRole('dialog').filter({ has: page.getByRole('button', { name: 'Hoy' }) });
+  await expect(calendario.getByRole('button', { name: 'Hoy' })).toBeVisible();
   await expect(page.locator('.MuiPickerPopper-paper')).toHaveCSS('opacity', '1');
   await page.screenshot({ path: captura('documento-con-fecha'), fullPage: true });
-  await page.getByRole('dialog').getByRole('button', { name: 'Hoy' }).click();
-  await expect(page.getByRole('button', { name: 'Elegir archivo' })).toBeEnabled();
+  await calendario.getByRole('button', { name: 'Hoy' }).click();
+  await expect(dialogo.getByRole('button', { name: 'Elegir archivo' })).toBeEnabled();
 });

@@ -5,6 +5,7 @@ import { declaracionPep } from './es-CO-ficha-pep';
 import { evaluaciones } from './es-CO-evaluaciones';
 import { notificaciones } from './es-CO-notificaciones';
 import { certificacionDeCuenta } from './es-CO-cuentas-certificacion';
+import { requisitoBancario } from './es-CO-requisito-bancario';
 import { personas } from './es-CO-personas';
 import { erroresPrivacidad, privacidad } from './es-CO-privacidad';
 
@@ -227,6 +228,12 @@ export const esCO = {
     documentosCuenta_other: '{{count}} documentos',
     vacio: 'Aún no tienes documentos',
     vacioTexto: 'Sube tu RUT, tu Cámara de comercio u otros documentos. Los compartimos solo con las empresas que aceptaste.',
+    // Los documentos de las personas relacionadas viven en la bóveda de cada persona (ADR-0010), no en la del tercero.
+    personas: {
+      titulo: 'De tus personas relacionadas',
+      sub: 'La cédula y los antecedentes de tus representantes, suplentes y socios están en la bóveda de cada persona: se validan una vez y sirven a todas tus empresas.',
+      ver: 'Ver personas relacionadas',
+    },
     cargadaEl: 'Versión {{n}} · cargada el {{fecha}}',
     sinVigente: 'Sin versión vigente',
     nuevaVersion: 'Subir versión',
@@ -494,6 +501,7 @@ export const esCO = {
     duplicado: 'Es idéntico a tu versión {{n}}: no hace falta subirlo de nuevo.',
     devueltaTitulo: 'Devolvimos este archivo',
     otroArchivo: 'Elegir otro archivo',
+    listo: 'Listo',
     irBoveda: 'Ver mi bóveda',
     volverRevision: 'Volver a mi revisión',
     volverFicha: 'Volver a mi información',
@@ -618,6 +626,7 @@ export const esCO = {
       acciones: { subir: 'Subir documento', corregir: 'Subir versión corregida', reemplazar: 'Subir otra versión' },
       accionesFormulario: { subir: 'Llenar formulario', corregir: 'Corregir los datos', reemplazar: 'Actualizar los datos' },
       versionFormulario: 'Versión {{n}} · enviada el {{fecha}}',
+      bancaria: requisitoBancario,
     },
     seccion: seccionEnExpediente,
     camposSenalados: 'Datos por corregir: {{campos}}',

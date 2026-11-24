@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Validalo.Aplicacion.Comun;
 using Validalo.Aplicacion.Documentos;
+using Validalo.Aplicacion.Ficha;
 using Validalo.Aplicacion.Interesado;
 using Validalo.Contratos;
 using Validalo.Dominio.Comun;
@@ -136,8 +137,10 @@ public static class PersonasRelacionadasEndpoints
     }
 
     /// <summary>
-    /// El tercero declara una persona relacionada. Si ya figuraba terminada, descartada o como una propuesta de la IA, la declaración la devuelve a vigente; si ya era vigente,
-    /// 409 <c>relacion-duplicada</c>. Con <c>principal</c>, la que era principal de ese tipo deja de serlo.
+    /// El tercero declara una persona relacionada que la ficha legal no maneja (beneficiario final o miembro de consorcio). Los representantes legales, suplentes y socios se registran
+    /// en la información legal de la ficha, que es el único lugar para ellos (decisión de Producto del 2026-11-24): 422 <c>persona-se-registra-en-la-ficha</c>. Si ya figuraba
+    /// terminada, descartada o como una propuesta de la IA, la declaración la devuelve a vigente; si ya era vigente, 409 <c>relacion-duplicada</c>. Con <c>principal</c>, la que era
+    /// principal de ese tipo deja de serlo.
     /// </summary>
     [WolverinePost("/public/v1/tercero/relaciones")]
     [Authorize(Policy = ReclamosTercero.Politica)]
@@ -148,6 +151,9 @@ public static class PersonasRelacionadasEndpoints
         if (!Enum.TryParse<TipoRelacionTerceros>(dto.Tipo, true, out var tipo) || !Enum.IsDefined(tipo))
             throw ReglaDeNegocioException.Validacion("tipo-relacion-invalido",
                 $"«{dto.Tipo}» no es un tipo de relación ({string.Join(", ", Enum.GetNames<TipoRelacionTerceros>())}).");
+        if (PersonasDeLaFicha.LaFichaManeja(tipo))
+            throw ReglaDeNegocioException.Validacion("persona-se-registra-en-la-ficha",
+                $"{PersonasDelTercero.TextoDelRol(tipo)}: esta persona se registra en la información legal de tu ficha, no en Personas relacionadas. Agrégala en «Información legal» y aparecerá aquí.");
         var nombre = (dto.Nombre ?? string.Empty).Trim();
         if (nombre.Length == 0)
             throw ReglaDeNegocioException.Validacion("nombre-requerido", "Indica el nombre de la persona.");
@@ -220,8 +226,10 @@ public static class PersonasRelacionadasEndpoints
     }
 
     /// <summary>
-    /// Confirma lo que detectó la IA (una propuesta): la persona pasa a ser la relación vigente del tipo. Si la propuesta es la principal, la que lo era sale (termina) y, con
-    /// ella, lo que se había validado de ella en los expedientes abiertos: sus requisitos de persona se eximen y los de la persona nueva se piden (ADR-0010, regla 5).
+    /// Confirma lo que detectó la IA (una propuesta): la persona pasa a ser la relación vigente del tipo. Como la ficha legal es el único lugar donde se registran los representantes
+    /// legales, suplentes y socios, confirmar también escribe a la persona en la sección <c>FICHA_LEGAL</c> (versión nueva, en la misma transacción) y la relación queda de la ficha.
+    /// Si la propuesta es la principal, la que lo era sale (termina y deja la ficha) y, con ella, lo que se había validado de ella en los expedientes abiertos: sus requisitos de
+    /// persona se eximen y los de la persona nueva se piden (ADR-0010, regla 5). Repetir la confirmación no cambia nada.
     /// </summary>
     [WolverinePost("/public/v1/tercero/relaciones/{id}/confirmar")]
     [Authorize(Policy = ReclamosTercero.Politica)]
@@ -232,27 +240,40 @@ public static class PersonasRelacionadasEndpoints
         var terceroId = sesion.TerceroId;
         var ahora = reloj.GetUtcNow();
         var hoy = reloj.Hoy();
-        await Peticiones.ConReintentosAsync(async () =>
+        // La sesión sale del outbox de la petición: lo que publica el guardado de la ficha (avisos a los vínculos, a las listas restrictivas y a los cruces) viaja en la misma transacción.
+        var yaAvisada = await GuardadoDeSecciones.ConReintentosAsync(async () =>
         {
-            await using var escritura = store.LightweightSession(TenantsTecnicos.Boveda);
+            await using var escritura = sesiones.Boveda(mensajes);
             escritura.SetHeader("actorTipo", ActorTipo.Tercero.ToString());
             escritura.SetHeader("actorId", terceroId.ToString());
             var delTercero = await escritura.Query<RelacionEntreTerceros>().Where(r => r.DestinoId == terceroId).ToListAsync(ct);
             var relacion = delTercero.FirstOrDefault(r => r.Id == id)
                            ?? throw ReglaDeNegocioException.NoEncontrado("relacion-no-encontrada", "No existe esa relación.");
             if (relacion.Confirmar(terceroId.ToString(), ViaDeConfirmacionDeRelacion.Tercero, hoy, ahora) is not { } confirmada)
-                return 0;
+                return false;
+
+            // La que era la principal de su tipo sale: una sola principal vigente por tipo ante el tercero.
+            IReadOnlyList<RelacionEntreTerceros> salientes = relacion.Principal
+                ? [.. delTercero.Where(r => r.Id != id && r.Tipo == relacion.Tipo && r.Principal && r.EsVigente(hoy))]
+                : [];
+            if (PersonasDeLaFicha.LaFichaManeja(relacion.Tipo))
+            {
+                // La ficha legal es el único lugar donde se registran estas personas: confirmar también las escribe en ella, en esta misma transacción.
+                var tercero = await escritura.LoadAsync<Tercero>(terceroId, ct)
+                              ?? throw ReglaDeNegocioException.NoEncontrado("tercero-no-encontrado", "No existe ese tercero.");
+                var avisada = await PersonasEnLaFicha.ConfirmarAsync(escritura, sesiones, mensajes, tercero, relacion, confirmada, delTercero, salientes, hoy, ahora, ct);
+                await escritura.SaveChangesAsync(ct);
+                return avisada;
+            }
 
             (await escritura.Events.FetchForWriting<RelacionEntreTerceros>(id, ct)).AppendOne(confirmada);
-            // La que era la principal de su tipo sale: una sola principal vigente por tipo ante el tercero.
-            if (relacion.Principal)
-                await TerminarSalientesAsync(escritura, delTercero.Where(r => r.Id != id && r.Tipo == relacion.Tipo && r.Principal && r.EsVigente(hoy)), hoy,
-                    "Reemplazada por la persona que el tercero confirmó.", terceroId.ToString(), ahora, ct);
+            await TerminarSalientesAsync(escritura, salientes, hoy, "Reemplazada por la persona que el tercero confirmó.", terceroId.ToString(), ahora, ct);
             await escritura.SaveChangesAsync(ct);
-            return 1;
-        });
+            return false;
+        }, mensajes);
 
-        await SincronizacionDePersonas.AvisarDeCambiosAsync(store, mensajes, terceroId, ct);
+        if (!yaAvisada)
+            await SincronizacionDePersonas.AvisarDeCambiosAsync(store, mensajes, terceroId, ct);
         return (await ListarDeAsync(sesiones, sesion, hoy, ct)).FirstOrDefault(r => r.Id == id)
                ?? throw ReglaDeNegocioException.NoEncontrado("relacion-no-encontrada", "No existe esa relación.");
     }
@@ -324,7 +345,7 @@ public static class PersonasRelacionadasEndpoints
         }
     }
 
-    private static async Task TerminarSalientesAsync(IDocumentSession escritura, IEnumerable<RelacionEntreTerceros> relaciones, DateOnly hoy, string motivo, string por,
+    internal static async Task TerminarSalientesAsync(IDocumentSession escritura, IEnumerable<RelacionEntreTerceros> relaciones, DateOnly hoy, string motivo, string por,
         DateTimeOffset ahora, CancellationToken ct)
     {
         foreach (var relacion in relaciones)

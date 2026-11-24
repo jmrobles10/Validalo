@@ -41,7 +41,26 @@ export async function abrirDesdeBandeja(app: FrameLocator, tercero: string, area
   await expect(app.getByRole('heading', { level: 1, name: tercero })).toBeVisible();
 }
 
-/** Región «{área}» de «Decisión de cada área» en el detalle del expediente. */
+/**
+ * La ficha del vínculo (`/vinculos/:id`) y el expediente (`/expedientes/:id`) son una sola pantalla con una barra lateral de sectores: cada documento, sección y tarjeta vive
+ * en el suyo (el RUT en «Información tributaria», la Cámara de comercio en «Información legal», la certificación bancaria y la cuenta designada en «Cuenta bancaria», la decisión
+ * de las áreas en «Aprobaciones»…). Pasa al sector por su nombre visible y espera a que quede activo.
+ */
+export async function irASector(app: FrameLocator, nombre: string): Promise<void> {
+  const boton = app.getByRole('navigation', { name: 'Sectores de la ficha' }).getByRole('button', { name: new RegExp(`^${escapar(nombre)}`) });
+  await boton.click();
+  await expect(boton).toHaveAttribute('aria-current', 'page');
+}
+
+/**
+ * La tarjeta de la ficha con ese título (p. ej. «Cuenta bancaria designada»): su encabezado y la sección que lo contiene. Hay que estar en el sector donde vive; buscarla por el texto
+ * de una sección cualquiera la confunde con la sección del sector, que también lo contiene.
+ */
+export function tarjetaDeLaFicha(app: FrameLocator, titulo: string): Locator {
+  return app.getByRole('heading', { name: titulo, exact: true }).locator('xpath=ancestor::section[1]');
+}
+
+/** Región «{área}» de «Decisión de cada área» en el detalle del expediente (sector «Aprobaciones»). */
 export function regionDeArea(app: FrameLocator, area: string): Locator {
   return app.getByRole('region', { name: area, exact: true }).first();
 }
@@ -52,8 +71,8 @@ export async function aprobarArea(app: FrameLocator, area: string): Promise<void
   const dialogo = app.getByRole('dialog', { name: new RegExp(`^Aprobar ${escapar(area)}`) });
   await dialogo.getByRole('button', { name: /^Aprobar/ }).last().click();
   await expect(dialogo).toBeHidden();
-  // Si era la última área, el expediente se cierra y la decisión por áreas deja de mostrarse.
-  await expect(regionDeArea(app, area).filter({ hasText: 'Aprobada' }).or(app.getByText(/Todas las áreas aprobaron el /))).toBeVisible();
+  // Si era la última área, el expediente se cierra y el sector «Aprobaciones» lo dice (con la decisión de cada área todavía a la vista): basta con ver una de las dos cosas.
+  await expect(regionDeArea(app, area).filter({ hasText: 'Aprobada' }).or(app.getByText(/Todas las áreas aprobaron el /)).first()).toBeVisible();
 }
 
 /**

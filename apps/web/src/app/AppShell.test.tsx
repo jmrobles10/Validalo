@@ -35,12 +35,12 @@ afterEach(() => {
 });
 
 describe('AppShell', () => {
-  it('lleva el logotipo de Valídalo en la barra (la «V» con el check y «alídalo»), con su nombre accesible', () => {
+  it('lleva el ícono de Valídalo arriba del riel, con su nombre accesible, enlazado a Inicio', () => {
     permisos.scopes = new Set([SCOPES.vinculosLeer]);
     montar('/e/emp/vinculos');
-    const logo = screen.getByRole('img', { name: 'Valídalo' });
-    expect(logo.querySelector('[data-parte="palabra"]')).not.toBeNull();
-    expect(within(screen.getByRole('banner')).getByRole('img', { name: 'Valídalo' })).toBe(logo);
+    const riel = screen.getByRole('navigation', { name: 'Secciones' });
+    const logo = within(riel).getByRole('img', { name: 'Valídalo' });
+    expect(logo.closest('a')).toHaveAttribute('href', '/e/emp/inicio');
   });
 
   it('sin auditoria:leer no muestra la pestaña Auditoría', () => {
@@ -59,12 +59,12 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'Vínculos' })).not.toHaveAttribute('aria-current');
   });
 
-  it('Configuración no es una pestaña de texto: es un engranaje con su tooltip, activo en cualquiera de sus secciones', () => {
+  it('Configuración va al pie del riel, fuera de la lista de secciones, activa en cualquiera de sus secciones', () => {
     permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.configuracionLeer]);
     montar('/e/emp/plantillas');
     const barra = screen.getByRole('navigation', { name: 'Secciones' });
-    expect(within(barra).queryByRole('link', { name: 'Configuración' })).not.toBeInTheDocument();
-    const engranaje = screen.getByRole('link', { name: 'Configuración' });
+    expect(within(within(barra).getByRole('list')).queryByRole('link', { name: 'Configuración' })).not.toBeInTheDocument();
+    const engranaje = within(barra).getByRole('link', { name: 'Configuración' });
     expect(engranaje).toHaveAttribute('href', '/e/emp/tipos-vinculo');
     expect(engranaje).toHaveAttribute('aria-current', 'page');
     // Estando en Configuración ninguna pestaña queda activa.
@@ -83,10 +83,10 @@ describe('AppShell', () => {
     expect(screen.queryByRole('link', { name: 'Configuración' })).not.toBeInTheDocument();
   });
 
-  it('con todos los permisos hay once pestañas, en su orden, y sin medidas (jsdom) todas a la vista', () => {
+  it('con todos los permisos el riel tiene once secciones, en su orden, todas a la vista', () => {
     permisos.scopes = new Set(Object.values(SCOPES));
     montar('/e/emp/inicio');
-    const barra = screen.getByRole('navigation', { name: 'Secciones' });
+    const barra = within(screen.getByRole('navigation', { name: 'Secciones' })).getByRole('list');
     expect(within(barra).getAllByRole('link').map((e) => e.textContent)).toEqual([
       'Inicio',
       'Bandeja',

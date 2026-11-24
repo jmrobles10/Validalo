@@ -146,9 +146,9 @@ public sealed partial class RequisitosPersonasApiTests(ApiFixture fixture, ITest
         (await CodigoAsync(await TerceroAsync("POST", "/public/v1/tercero/relaciones", sesion.AccessToken,
             new DeclararRelacionDto(new IdentificacionDto("CO", "CC", Cedula()), "X", "Dueño"), 422))).ShouldBe("tipo-relacion-invalido");
         (await CodigoAsync(await TerceroAsync("POST", "/public/v1/tercero/relaciones", sesion.AccessToken,
-            new DeclararRelacionDto(new IdentificacionDto("CO", "NIT", Nit()), "Sociedad", "Socio"), 422))).ShouldBe("persona-no-natural");
+            new DeclararRelacionDto(new IdentificacionDto("CO", "NIT", Nit()), "Sociedad", "BeneficiarioFinal"), 422))).ShouldBe("persona-no-natural");
         (await CodigoAsync(await TerceroAsync("POST", "/public/v1/tercero/relaciones", sesion.AccessToken,
-            new DeclararRelacionDto(new IdentificacionDto("CO", "CC", Cedula()), " ", "Socio"), 422))).ShouldBe("nombre-requerido");
+            new DeclararRelacionDto(new IdentificacionDto("CO", "CC", Cedula()), " ", "BeneficiarioFinal"), 422))).ShouldBe("nombre-requerido");
 
         // Terminarla: la declarada a mano termina; la que viene de la ficha no (se quita de la ficha).
         await TerceroAsync("DELETE", $"/public/v1/tercero/relaciones/{creada.Id}", sesion.AccessToken, null, 204);

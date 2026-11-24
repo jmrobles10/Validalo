@@ -11,7 +11,18 @@ import { SubidaDeCertificacion } from './SubidaDeCertificacion';
  * Sube (o reemplaza) la certificación bancaria de una cuenta ya registrada (CB-1): elige el archivo y lo sube apenas se elige. Si ya hay una, la nueva es una versión más de
  * <b>esa</b> cuenta: las empresas con las que está designada reciben la nueva y la IA la vuelve a leer.
  */
-export function DialogoCertificacion({ cuenta, reemplaza, onCerrar }: { cuenta: CuentaBancariaPublicaDto; reemplaza: boolean; onCerrar: () => void }) {
+export function DialogoCertificacion({
+  cuenta,
+  reemplaza,
+  onCerrar,
+  onSubida,
+}: {
+  cuenta: CuentaBancariaPublicaDto;
+  reemplaza: boolean;
+  onCerrar: () => void;
+  /** Quien sigue con la cuenta tras subir (p. ej. proponerla a una empresa): se llama en vez de cerrar. */
+  onSubida?: () => void;
+}) {
   const { t } = useTranslation();
   const mostrar = useAvisos((s) => s.mostrar);
   const [archivo, setArchivo] = useState<File | null>(null);
@@ -32,7 +43,7 @@ export function DialogoCertificacion({ cuenta, reemplaza, onCerrar }: { cuenta: 
               archivo={archivo}
               onLista={(version) => {
                 mostrar(t('cuentas.certificacion.dialogo.exito', { cuenta: nombre, n: String(version) }));
-                onCerrar();
+                (onSubida ?? onCerrar)();
               }}
               onOtroArchivo={() => setArchivo(null)}
             />

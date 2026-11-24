@@ -296,7 +296,7 @@ Respuesta `200`:
 
 ### `POST /public/v1/tercero/relaciones`
 
-**Declarar relacion del tercero.** El tercero declara una persona relacionada. Si ya figuraba terminada, descartada o como una propuesta de la IA, la declaración la devuelve a vigente; si ya era vigente, 409 `relacion-duplicada`. Con `principal`, la que era principal de ese tipo deja de serlo.
+**Declarar relacion del tercero.** El tercero declara una persona relacionada que la ficha legal no maneja (beneficiario final o miembro de consorcio). Los representantes legales, suplentes y socios se registran en la información legal de la ficha, que es el único lugar para ellos (decisión de Producto del 2026-11-24): 422 `persona-se-registra-en-la-ficha`. Si ya figuraba terminada, descartada o como una propuesta de la IA, la declaración la devuelve a vigente; si ya era vigente, 409 `relacion-duplicada`. Con `principal`, la que era principal de ese tipo deja de serlo.
 
 **Sesión del tercero · Portal del tercero (`/public/v1`) · SDK: `declararRelacionDelTercero`**
 
@@ -363,6 +363,7 @@ Campos de la respuesta `201`:
 - `422` `nombre-demasiado-largo`
 - `422` `nombre-requerido`
 - `422` `persona-no-natural`
+- `422` `persona-se-registra-en-la-ficha`
 - `422` `relacion-consigo-misma`
 - `422` `tipo-relacion-invalido`
 
@@ -457,7 +458,7 @@ curl -X DELETE "https://{host}/public/v1/tercero/relaciones/3fa85f64-5717-4562-b
 
 ### `POST /public/v1/tercero/relaciones/{id}/confirmar`
 
-**Confirmar relacion del tercero.** Confirma lo que detectó la IA (una propuesta): la persona pasa a ser la relación vigente del tipo. Si la propuesta es la principal, la que lo era sale (termina) y, con ella, lo que se había validado de ella en los expedientes abiertos: sus requisitos de persona se eximen y los de la persona nueva se piden (ADR-0010, regla 5).
+**Confirmar relacion del tercero.** Confirma lo que detectó la IA (una propuesta): la persona pasa a ser la relación vigente del tipo. Como la ficha legal es el único lugar donde se registran los representantes legales, suplentes y socios, confirmar también escribe a la persona en la sección `FICHA_LEGAL` (versión nueva, en la misma transacción) y la relación queda de la ficha. Si la propuesta es la principal, la que lo era sale (termina y deja la ficha) y, con ella, lo que se había validado de ella en los expedientes abiertos: sus requisitos de persona se eximen y los de la persona nueva se piden (ADR-0010, regla 5). Repetir la confirmación no cambia nada.
 
 **Sesión del tercero · Portal del tercero (`/public/v1`) · SDK: `confirmarRelacionDelTercero`**
 
@@ -479,6 +480,7 @@ Mismos campos de `RelacionEntreTercerosDto` que se detallan en `POST /public/v1/
 **Errores de negocio que lanza**
 
 - `404` `relacion-no-encontrada`
+- `404` `tercero-no-encontrado`
 
 <details><summary>Ejemplo de petición y respuesta</summary>
 

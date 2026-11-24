@@ -83,7 +83,7 @@ describe('Mi revisión con una empresa: los documentos que pide', () => {
     const titulo = await screen.findByRole('heading', { level: 1, name: 'Tu revisión con Constructora Norte' });
     expect(within(titulo.closest('main') ?? document.body).getByText('Te falta 1 documento. Súbelo para que Constructora Norte empiece a revisar.')).toBeInTheDocument();
     expect(tarjeta('Certificado de existencia y representación legal').getByText('Aún no lo subes.')).toBeInTheDocument();
-    expect(tarjeta('Certificado de existencia y representación legal').getByRole('link', { name: 'Subir documento' })).toBeInTheDocument();
+    expect(tarjeta('Certificado de existencia y representación legal').getByRole('button', { name: 'Subir documento' })).toBeInTheDocument();
   });
 
   it('un documento eximido se ve «Eximido» y ya no se le pide subirlo; la revisión sigue en curso', async () => {
@@ -97,7 +97,7 @@ describe('Mi revisión con una empresa: los documentos que pide', () => {
     await screen.findByRole('heading', { level: 1, name: 'Tu revisión con Constructora Norte' });
     const camara = tarjeta('Certificado de existencia y representación legal');
     expect(await camara.findByText('Eximido')).toBeInTheDocument();
-    expect(camara.queryByRole('link', { name: /^Subir/ })).not.toBeInTheDocument();
+    expect(camara.queryByRole('button', { name: /^Subir/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Te falta/)).not.toBeInTheDocument();
   });
 

@@ -78,7 +78,10 @@ public static class CargaEndpoints
             var documento = await DocumentoParaEscribirAsync(sesion, destino, ahora, ct);
 
             if (sha256 is not null && documento.BuscarPorHuella(sha256, datos?.Hash) is { } duplicada)
+            {
+                RechazarSiFueDevuelta(duplicada);
                 return (documento.Id, duplicada.Numero, (CargaDeDocumento?)null);
+            }
 
             var documentoId = documento.Id;
             var pendientes = await sesion.Query<CargaDeDocumento>()
@@ -181,6 +184,11 @@ public static class CargaEndpoints
         }, ct);
 
         var datos = carga.DatosVerificados;
+        if (documento.BuscarPorHuella(sha256, datos?.Hash) is { } yaDevuelta && yaDevuelta.Estado == EstadoVersion.Devuelta)
+        {
+            await almacen.EliminarAsync(carga.Bucket, carga.ClaveTemporal, ct);
+            RechazarSiFueDevuelta(yaDevuelta);
+        }
         if (documento.DetectarDuplicado(sha256, ahora, datos?.Hash) is { } duplicado)
         {
             stream.AppendOne(duplicado);
@@ -481,6 +489,17 @@ public static class CargaEndpoints
             ahora => Documento.CrearEnCuarentena(terceroId, tipo, enSesion.TenantId, enSesion.EmpresaId, vinculo.Id, ahora),
             ClavesDeAlmacen.BucketDeTenant(enSesion.TenantId), vinculo.Id,
             tipo.ReglasEfectivas(reglas.TamanoMaximoBytes, reglas.MaximoPaginas), tipo, EnCuarentena: true);
+    }
+    /// <summary>
+    /// El mismo archivo de una versión que se devolvió no es «el que ya tienes»: se rechaza con el motivo de la devolución, para que el tercero sepa qué
+    /// corregir (p. ej. volver a guardar como PDF simple) en vez de leer que no hace falta subirlo.
+    /// </summary>
+    private static void RechazarSiFueDevuelta(VersionDocumento version)
+    {
+        if (version.Estado != EstadoVersion.Devuelta) return;
+        var motivo = version.DetalleDevolucion ?? "No cumple las condiciones para aceptarlo.";
+        throw ReglaDeNegocioException.Validacion("archivo-ya-devuelto",
+            $"Es el mismo archivo que te devolvimos en la versión {version.Numero}: {motivo}");
     }
 }
 

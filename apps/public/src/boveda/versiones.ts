@@ -2,6 +2,7 @@ import type { ComparticionPublicaDto, DocumentoBovedaDto, VersionDocumentoDto } 
 import type { TFunction } from 'i18next';
 import { formatearDiaCivil } from '@validalo/ui';
 import { estadoDeVigencia, textoVigencia } from '../vigencia/vigencia';
+import type { SolicitudDeSubida } from './solicitudDeSubida';
 import { MAXIMO_PAGINAS } from './subida';
 
 /** Por qué se devolvió una versión, en lenguaje del tercero y con qué hacer (BO-4). */
@@ -135,7 +136,7 @@ export function sePuedeSubirVersion(documento: Pick<DocumentoBovedaDto, 'clase' 
   return documento.clase !== 'Formulario' && documento.versionActual?.clase !== 'Formulario';
 }
 
-/** Enlace para subir la versión nueva de un documento de la bóveda. */
-export function enlaceSubirVersion(documento: Pick<DocumentoBovedaDto, 'id' | 'tipo'>): string {
-  return `/boveda/subir?documento=${documento.id}&tipo=${encodeURIComponent(documento.tipo.codigo)}`;
+/** Lo que se le pide al diálogo de subida para subir la versión nueva de un documento de la bóveda. */
+export function solicitudDeNuevaVersion(documento: Pick<DocumentoBovedaDto, 'id' | 'tipo'>): SolicitudDeSubida {
+  return { documento: documento.id, tipo: documento.tipo.codigo };
 }

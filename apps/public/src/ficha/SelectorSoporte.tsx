@@ -3,7 +3,7 @@ import type { DocumentoBovedaDto, SoporteSeccionDto } from '@validalo/api-client
 import { formatearFecha, SeccionPlana, visualmenteOculto } from '@validalo/ui';
 import { FileCheck, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router';
+import { useDialogoSubir } from '../boveda/useDialogoSubir';
 import { useBoveda } from '../shared/api';
 import { documentosDeSoporte, SOPORTE_FICHA, type DefinicionSeccion } from './secciones';
 
@@ -17,8 +17,6 @@ interface Props {
   faltaSoporte: string | null;
   /** Error 422 del soporte (`soporte-invalido`, `soporte-tipo-invalido`…). */
   error: string | null;
-  /** Ruta de la sección, para volver después de subir un soporte. */
-  volver: string;
   deshabilitado: boolean;
 }
 
@@ -31,12 +29,13 @@ const mismo = (a: SoporteSeccionDto, b: SoporteSeccionDto) => a.documentoId === 
 
 /**
  * «Documento que respalda esta información»: los documentos globales de la bóveda del tercero de los tipos que admite la
- * sección (FM-20), en su versión vigente, más los soportes que ya tenía la versión guardada. «Subir un soporte» usa la
- * carga de siempre con el canónico `SOPORTE_FICHA` y vuelve a la sección.
+ * sección (FM-20), en su versión vigente, más los soportes que ya tenía la versión guardada. «Subir un soporte» abre el diálogo de
+ * subida con el canónico `SOPORTE_FICHA`: no saca al tercero de la sección, así que sus cambios sin guardar siguen ahí.
  */
-export function SelectorSoporte({ definicion, soportes, retirados = [], onCambiar, faltaSoporte, error, volver, deshabilitado }: Props) {
+export function SelectorSoporte({ definicion, soportes, retirados = [], onCambiar, faltaSoporte, error, deshabilitado }: Props) {
   const { t } = useTranslation();
   const boveda = useBoveda();
+  const abrirSubida = useDialogoSubir((s) => s.abrir);
   const documentos = boveda.data?.documentos ?? [];
   const tipoDe = (documentoId: string) => documentos.find((d) => d.id === documentoId)?.tipo.nombre ?? null;
 
@@ -57,7 +56,6 @@ export function SelectorSoporte({ definicion, soportes, retirados = [], onCambia
   const alternar = (opcion: OpcionSoporte, marcado: boolean) =>
     onCambiar(marcado ? [...soportes, opcion.soporte] : soportes.filter((s) => !mismo(s, opcion.soporte)));
 
-  const subir = `/boveda/subir?tipo=${SOPORTE_FICHA}&nombre=${encodeURIComponent(t('ficha.soporte.nombreCanonico'))}&volver=${encodeURIComponent(volver)}`;
   const mensaje = error ?? faltaSoporte;
 
   return (
@@ -98,7 +96,7 @@ export function SelectorSoporte({ definicion, soportes, retirados = [], onCambia
           </Alert>
         )}
       </FormControl>
-      <Button component={RouterLink} to={subir} variant="text" startIcon={<Upload size={18} aria-hidden />} sx={{ mt: 1 }}>
+      <Button onClick={() => abrirSubida({ tipo: SOPORTE_FICHA, nombre: t('ficha.soporte.nombreCanonico') })} variant="text" startIcon={<Upload size={18} aria-hidden />} sx={{ mt: 1 }}>
         {t('ficha.soporte.subir')}
       </Button>
       <Typography sx={{ color: 'text.secondary' }}>{t('ficha.soporte.subirAyuda')}</Typography>

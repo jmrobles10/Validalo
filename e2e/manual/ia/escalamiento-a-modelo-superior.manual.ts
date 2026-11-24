@@ -36,7 +36,8 @@ recorrido(
         nombre: RUT,
         archivo: pdf(`RUT ${tercero.nombre} [[nit=${tercero.identificacion.numero}]][[razonSocial=${tercero.nombre}]][[confianza=0.55]]`),
       },
-      { nombre: 'Certificación bancaria', archivo: pdf(`Certificacion bancaria ${tercero.nombre}`) },
+      // La certificación bancaria no es un documento suelto: el tercero registra una cuenta con ella y la designa para Sur, que así la recibe y su IA la lee.
+      { nombre: 'Certificación bancaria', archivo: pdf(`Certificacion bancaria ${tercero.nombre}`), cuenta: { titular: tercero.nombre } },
     ]);
 
     const paginaSofia = await (await browser.newContext()).newPage();

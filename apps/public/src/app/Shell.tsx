@@ -4,6 +4,7 @@ import { Building2, FolderCheck, IdCard, Landmark, LogOut, ShieldCheck, type Luc
 import { useTranslation } from 'react-i18next';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router';
 import { AvisoDeAccesoAislado, AvisoDeAccesosPorAprobar } from '../accesos/AvisosDeAcceso';
+import { AnfitrionDeSubida } from '../boveda/AnfitrionDeSubida';
 import { AvisoDePropuestasDePersonas } from '../personas/AvisoDePropuestas';
 import { Campana } from '../notificaciones/Campana';
 import { MODO_EMBEBIDO } from '../embebido/modo';
@@ -103,8 +104,13 @@ function AccionDeBarra({ icono: Icono, etiqueta, onClick }: { icono: LucideIcon;
 export function Shell() {
   // Dentro del iframe de un sistema integrador: sin cabecera, navegación ni pie (el sistema pone su propio marco) y con el puente de mensajes.
   usePuenteEmbebido();
-  if (MODO_EMBEBIDO) return <ShellEmbebido />;
-  return <ShellNormal />;
+  return (
+    <>
+      {MODO_EMBEBIDO ? <ShellEmbebido /> : <ShellNormal />}
+      {/* El diálogo de subida es de toda la app: lo abren los botones «Subir…» de las pantallas y no depende de la fila que lo abrió. */}
+      <AnfitrionDeSubida />
+    </>
+  );
 }
 
 /** El contenido solo, a todo el ancho del iframe y sin saltos laterales. */

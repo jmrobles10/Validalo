@@ -1,8 +1,10 @@
 import { ThemeProvider } from '@mui/material';
-import { render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render, screen, within } from '@testing-library/react';
 import { createValidaloTheme } from '@validalo/ui';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useDialogoSubir } from '../boveda/useDialogoSubir';
 import { useSesionTercero } from '../sesion/sesionTercero';
 import { Shell } from './Shell';
 
@@ -28,7 +30,10 @@ function montar(ruta: string) {
   );
 }
 
-afterEach(() => useSesionTercero.setState({ estado: 'sin-sesion', sesion: null }));
+afterEach(() => {
+  useSesionTercero.setState({ estado: 'sin-sesion', sesion: null });
+  useDialogoSubir.getState().cerrar();
+});
 
 describe('Shell del tercero: la marca', () => {
   it('la barra lleva el logotipo de Valídalo (la «V» con el check y «alídalo») y, en las pantallas de entrada, el rótulo «Mis documentos»', () => {
@@ -193,5 +198,29 @@ describe('Shell del tercero: la barra inferior del celular', () => {
     for (const rotulo of rotulos) {
       expect(rotulo).toHaveStyle({ whiteSpace: 'nowrap' });
     }
+  });
+});
+
+describe('Shell del tercero: el diálogo de subida', () => {
+  it('el marco monta el diálogo de toda la app: los botones «Subir…» lo abren sin que la pantalla lo traiga', async () => {
+    useSesionTercero.setState({ estado: 'activa' });
+    render(
+      <ThemeProvider theme={createValidaloTheme('light', { app: 'public' })}>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <MemoryRouter initialEntries={['/boveda']}>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route path="*" element={<p>contenido</p>} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ThemeProvider>,
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    act(() => useDialogoSubir.getState().abrir({ tipo: 'RUT', nombre: 'RUT' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Subir RUT' })).toBeInTheDocument();
   });
 });

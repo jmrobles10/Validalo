@@ -4,7 +4,6 @@ import { formatearFecha } from '@validalo/ui';
 import { Archive, Download, EllipsisVertical, FileText, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router';
 import { estadoDeVigencia, textoVigencia } from '../vigencia/vigencia';
 import { ChipDeVersion } from './ChipDeVersion';
 import { COLUMNAS_DOCUMENTO } from './columnas';
@@ -14,12 +13,13 @@ import { EmpresasDelDocumento } from './EmpresasDelDocumento';
 import { BOTON_DE_TEXTO_PEQUENO } from './estilos';
 import { comparticionesDeLaEmpresa, resumirEmpresas } from './resumenEmpresas';
 import { useDescargar } from './useDescargar';
+import { useDialogoSubir } from './useDialogoSubir';
 import {
   empresaConLaFechaMasProxima,
-  enlaceSubirVersion,
   sePuedeDescargar,
   sePuedeRetirar,
   sePuedeSubirVersion,
+  solicitudDeNuevaVersion,
   venceEnCabecera,
 } from './versiones';
 import { VersionesDocumento } from './VersionesDocumento';
@@ -44,6 +44,7 @@ export function TarjetaDocumento({ documento, empresaId = null }: { documento: D
   const [verVersiones, setVerVersiones] = useState(false);
   const [verEmpresas, setVerEmpresas] = useState(false);
   const descargar = useDescargar();
+  const abrirSubida = useDialogoSubir((s) => s.abrir);
   const actual = documento.versionActual;
   const titulo = documento.tipo.nombre;
   const subible = sePuedeSubirVersion(documento);
@@ -132,7 +133,7 @@ export function TarjetaDocumento({ documento, empresaId = null }: { documento: D
 
       <Stack direction="row" sx={{ gridArea: 'acc', alignItems: 'center', justifySelf: 'end' }}>
         {subible && (
-          <Button component={RouterLink} to={enlaceSubirVersion(documento)} variant="text" size="small" startIcon={<Upload size={16} aria-hidden />}>
+          <Button onClick={() => abrirSubida(solicitudDeNuevaVersion(documento))} variant="text" size="small" startIcon={<Upload size={16} aria-hidden />}>
             {t('boveda.nuevaVersion')}
           </Button>
         )}
@@ -190,7 +191,7 @@ export function TarjetaDocumento({ documento, empresaId = null }: { documento: D
           documentoId={documento.id}
           tipo={titulo}
           version={retirando}
-          enlaceSubir={subible ? enlaceSubirVersion(documento) : null}
+          subirCorregida={subible ? solicitudDeNuevaVersion(documento) : null}
           onCerrar={() => setRetirando(null)}
         />
       )}

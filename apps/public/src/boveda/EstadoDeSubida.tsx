@@ -8,7 +8,10 @@ import { formatearTamano, REGLAS_GLOBALES, type ReglasArchivo } from './subida';
 import type { EstadoSubida } from './useSubida';
 import { mensajeDevolucion } from './versiones';
 
-/** Progreso y resultado de la subida con su siguiente paso: lista, duplicado, devuelta, límite, formato o sin red. */
+/**
+ * Progreso y resultado de la subida con su siguiente paso: lista, duplicado, devuelta, límite, formato o sin red. En el diálogo de subida
+ * (`onListo`) no hay a dónde navegar: al quedar lista la acción principal es «Listo», que lo cierra.
+ */
 export function EstadoDeSubida({
   estado,
   tipo,
@@ -16,6 +19,7 @@ export function EstadoDeSubida({
   onReintentar,
   onOtroArchivo,
   volver = null,
+  onListo,
   reglas = REGLAS_GLOBALES,
 }: {
   estado: Exclude<EstadoSubida, { fase: 'inicio' }>;
@@ -25,6 +29,8 @@ export function EstadoDeSubida({
   onOtroArchivo: () => void;
   /** Ruta a la que regresar (la revisión de la que vino); si la hay, es la acción principal. */
   volver?: string | null;
+  /** Solo en el diálogo: cierra el diálogo al terminar, en lugar de los enlaces a otras pantallas. */
+  onListo?: () => void;
   /** Reglas de archivo del tipo, para explicar un rechazo con sus límites. */
   reglas?: ReglasArchivo;
 }) {
@@ -126,14 +132,22 @@ export function EstadoDeSubida({
       <AlertTitle>{t('subir.lista', { n: String(r.version.n), tipo })}</AlertTitle>
       {empresas.length > 0 ? t('subir.listaCompartida', { empresas: empresas.join(', ') }) : t('subir.listaSinCompartir')}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.5 }}>
-        {volver && (
-          <Button component={RouterLink} to={volver} variant="contained">
-            {volver.startsWith('/ficha') ? t('subir.volverFicha') : t('subir.volverRevision')}
+        {onListo ? (
+          <Button variant="contained" onClick={onListo}>
+            {t('subir.listo')}
           </Button>
+        ) : (
+          <>
+            {volver && (
+              <Button component={RouterLink} to={volver} variant="contained">
+                {volver.startsWith('/ficha') ? t('subir.volverFicha') : t('subir.volverRevision')}
+              </Button>
+            )}
+            <Button component={RouterLink} to="/boveda" variant={volver ? 'outlined' : 'contained'}>
+              {t('subir.irBoveda')}
+            </Button>
+          </>
         )}
-        <Button component={RouterLink} to="/boveda" variant={volver ? 'outlined' : 'contained'}>
-          {t('subir.irBoveda')}
-        </Button>
         <Button variant="outlined" onClick={onOtroArchivo}>
           {t('subir.otroArchivo')}
         </Button>

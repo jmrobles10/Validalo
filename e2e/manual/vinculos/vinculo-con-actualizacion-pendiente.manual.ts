@@ -4,7 +4,7 @@ import { abrirEmbebido } from '../../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea, regionDeArea } from '../../soporte/empresa';
 import { publicarFlujoDeFicha } from '../../soporte/ficha';
 import { crearTipoDeVinculo, invitarVinculo } from '../../soporte/flujos';
-import { aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento } from '../../soporte/proveedor';
+import { aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, subirVersionDesdeLaBoveda } from '../../soporte/proveedor';
 import { crearEscenario, nuevoTercero, type Empresa, type Escenario, type Persona } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 import { irASector } from '../nucleo/ficha';
@@ -29,11 +29,7 @@ async function aprobarDesdeBandeja(app: FrameLocator, tercero: string, area: str
 /** El tercero sube una versión nueva del RUT desde su bóveda (siembra). */
 async function subirVersionNueva(page: Page, version: number): Promise<void> {
   await page.goto('/boveda');
-  await page.getByRole('article', { name: RUT }).getByRole('link', { name: 'Subir versión' }).click();
-  const selector = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Elegir archivo' }).click();
-  await (await selector).setFiles(pdf(`RUT en revisión v${String(version)}`));
-  await expect(page.getByText(`Es tu versión ${String(version)} de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+  await subirVersionDesdeLaBoveda(page, RUT, pdf(`RUT en revisión v${String(version)}`), version);
 }
 
 recorrido(

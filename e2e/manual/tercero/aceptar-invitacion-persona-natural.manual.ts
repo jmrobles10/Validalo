@@ -7,7 +7,7 @@ import {
   llenarSst,
   llenarTributaria,
 } from '../../soporte/ficha';
-import { abrirEmpresa, aceptarInvitacion, esperarEstadoDelTercero, fraseDeEstado, subirDocumento, tarjeta } from '../../soporte/proveedor';
+import { abrirEmpresa, aceptarInvitacion, cerrarDialogoDeSubida, elegirArchivo, esperarEstadoDelTercero, fraseDeEstado, subirDocumento, tarjeta } from '../../soporte/proveedor';
 import { invitar, nuevaPersonaNatural } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 import { escenarioConFlujoDeClientePorTipo } from '../nucleo/semillas';
@@ -185,20 +185,18 @@ recorrido(
     await page.goto('/empresas');
     await abrirEmpresa(page, e.sur.nombre, 'CLIENTE');
     await expect(fraseDeEstado(page, 'Abierto')).toBeVisible();
-    await tarjeta(page, CEDULA).getByRole('link', { name: /^Subir/ }).click();
-    await expect(page.getByRole('heading', { level: 1, name: `Subir ${CEDULA}` })).toBeVisible();
+    await tarjeta(page, CEDULA).getByRole('button', { name: /^Subir/ }).click();
+    const dialogo = page.getByRole('dialog', { name: `Subir ${CEDULA}` });
+    await expect(dialogo).toBeVisible();
     await paso(page, {
       titulo: 'Sube tu cédula de ciudadanía',
       explicacion:
-        'Cada documento tiene su pantalla de carga con sus reglas: formatos permitidos, tamaño máximo y, si aplica, los datos que debes escribir. Pulsa «Elegir archivo» y selecciona el PDF de tu cédula; Valídalo lo guarda en tu bóveda y te confirma la versión.',
-      resaltar: page.getByRole('button', { name: 'Elegir archivo' }),
+        'Cada documento abre su ventana de carga, sin salir de tu revisión, con sus reglas: formatos permitidos, tamaño máximo y, si aplica, los datos que debes escribir. Pulsa «Elegir archivo» y selecciona el PDF de tu cédula; Valídalo lo guarda en tu bóveda y te confirma la versión.',
+      resaltar: dialogo.getByRole('button', { name: 'Elegir archivo' }),
       configuracion: { ajuste: 'Formatos, tamaño, campos y vigencia del tipo de documento', ruta: 'Configuración › Tipos de documento (/tipos-documento)' },
     });
-    const selector = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf(`Cedula ${tercero.identificacion.numero}`));
-    await expect(page.getByText(`Es tu versión 1 de ${CEDULA}`)).toBeVisible({ timeout: 30_000 });
-    await page.getByRole('link', { name: 'Volver a mi revisión' }).click();
+    await elegirArchivo(page, pdf(`Cedula ${tercero.identificacion.numero}`), `Es tu versión 1 de ${CEDULA}`);
+    await cerrarDialogoDeSubida(page);
     await subirDocumento(page, RUT, pdf(`RUT ${tercero.identificacion.numero}`));
 
     // 10. En revisión.

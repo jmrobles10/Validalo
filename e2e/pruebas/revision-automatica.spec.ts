@@ -2,8 +2,8 @@ import { expect, test, type Browser, type FrameLocator, type Page } from '@playw
 import { llamar } from '../soporte/api';
 import { pdf } from '../soporte/archivos';
 import { abrirEmbebido } from '../soporte/embebido';
-import { abrirDesdeBandeja, irASeccion, regionDeArea } from '../soporte/empresa';
-import { completarInvitacionYEsperarRevisionOAprobacion, esperarEstadoDelTercero } from '../soporte/proveedor';
+import { abrirDesdeBandeja, irASeccion, irASector, regionDeArea } from '../soporte/empresa';
+import { completarInvitacionYEsperarRevisionOAprobacion, esperarEstadoDelTercero, type DocumentoDelRequisito } from '../soporte/proveedor';
 import { activarIa, crearEscenario, invitar, nuevoTercero, publicarFlujoConFicha, type Escenario, type Tercero } from '../soporte/semilla';
 
 /**
@@ -56,13 +56,16 @@ async function esperarFila(app: FrameLocator, tercero: Tercero): Promise<void> {
   }).toPass({ timeout: 60_000 });
 }
 
-/** Cliente de Sur que sube su RUT (y la certificación bancaria, si el flujo la pide) y queda «En revisión». */
+/**
+ * Cliente de Sur que sube su RUT (y la certificación bancaria, si el flujo la pide) y queda «En revisión». La certificación bancaria no es un documento suelto (CB-8): se registra
+ * una cuenta con ella y se designa para Sur, que así la recibe.
+ */
 async function terceroConDocumentos(e: Escenario, browser: Browser, nombre: string, marcas = '', conBancaria = false) {
   const tercero = nuevoTercero(nombre);
   const invitacion = await invitar(e, e.sur, tercero, 'CLIENTE');
   const pagina = await (await browser.newContext()).newPage();
-  const documentos = [{ nombre: RUT, archivo: rut(tercero, marcas) }];
-  if (conBancaria) documentos.push({ nombre: BANCARIA, archivo: pdf(`Certificacion bancaria ${tercero.nombre}`) });
+  const documentos: DocumentoDelRequisito[] = [{ nombre: RUT, archivo: rut(tercero, marcas) }];
+  if (conBancaria) documentos.push({ nombre: BANCARIA, archivo: pdf(`Certificacion bancaria ${tercero.nombre}`), cuenta: { titular: tercero.nombre } });
   // En Automático el limpio se aprueba solo y puede hacerlo antes de que la página alcance a mostrar «En revisión».
   await completarInvitacionYEsperarRevisionOAprobacion(pagina, invitacion, documentos);
   return { tercero, pagina };
@@ -126,12 +129,14 @@ test('Ana activa Automático desde Configuración: el sistema aprueba solo lo li
   await capturar(paginaSofia, 'revision-automatica-excepciones', 1280, 900);
   await capturar(paginaSofia, 'revision-automatica-excepciones-movil', 390, 1100);
 
-  // «Abrir expediente» lleva al documento, que dice por qué requiere una persona; ella decide como siempre.
+  // «Abrir expediente» lleva al documento (en su sector, «Información tributaria»), que dice por qué requiere una persona; ella decide como siempre, desde «Aprobaciones».
   await excepcion.getByRole('link', { name: /^Abrir el expediente/ }).click();
   await expect(sofia.getByRole('heading', { level: 1, name: dudoso.tercero.nombre })).toBeVisible();
+  await irASector(sofia, 'Información tributaria');
   const decision = sofia.getByRole('region', { name: 'Decisión automática' });
   await expect(decision).toContainText('Requiere una persona:');
   await expect(decision).toContainText('Confianza baja');
+  await irASector(sofia, 'Aprobaciones');
   await expect(regionDeArea(sofia, 'Revisión').getByRole('button', { name: /^Aprobar área/ })).toBeVisible();
 });
 
@@ -188,16 +193,21 @@ test('con muestreo del 100 % la aprobación queda en Excepciones: una persona co
   await expect(fila(sofia, revertido.tercero)).toContainText('Revertida por Sofía Revisora');
   await capturar(paginaSofia, 'revision-automatica-resueltas', 1280, 900);
 
-  // El documento revertido vuelve a revisión humana: se ve en el expediente y en su historial, y el área puede decidirlo.
+  // El documento revertido vuelve a revisión humana: se ve en el expediente (sector «Información tributaria») y en su historial (sector «Historial»), y el área puede decidirlo
+  // desde «Aprobaciones».
   await fila(sofia, revertido.tercero).getByRole('link', { name: /^Abrir el expediente/ }).click();
   await expect(sofia.getByRole('heading', { level: 1, name: revertido.tercero.nombre })).toBeVisible();
+  await irASector(sofia, 'Información tributaria');
   const decision = sofia.getByRole('region', { name: 'Decisión automática' });
   await expect(decision).toContainText('Revertida por Sofía Revisora');
   await expect(decision).toContainText('Justificación: El RUT que subió no es el vigente.');
   await expect(decision.getByRole('button')).toHaveCount(0);
+  await irASector(sofia, 'Historial');
   await expect(sofia.getByText(`Una persona revirtió la aprobación automática de ${RUT} en el área Revisión`)).toBeVisible();
   await expect(sofia.getByText(new RegExp(`La revisión automática aprobó ${RUT} en el área Revisión \\(confianza 97\\s?%\\): queda para confirmar`))).toBeVisible();
+  await irASector(sofia, 'Aprobaciones');
   await expect(regionDeArea(sofia, 'Revisión').getByRole('button', { name: /^Aprobar área/ })).toBeVisible();
   await abrirDesdeBandeja(sofia, confirmado.tercero.nombre, 'Revisión', 'Cliente');
+  await irASector(sofia, 'Información tributaria');
   await expect(sofia.getByRole('region', { name: 'Decisión automática' })).toContainText('Aprobado por el sistema');
 });

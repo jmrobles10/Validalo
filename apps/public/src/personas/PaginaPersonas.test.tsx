@@ -6,6 +6,7 @@ import { configurarCliente, reiniciarCliente, type RelacionEntreTercerosDto } fr
 import { createValidaloTheme } from '@validalo/ui';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useDialogoSubir } from '../boveda/useDialogoSubir';
 import { PaginaPersonas } from './PaginaPersonas';
 
 const json = (estado: number, cuerpo: unknown) =>
@@ -69,10 +70,14 @@ function montar(relaciones: RelacionEntreTercerosDto[], alMutar: (p: Peticion) =
   return mutaciones;
 }
 
-afterEach(() => reiniciarCliente());
+afterEach(() => {
+  reiniciarCliente();
+  useDialogoSubir.getState().cerrar();
+});
 
 describe('personas relacionadas', () => {
   it('muestra las personas vigentes por rol con sus documentos y lo que una empresa pide', async () => {
+    const usuario = userEvent.setup();
     montar([
       relacion('1', 'RepresentanteLegal', 'Juan Pérez', { principal: true, documentos: documentos({ pedido: true }) }),
       relacion('2', 'Socio', 'Ana Gómez', { participacion: '35.5', deFicha: false, cargo: 'Presidente' }),
@@ -85,17 +90,36 @@ describe('personas relacionadas', () => {
     expect(juan).toHaveTextContent('CC 1001 · Representante legal');
     expect(within(juan).getByText('Principal')).toBeInTheDocument();
     expect(juan).toHaveTextContent('Te lo pide una empresa');
-    // Lo pedido se destaca (botón relleno) y lleva a la subida de la bóveda de la persona.
-    const subir = within(juan).getByRole('link', { name: 'Subir: Cédula de ciudadanía' });
-    expect(subir).toHaveAttribute('href', expect.stringContaining('persona=persona-1'));
-    expect(subir).toHaveAttribute('href', expect.stringContaining('tipo=CEDULA'));
-    expect(within(juan).getByText('Sale de tu información legal; para quitarla, quítala de la ficha.')).toBeInTheDocument();
+    // Lo pedido se destaca (botón relleno) y abre el diálogo de subida de la bóveda de la persona, sin salir de la página.
+    await usuario.click(within(juan).getByRole('button', { name: 'Subir: Cédula de ciudadanía' }));
+    expect(useDialogoSubir.getState().solicitud).toEqual({ persona: 'persona-1', tipo: 'CEDULA', nombre: 'Cédula de ciudadanía' });
+    // La que sale de la información legal se cambia o se quita allí (es el único lugar donde se registra): la tarjeta lleva a la ficha y no ofrece quitarla.
+    expect(within(juan).getByText('Se registra en tu información legal: para cambiarla o quitarla, hazlo allí.')).toBeInTheDocument();
+    expect(within(juan).getByRole('link', { name: 'Editar en Información legal' })).toHaveAttribute('href', '/ficha/legal');
     expect(within(juan).queryByRole('button', { name: 'Quitar' })).not.toBeInTheDocument();
 
     const ana = screen.getByRole('heading', { name: 'Ana Gómez' }).closest('li') as HTMLElement;
     expect(ana).toHaveTextContent('35,5 % de participación');
     expect(ana).toHaveTextContent('Cargo: Presidente');
     expect(within(ana).getByRole('button', { name: 'Quitar' })).toBeInTheDocument();
+    expect(within(ana).queryByText(/antes de que la información legal fuera el único lugar/)).toBeInTheDocument(); // un socio declarado a mano de antes: se agrega en la ficha
+  });
+
+  it('un beneficiario final declarado aquí no lleva el aviso de la ficha, porque la ficha no lo maneja', async () => {
+    montar([relacion('2', 'BeneficiarioFinal', 'Beatriz Beneficiaria', { deFicha: false })]);
+
+    const beatriz = (await screen.findByRole('heading', { name: 'Beatriz Beneficiaria' })).closest('li') as HTMLElement;
+    expect(within(beatriz).getByRole('button', { name: 'Quitar' })).toBeInTheDocument();
+    expect(within(beatriz).queryByText(/información legal/)).not.toBeInTheDocument();
+  });
+
+  it('la cabecera y el vacío dicen dónde se registran los representantes, suplentes y socios y llevan a la información legal', async () => {
+    montar([]);
+
+    expect(await screen.findByText('Aún no hay personas relacionadas')).toBeInTheDocument();
+    expect(screen.getByText(/se registran en Información legal; aquí los ves con sus documentos/)).toBeInTheDocument();
+    for (const enlace of screen.getAllByRole('link', { name: 'Ir a Información legal' })) expect(enlace).toHaveAttribute('href', '/ficha/legal');
+    expect(screen.getAllByRole('link', { name: 'Ir a Información legal' })).toHaveLength(2); // el de la cabecera y el del estado vacío
   });
 
   it('muestra el estado del documento ya cargado y ofrece subir otra versión', async () => {
@@ -104,10 +128,10 @@ describe('personas relacionadas', () => {
     const juan = (await screen.findByRole('heading', { name: 'Juan Pérez' })).closest('li') as HTMLElement;
     expect(juan).toHaveTextContent('Versión 2');
     expect(juan).toHaveTextContent('Vigente');
-    expect(within(juan).getByRole('link', { name: 'Subir otra versión: Cédula de ciudadanía' })).toBeInTheDocument();
+    expect(within(juan).getByRole('button', { name: 'Subir otra versión: Cédula de ciudadanía' })).toBeInTheDocument();
   });
 
-  it('confirma lo que detectó la IA y dice a quién reemplazaría', async () => {
+  it('confirma lo que detectó la IA y dice a quién reemplazaría y que también la agrega a la información legal', async () => {
     const mutaciones = montar([
       relacion('1', 'RepresentanteLegal', 'Juan Pérez', { principal: true }),
       relacion('9', 'RepresentanteLegal', 'María Gómez', {
@@ -123,6 +147,7 @@ describe('personas relacionadas', () => {
     const propuesta = await screen.findByRole('group', { name: 'María Gómez' });
     expect(propuesta).toHaveTextContent('María Gómez como representante legal (confianza 93 %)');
     expect(propuesta).toHaveTextContent('Reemplazaría a Juan Pérez.');
+    expect(propuesta).toHaveTextContent('al confirmar, también la agregamos a tu información legal');
     expect(screen.queryByRole('heading', { name: 'María Gómez' })).not.toBeInTheDocument(); // todavía no es una persona vigente
 
     await userEvent.setup().click(within(propuesta).getByRole('button', { name: 'Confirmar cambio' }));
@@ -152,6 +177,28 @@ describe('personas relacionadas', () => {
     await vi.waitFor(() => expect(mutaciones).toHaveLength(1));
     expect(mutaciones[0]?.metodo).toBe('DELETE');
     expect(mutaciones[0]?.url).toContain('/public/v1/tercero/relaciones/2');
+  });
+
+  it('con un rol de la ficha el diálogo no declara nada: lleva a la información legal con el rol elegido', async () => {
+    const mutaciones = montar([]);
+    const usuario = userEvent.setup();
+
+    await usuario.click((await screen.findAllByRole('button', { name: 'Agregar persona' }))[0]!);
+    const dialogo = await screen.findByRole('dialog', { name: 'Agregar una persona relacionada' });
+    // Lo que se declara aquí por omisión es lo que la ficha no maneja.
+    expect(within(dialogo).getByRole('combobox', { name: /Cómo se relaciona/ })).toHaveTextContent('Beneficiario final');
+    expect(within(dialogo).getByLabelText(/Nombre completo/)).toBeInTheDocument();
+
+    for (const [rol, valor] of [['Representante legal', 'RepresentanteLegal'], ['Suplente del representante legal', 'Suplente'], ['Socio o accionista', 'Socio']] as const) {
+      await usuario.click(within(dialogo).getByRole('combobox', { name: /Cómo se relaciona/ }));
+      await usuario.click(await screen.findByRole('option', { name: rol }));
+      expect(within(dialogo).getByText(/se registra en tu Información legal, que es el único lugar/)).toBeInTheDocument();
+      expect(within(dialogo).queryByLabelText(/Nombre completo/)).not.toBeInTheDocument();
+      expect(within(dialogo).queryByRole('button', { name: 'Agregar' })).not.toBeInTheDocument();
+      expect(within(dialogo).getByRole('link', { name: 'Ir a Información legal' })).toHaveAttribute('href', `/ficha/legal?agregar=${valor}`);
+    }
+
+    expect(mutaciones).toHaveLength(0);
   });
 
   it('declara una persona: valida al intentar y envía el cuerpo de la API', async () => {

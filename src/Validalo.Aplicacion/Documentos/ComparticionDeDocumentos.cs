@@ -54,7 +54,14 @@ public static class ComparticionDeDocumentos
             // La certificación de una cuenta (CB-1) no la pide el flujo: se comparte solo cuando el tercero designa esa cuenta con la empresa (CompartirCertificacionDeCuentaAsync).
             var pedido = candidato.Ambito == AmbitoDocumento.Global && candidato.CuentaBancariaId is null && candidato.TipoCanonico is { } codigo && codigosGlobales.Contains(codigo);
             if (!esDelVinculo && !pedido)
+            {
+                // La certificación general que ya se le había compartido a la empresa y luego se ligó a su cuenta (CB-8) no se vuelve a compartir aquí, pero sigue siendo lo que
+                // cubre ese requisito: va en el resultado para que el cálculo de requisitos la vea.
+                if (candidato.Ambito == AmbitoDocumento.Global && candidato.CuentaBancariaId is not null && candidato.TipoCanonico is { } canonico && codigosGlobales.Contains(canonico) &&
+                    candidato.Comparticiones.Any(c => c.VinculoId == vinculo.Id))
+                    resultado.Add(candidato);
                 continue;
+            }
 
             var destino = new VinculoCandidato(vinculo.Id, tenantId, vinculo.EmpresaId, terceroId, InvitacionAceptada: true, vinculo.Estado,
                 ExigeElTipo: pedido, vinculo.BovedaDisponible);

@@ -1,5 +1,6 @@
 import type { HechosDto, HechosIaDto } from '@validalo/api-client';
-import { LOCALE } from '@validalo/ui';
+import { formatearFecha, LOCALE } from '@validalo/ui';
+import type { TFunction } from 'i18next';
 import { formatearFechaDeclarada } from './formatoDatos';
 
 /**
@@ -90,4 +91,9 @@ export function estadoRevision(hechos: HechosDto | null | undefined): EstadoRevi
   if (!hechos) return 'nada';
   if (hechos.ia) return 'conIa';
   return hechos.conIa ? 'nada' : 'sinAnalisis';
+}
+
+/** «Analizado el 07/11/2026 · gpt-6.1-terra»: cuándo y con qué modelo se leyó el archivo (texto pequeño, al pie de la revisión). */
+export function textoDelAnalisis(ia: Pick<HechosIaDto, 'fecha' | 'modelo'>, t: TFunction): string {
+  return t('ia.revision.analizado', { fecha: formatearFecha(ia.fecha), modelo: ia.modelo });
 }

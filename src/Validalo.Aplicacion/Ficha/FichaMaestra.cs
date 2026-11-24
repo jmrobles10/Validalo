@@ -135,52 +135,67 @@ public static class GuardadoDeSecciones
         object datos, IReadOnlyList<SoporteDeSeccion> soportes, ContextoDeSeccion contexto, ICatalogosDeFicha catalogos, OrigenDeSeccion origen, string autor,
         TimeProvider reloj, CancellationToken ct, IMessageBus? mensajes = null, (string Tipo, string Id)? actorSincronizacion = null)
     {
-        var terceroId = tercero.Id;
         return ConReintentosAsync(async () =>
         {
-            var ahora = reloj.GetUtcNow();
             await using var sesion = abrirBoveda();
-            var id = SeccionDeFicha.IdPara(terceroId, definicion.Codigo, periodoValido);
-            var existente = await sesion.Events.FetchStreamStateAsync(id, ct) is not null;
-            var stream = existente ? await sesion.Events.FetchForExclusiveWriting<SeccionDeFicha>(id, ct) : null;
-
-            SeccionDeFichaIniciada? iniciada = null;
-            var actual = stream?.Aggregate;
-            if (actual is null)
-            {
-                iniciada = SeccionDeFicha.Iniciar(terceroId, definicion, periodoValido, ahora);
-                actual = SeccionDeFicha.Create(iniciada);
-            }
-
-            var eventos = actual.Registrar(definicion, datos, soportes, contexto, catalogos, origen, autor, ahora);
-            var estado = await sesion.LoadAsync<EstadoDeFicha>(terceroId, ct) ?? EstadoDeFicha.Nuevo(terceroId);
-            if (eventos.Count == 0)
-                return new Resultado(actual, false, estado, tercero.TipoPersona);
-
-            if (iniciada is not null)
-                sesion.Events.StartStream<SeccionDeFicha>(id, [iniciada, .. eventos]);
-            else
-                foreach (var evento in eventos)
-                    stream!.AppendOne(evento);
-
-            var proyectada = actual.Proyectar(eventos);
-            estado.Reflejar(proyectada);
-            sesion.Store(estado);
-            if (mensajes is not null && actorSincronizacion is { } actor)
-                await PedirSincronizacionAsync(sesion, terceroId, mensajes, actor.Tipo, actor.Id, ct);
-            // F5: la versión nueva se cruza con los documentos que la respaldan (si ya tienen análisis de IA).
-            if (mensajes is not null && definicion.Codigo is not (CodigosDeSeccion.Sst or CodigosDeSeccion.Especialidades))
-                await mensajes.PublishAsync(new CruzarFichaConDocumentos(terceroId));
-            // CU-15: una versión nueva de la ficha legal puede traer otro representante, suplente, socio o PEP: las listas ya consultadas se reevalúan.
-            if (mensajes is not null && definicion.Codigo == CodigosDeSeccion.Legal)
-            {
-                await mensajes.PublishAsync(new Verificaciones.PersonasDeFichaCambiaron(terceroId));
-                // ADR-0010: las personas de la sección legal son terceros con bóveda propia unidos al tercero por sus relaciones (idempotente).
-                await mensajes.PublishAsync(new Personas.SincronizarPersonasDeFicha(terceroId));
-            }
-            await sesion.SaveChangesAsync(ct);
-            return new Resultado(proyectada, true, estado, tercero.TipoPersona);
+            var resultado = await RegistrarEnSesionAsync(sesion, tercero, definicion, periodoValido, datos, soportes, contexto, catalogos, origen, autor, reloj.GetUtcNow(), ct,
+                mensajes, actorSincronizacion);
+            if (resultado.Creada)
+                await sesion.SaveChangesAsync(ct);
+            return resultado;
         }, mensajes);
+    }
+
+    /// <summary>
+    /// El cuerpo de <see cref="RegistrarAsync"/> sobre una sesión ya abierta y <b>sin guardar</b>: agrega la versión al stream de la sección, refleja el <see cref="EstadoDeFicha"/> y
+    /// publica lo que sigue (en el outbox si la sesión está enlistada). Quien llama guarda cuando <see cref="Resultado.Creada"/> sea verdadero, y así la versión puede ir en la misma
+    /// transacción que otros cambios (confirmar una persona de la IA, que además actualiza las relaciones). Sin cambios en la huella no escribe nada.
+    /// </summary>
+    internal static async Task<Resultado> RegistrarEnSesionAsync(IDocumentSession sesion, Tercero tercero, DefinicionDeSeccion definicion, int? periodoValido, object datos,
+        IReadOnlyList<SoporteDeSeccion> soportes, ContextoDeSeccion contexto, ICatalogosDeFicha catalogos, OrigenDeSeccion origen, string autor, DateTimeOffset ahora,
+        CancellationToken ct, IMessageBus? mensajes = null, (string Tipo, string Id)? actorSincronizacion = null)
+    {
+        var terceroId = tercero.Id;
+        var id = SeccionDeFicha.IdPara(terceroId, definicion.Codigo, periodoValido);
+        var existente = await sesion.Events.FetchStreamStateAsync(id, ct) is not null;
+        var stream = existente ? await sesion.Events.FetchForExclusiveWriting<SeccionDeFicha>(id, ct) : null;
+
+        SeccionDeFichaIniciada? iniciada = null;
+        var actual = stream?.Aggregate;
+        if (actual is null)
+        {
+            iniciada = SeccionDeFicha.Iniciar(terceroId, definicion, periodoValido, ahora);
+            actual = SeccionDeFicha.Create(iniciada);
+        }
+
+        var eventos = actual.Registrar(definicion, datos, soportes, contexto, catalogos, origen, autor, ahora);
+        var estado = await sesion.LoadAsync<EstadoDeFicha>(terceroId, ct) ?? EstadoDeFicha.Nuevo(terceroId);
+        if (eventos.Count == 0)
+            return new Resultado(actual, false, estado, tercero.TipoPersona);
+
+        if (iniciada is not null)
+            sesion.Events.StartStream<SeccionDeFicha>(id, [iniciada, .. eventos]);
+        else
+            foreach (var evento in eventos)
+                stream!.AppendOne(evento);
+
+        var proyectada = actual.Proyectar(eventos);
+        estado.Reflejar(proyectada);
+        sesion.Store(estado);
+        if (mensajes is not null && actorSincronizacion is { } actor)
+            await PedirSincronizacionAsync(sesion, terceroId, mensajes, actor.Tipo, actor.Id, ct);
+        // F5: la versión nueva se cruza con los documentos que la respaldan (si ya tienen análisis de IA).
+        if (mensajes is not null && definicion.Codigo is not (CodigosDeSeccion.Sst or CodigosDeSeccion.Especialidades))
+            await mensajes.PublishAsync(new CruzarFichaConDocumentos(terceroId));
+        // CU-15: una versión nueva de la ficha legal puede traer otro representante, suplente, socio o PEP: las listas ya consultadas se reevalúan.
+        if (mensajes is not null && definicion.Codigo == CodigosDeSeccion.Legal)
+        {
+            await mensajes.PublishAsync(new Verificaciones.PersonasDeFichaCambiaron(terceroId));
+            // ADR-0010: las personas de la sección legal son terceros con bóveda propia unidos al tercero por sus relaciones (idempotente).
+            await mensajes.PublishAsync(new Personas.SincronizarPersonasDeFicha(terceroId));
+        }
+
+        return new Resultado(proyectada, true, estado, tercero.TipoPersona);
     }
 
     /// <summary>

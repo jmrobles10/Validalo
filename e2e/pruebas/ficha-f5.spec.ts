@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { pdf } from '../soporte/archivos';
 import { abrirEmbebido } from '../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea, regionDeArea } from '../soporte/empresa';
-import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento } from '../soporte/proveedor';
+import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, subirVersionDesdeLaBoveda } from '../soporte/proveedor';
 import { activarIa, crearEscenario, invitar, nuevoTercero, publicarFlujoConFicha } from '../soporte/semilla';
 
 /**
@@ -72,11 +72,7 @@ test('el tercero sube un RUT nuevo, acepta la propuesta en el wizard y la empres
 
   // El tercero sube un RUT nuevo (otra dirección): la plataforma le ofrece actualizar su información desde él.
   await page.goto('/boveda');
-  await page.getByRole('article', { name: RUT }).getByRole('link', { name: 'Subir versión' }).click();
-  const selector = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Elegir archivo' }).click();
-  await (await selector).setFiles(rut(nit, 'Cl 80 # 10-20', 'v2'));
-  await expect(page.getByText(`Es tu versión 2 de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+  await subirVersionDesdeLaBoveda(page, RUT, rut(nit, 'Cl 80 # 10-20', 'v2'), 2);
 
   await page.goto('/ficha');
   const aviso = page.getByRole('alert', { name: 'Tienes documentos más nuevos que tu información' });

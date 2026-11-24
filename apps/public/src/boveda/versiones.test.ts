@@ -2,7 +2,7 @@ import type { ComparticionPublicaDto, VigenciaDto } from '@validalo/api-client';
 import { describe, expect, it } from 'vitest';
 import i18n from '../i18n';
 import { extraerDeCorreo } from '../dev/correos';
-import { detalleComparticion, empresaConLaFechaMasProxima, mensajeDevolucion, resumenCorto, sePuedeDescargar, sePuedeRetirar, venceEnCabecera } from './versiones';
+import { detalleComparticion, empresaConLaFechaMasProxima, mensajeDevolucion, resumenCorto, sePuedeDescargar, sePuedeRetirar, solicitudDeNuevaVersion, venceEnCabecera } from './versiones';
 
 const t = i18n.t.bind(i18n);
 const empresa = { id: 'e1', nombre: 'Constructora Norte S.A.S.', logoUrl: null };
@@ -124,6 +124,12 @@ describe('versiones de la bóveda', () => {
     expect(sePuedeRetirar({ estado: 'Devuelta' })).toBe(false);
     expect(sePuedeDescargar({ estado: 'Superada' })).toBe(true);
     expect(sePuedeDescargar({ estado: 'Retirada' })).toBe(false);
+  });
+});
+
+describe('subir una versión nueva de un documento de la bóveda', () => {
+  it('le pide al diálogo de subida el documento y su tipo', () => {
+    expect(solicitudDeNuevaVersion({ id: 'd1', tipo: { codigo: 'RUT', nombre: 'RUT', tipoDocumentoTenantId: null } })).toEqual({ documento: 'd1', tipo: 'RUT' });
   });
 });
 

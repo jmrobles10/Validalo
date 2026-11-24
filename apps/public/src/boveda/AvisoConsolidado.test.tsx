@@ -4,8 +4,9 @@ import userEvent from '@testing-library/user-event';
 import type { DocumentoBovedaDto, VigenciaDto } from '@validalo/api-client';
 import { createValidaloTheme } from '@validalo/ui';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { AvisoConsolidado } from './AvisoConsolidado';
+import { useDialogoSubir } from './useDialogoSubir';
 
 const vigencia = (estado: string, vigenteHasta: string, finDeGracia: string | null = null): VigenciaDto => ({
   vigenteHasta,
@@ -46,8 +47,11 @@ function montar(documentos: DocumentoBovedaDto[]) {
   );
 }
 
+afterEach(() => useDialogoSubir.getState().cerrar());
+
 describe('bloque «Por renovar» de la bóveda', () => {
-  it('lista primero lo que vence antes, con qué empresas queda al día y el enlace para subir la versión nueva', () => {
+  it('lista primero lo que vence antes, con qué empresas queda al día y la acción para subir la versión nueva', async () => {
+    const usuario = userEvent.setup();
     montar([
       documento('camara', 'Cámara de comercio', [
         ['Constructora Norte', vigencia('PorVencer', '2026-11-30')],
@@ -67,10 +71,9 @@ describe('bloque «Por renovar» de la bóveda', () => {
     expect(lineas[1]).toHaveTextContent(
       'Cámara de comercio: vence para Constructora Norte el 30/11/2026 y para Constructora Sur el 30/12/2026. Renueva antes del 30/11 y quedas al día con las dos.',
     );
-    expect(within(lineas[1]).getByRole('link', { name: 'Subir versión nueva: Cámara de comercio' })).toHaveAttribute(
-      'href',
-      '/boveda/subir?documento=camara&tipo=CAMARA',
-    );
+    // «Subir versión nueva» abre el diálogo de subida con ese documento: no navega.
+    await usuario.click(within(lineas[1]).getByRole('button', { name: 'Subir versión nueva: Cámara de comercio' }));
+    expect(useDialogoSubir.getState().solicitud).toEqual({ documento: 'camara', tipo: 'CAMARA' });
     expect(screen.queryByText(/Cédula/)).not.toBeInTheDocument();
   });
 
@@ -93,7 +96,7 @@ describe('bloque «Por renovar» de la bóveda', () => {
     expect(within(bloque).getAllByRole('listitem')).toHaveLength(1);
     expect(bloque).toHaveTextContent('Cámara de comercio: vence el 20/11/2026 para 3 empresas (la primera, Empresa 01).');
     expect(bloque).not.toHaveTextContent('Empresa 25');
-    expect(within(bloque).getByRole('link', { name: 'Subir versión nueva: Cámara de comercio' })).toBeInTheDocument();
+    expect(within(bloque).getByRole('button', { name: 'Subir versión nueva: Cámara de comercio' })).toBeInTheDocument();
 
     const ver = within(bloque).getByRole('button', { name: 'Ver empresas: Cámara de comercio' });
     expect(ver).toHaveAttribute('aria-expanded', 'false');

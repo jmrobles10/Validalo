@@ -6,9 +6,9 @@ recorrido(
   {
     dominio: 'tercero',
     actor: 'Tercero',
-    titulo: 'Agrega a su representante legal como persona relacionada',
+    titulo: 'Agrega a un beneficiario final como persona relacionada',
     resumen:
-      'El proveedor abre «Personas relacionadas», ve que aún no tiene a nadie, y agrega a su representante legal con su número de documento. Cada persona tiene su propia bóveda: su cédula se sube una vez y sirve a todas las empresas con las que trabaja.',
+      'El proveedor abre «Personas relacionadas», ve que aún no tiene a nadie, y agrega a un beneficiario final con su número de documento. Los representantes legales, suplentes y socios no se agregan aquí: se registran en su información legal y aparecen en esta lista. Cada persona tiene su propia bóveda: su cédula se sube una vez y sirve a todas las empresas con las que trabaja.',
     precondiciones: [
       'Un grupo con Constructora Norte, que invitó a un proveedor jurídico. El proveedor aceptó la invitación.',
       'El proveedor no tiene personas relacionadas todavía.',
@@ -29,7 +29,7 @@ recorrido(
       titulo: 'Abre tus personas relacionadas',
       explicacion:
         'Aquí están las personas que representan a tu empresa o son sus socios y beneficiarios finales. Cada una tiene su propia bóveda: su cédula se valida una vez y sirve a todas las empresas con las que trabajas. ' +
-        'Algunas aparecen solas, a partir de tu información legal; otras las agregas aquí.',
+        'Los representantes legales, suplentes y socios se registran en tu información legal y aparecen aquí solos; los beneficiarios finales y los miembros de un consorcio los agregas aquí.',
       resaltar: page.getByRole('button', { name: 'Agregar persona' }),
       configuracion: {
         ajuste: 'Información legal (de donde salen las personas)',
@@ -41,22 +41,23 @@ recorrido(
     await page.getByRole('button', { name: 'Agregar persona' }).click();
     const dialogo = page.getByRole('dialog', { name: 'Agregar una persona relacionada' });
     await dialogo.getByRole('combobox', { name: 'Cómo se relaciona' }).click();
-    await page.getByRole('option', { name: 'Representante legal', exact: true }).click();
+    await page.getByRole('option', { name: 'Beneficiario final', exact: true }).click();
     await dialogo.getByRole('textbox', { name: 'Nombre completo' }).fill('Marta Lucía Ríos Duarte');
     await dialogo.getByRole('textbox', { name: 'Número de documento' }).fill('1020304050');
     await paso(page, {
       titulo: 'Escribe quién es y cómo se relaciona',
       explicacion:
-        'Elige cómo se relaciona con tu empresa (representante legal, suplente, socio, beneficiario final o miembro del consorcio), su nombre y su documento. ' +
+        'Elige cómo se relaciona con tu empresa (beneficiario final o miembro del consorcio), su nombre y su documento. ' +
         'Si la persona ya tiene bóveda por otra empresa, se reutiliza: no vuelve a empezar.',
       resaltar: dialogo,
       variantes: [
-        { cuando: 'Ya hay un representante legal principal', entonces: 'Puedes marcar esta persona como «Principal» solo si es la que piden las empresas para su tipo.' },
+        { cuando: 'Es un representante legal, un suplente o un socio', entonces: 'El diálogo te lleva a «Información legal», que es el único lugar donde se registran; al guardarlos aparecen aquí con sus documentos.' },
+        { cuando: 'Ya hay un beneficiario final principal', entonces: 'Puedes marcar esta persona como «Principal» solo si es la que piden las empresas para su tipo.' },
       ],
     });
 
     await dialogo.getByRole('button', { name: 'Agregar', exact: true }).click();
-    await expect(page.getByText('Agregamos a Marta Lucía Ríos Duarte como Representante legal.')).toBeVisible();
+    await expect(page.getByText('Agregamos a Marta Lucía Ríos Duarte como beneficiario final.')).toBeVisible();
     await paso(page, {
       titulo: 'Comprueba que la persona quedó agregada',
       explicacion:

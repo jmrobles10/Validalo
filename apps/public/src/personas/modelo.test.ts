@@ -1,10 +1,11 @@
 import type { RelacionEntreTercerosDto, RequisitoPublicoDto } from '@validalo/api-client';
 import { describe, expect, it } from 'vitest';
 import { destinoFijo } from '../boveda/parametrosSubida';
-import { enlaceDeSubida } from '../expediente/requisitos';
+import { parametrosDeSolicitud } from '../boveda/solicitudDeSubida';
+import { solicitudDeRequisito } from '../expediente/requisitos';
 import {
-  comoNumero, confianzaComoPorcentaje, cuerpoDeDeclaracion, DATOS_DE_PERSONA_VACIOS, documentoPorSubir, documentosPorSubir, enlaceDeSubidaDePersona, esRol,
-  propuestasDe, validarPersona, vigentesPorRol,
+  comoNumero, confianzaComoPorcentaje, cuerpoDeDeclaracion, DATOS_DE_PERSONA_VACIOS, documentoPorSubir, documentosPorSubir, esRol, estaCargado,
+  personasConDocumentosCargados, propuestasDe, ROLES_DE_LA_FICHA, seRegistraEnLaFicha, solicitudDeDocumentoDePersona, validarPersona, vigentesPorRol,
 } from './modelo';
 
 const relacion = (id: string, tipo: string, cambios: Partial<RelacionEntreTercerosDto> = {}): RelacionEntreTercerosDto => ({
@@ -68,8 +69,80 @@ describe('personas relacionadas del tercero', () => {
     expect(esRol('Dueño')).toBe(false);
   });
 
-  it('arma el enlace de subida de la persona con regreso a sus personas', () => {
-    expect(enlaceDeSubidaDePersona('p1', 'CEDULA', 'Cédula de ciudadanía')).toBe('/boveda/subir?persona=p1&tipo=CEDULA&nombre=C%C3%A9dula+de+ciudadan%C3%ADa&volver=%2Fpersonas');
+  it('la ficha maneja al representante legal, al suplente y al socio; el beneficiario final y el miembro se declaran en Personas', () => {
+    expect(ROLES_DE_LA_FICHA).toEqual(['RepresentanteLegal', 'Suplente', 'Socio']);
+    expect(['RepresentanteLegal', 'Suplente', 'Socio'].every(seRegistraEnLaFicha)).toBe(true);
+    expect(seRegistraEnLaFicha('BeneficiarioFinal')).toBe(false);
+    expect(seRegistraEnLaFicha('MiembroDe')).toBe(false);
+    expect(seRegistraEnLaFicha('Apoderado')).toBe(false);
+  });
+
+  it('arma la solicitud de subida de la persona: va a su bóveda, no a la del tercero', () => {
+    const solicitud = solicitudDeDocumentoDePersona('p1', 'CEDULA', 'Cédula de ciudadanía');
+
+    expect(solicitud).toEqual({ persona: 'p1', tipo: 'CEDULA', nombre: 'Cédula de ciudadanía' });
+    expect(destinoFijo(parametrosDeSolicitud(solicitud))).toEqual({ destino: { tipoCanonico: 'CEDULA', terceroRelacionadoId: 'p1' }, nombre: 'Cédula de ciudadanía' });
+  });
+});
+
+describe('las personas en «Mi bóveda»', () => {
+  const cargado = (tipoCanonico: string, cambios: Partial<RelacionEntreTercerosDto['documentos'][number]> = {}): RelacionEntreTercerosDto['documentos'][number] => ({
+    tipoCanonico,
+    nombre: tipoCanonico,
+    documentoId: `d-${tipoCanonico}`,
+    version: 1,
+    estado: 'Actual',
+    cargadaEn: '2026-11-10T10:00:00Z',
+    pedido: false,
+    ...cambios,
+  });
+  const sinCargar = (tipoCanonico: string) => cargado(tipoCanonico, { documentoId: null, version: null, estado: null, cargadaEn: null });
+
+  it('un documento está cargado si tiene documento, versión y estado', () => {
+    expect(estaCargado(cargado('CEDULA'))).toBe(true);
+    expect(estaCargado(sinCargar('CEDULA'))).toBe(false);
+    expect(estaCargado({ documentoId: 'd1', version: 1, estado: null })).toBe(false);
+  });
+
+  it('muestra a las personas vigentes con algo cargado, solo con sus documentos cargados', () => {
+    const personas = personasConDocumentosCargados([relacion('r1', 'RepresentanteLegal', { nombre: 'Juan Pérez', documentos: [cargado('CEDULA'), sinCargar('PASAPORTE')] })]);
+
+    expect(personas).toHaveLength(1);
+    expect(personas[0]).toMatchObject({ personaId: 'p-r1', nombre: 'Juan Pérez', roles: ['RepresentanteLegal'] });
+    expect(personas[0]?.documentos.map((d) => d.tipoCanonico)).toEqual(['CEDULA']);
+  });
+
+  it('sin relaciones, sin documentos cargados, propuestas o terminadas no hay nada que mostrar', () => {
+    expect(personasConDocumentosCargados([])).toEqual([]);
+    expect(
+      personasConDocumentosCargados([
+        relacion('r1', 'RepresentanteLegal', { documentos: [sinCargar('CEDULA')] }),
+        relacion('r2', 'Socio', { estado: 'Propuesta', documentos: [cargado('CEDULA')] }),
+        relacion('r3', 'Suplente', { estado: 'Finalizada', documentos: [cargado('CEDULA')] }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('una persona con varios roles sale una sola vez, con sus roles en el orden del catálogo', () => {
+    const documentos = [cargado('CEDULA')];
+    const personas = personasConDocumentosCargados([
+      relacion('s1', 'Socio', { personaId: 'p1', nombre: 'Ana Gómez', documentos }),
+      relacion('r1', 'RepresentanteLegal', { personaId: 'p1', nombre: 'Ana Gómez', documentos }),
+    ]);
+
+    expect(personas).toHaveLength(1);
+    expect(personas[0]?.roles).toEqual(['RepresentanteLegal', 'Socio']);
+  });
+
+  it('ordena por el primer rol y luego por nombre', () => {
+    const documentos = [cargado('CEDULA')];
+    const personas = personasConDocumentosCargados([
+      relacion('s1', 'Socio', { nombre: 'Zoila', documentos }),
+      relacion('r2', 'RepresentanteLegal', { nombre: 'Óscar', documentos }),
+      relacion('r1', 'RepresentanteLegal', { nombre: 'Álvaro', documentos }),
+    ]);
+
+    expect(personas.map((p) => p.nombre)).toEqual(['Álvaro', 'Óscar', 'Zoila']);
   });
 });
 
@@ -110,16 +183,14 @@ describe('el requisito de persona en el expediente', () => {
   });
 
   it('sube a la bóveda de la persona (sin vínculo de contexto) y el destino lo dice', () => {
-    const enlace = enlaceDeSubida(requisito({ persona: { rol: 'RepresentanteLegal', todasLasRelaciones: false, sinPersona: false, personaId: 'p1', nombre: 'Juan Pérez' } }), 'v1', 'e1');
+    const solicitud = solicitudDeRequisito(requisito({ persona: { rol: 'RepresentanteLegal', todasLasRelaciones: false, sinPersona: false, personaId: 'p1', nombre: 'Juan Pérez' } }), 'v1', 'e1');
 
-    expect(enlace).toContain('persona=p1');
-    expect(enlace).toContain('tipo=CEDULA');
-    expect(enlace).not.toContain('vinculoId');
-    const parametros = new URLSearchParams(enlace?.split('?')[1]);
-    expect(destinoFijo(parametros)).toEqual({ destino: { tipoCanonico: 'CEDULA', terceroRelacionadoId: 'p1' }, nombre: 'Cédula de ciudadanía' });
+    expect(solicitud).toMatchObject({ persona: 'p1', tipo: 'CEDULA' });
+    expect(solicitud?.vinculoId).toBeUndefined();
+    expect(destinoFijo(parametrosDeSolicitud(solicitud ?? {}))).toEqual({ destino: { tipoCanonico: 'CEDULA', terceroRelacionadoId: 'p1' }, nombre: 'Cédula de ciudadanía' });
   });
 
-  it('sin persona todavía no hay a quién subírselo: no hay enlace', () => {
-    expect(enlaceDeSubida(requisito({ persona: { rol: 'RepresentanteLegal', todasLasRelaciones: false, sinPersona: true } }), 'v1', 'e1')).toBeNull();
+  it('sin persona todavía no hay a quién subírselo: no hay solicitud', () => {
+    expect(solicitudDeRequisito(requisito({ persona: { rol: 'RepresentanteLegal', todasLasRelaciones: false, sinPersona: true } }), 'v1', 'e1')).toBeNull();
   });
 });

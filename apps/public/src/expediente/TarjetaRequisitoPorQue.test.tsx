@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { TarjetaRequisito } from './TarjetaRequisito';
 import { TarjetaRequisitoSeccion } from './TarjetaRequisitoSeccion';
-import { enlaceDeSubida } from './requisitos';
+import { solicitudDeRequisito } from './requisitos';
 
 const requisito = (cambios: Partial<RequisitoPublicoDto>): RequisitoPublicoDto => ({
   id: 'rq1',
@@ -44,7 +44,7 @@ function montar(r: RequisitoPublicoDto, seccion = false) {
             {seccion ? (
               <TarjetaRequisitoSeccion requisito={r} expediente={EXPEDIENTE} conAccion />
             ) : (
-              <TarjetaRequisito requisito={r} expediente={EXPEDIENTE} enlace={enlaceDeSubida(r, 'v1', 'e1')} />
+              <TarjetaRequisito requisito={r} expediente={EXPEDIENTE} subida={solicitudDeRequisito(r, 'v1', 'e1')} />
             )}
           </ul>
         </MemoryRouter>

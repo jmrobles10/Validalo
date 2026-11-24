@@ -3,18 +3,19 @@ import type { ImpactoDeRetiroDto, VersionDocumentoDto } from '@validalo/api-clie
 import { Upload } from 'lucide-react';
 import { useState, type ReactNode, type SubmitEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router';
 import { useImpactoDeRetiro, useRetirarVersion } from '../shared/api';
 import { useAvisos } from '../shared/useAvisos';
 import { mensajeDeError } from '../shared/errores';
 import { empresasOrdenadas, hayEmpresasAfectadas, lePesa, nombreDeSeccion, textoDeEmpresa, textoDeVersionVigente } from './impacto';
+import type { SolicitudDeSubida } from './solicitudDeSubida';
+import { useDialogoSubir } from './useDialogoSubir';
 
 interface Props {
   documentoId: string;
   tipo: string;
   version: VersionDocumentoDto;
-  /** Enlace para subir una versión corregida del documento; nulo si el tipo no se sube desde la bóveda (un formulario). */
-  enlaceSubir: string | null;
+  /** Lo que se le pide al diálogo para subir una versión corregida del documento; nulo si el tipo no se sube desde la bóveda (un formulario). */
+  subirCorregida: SolicitudDeSubida | null;
   onCerrar: () => void;
 }
 
@@ -23,9 +24,10 @@ interface Props {
  * la recibieron, aprobaron o revisan y qué les toca, y qué secciones de su información la usan de soporte. Si a alguna empresa le
  * toca revisar de nuevo, ofrece «Subir una versión corregida» como alternativa.
  */
-export function DialogoRetirar({ documentoId, tipo, version, enlaceSubir, onCerrar }: Props) {
+export function DialogoRetirar({ documentoId, tipo, version, subirCorregida, onCerrar }: Props) {
   const { t } = useTranslation();
   const mostrar = useAvisos((s) => s.mostrar);
+  const abrirSubida = useDialogoSubir((s) => s.abrir);
   const impacto = useImpactoDeRetiro(documentoId, version.n);
   const retiro = useRetirarVersion(documentoId, version.n);
   const [motivo, setMotivo] = useState('');
@@ -75,9 +77,18 @@ export function DialogoRetirar({ documentoId, tipo, version, enlaceSubir, onCerr
                   <Typography>
                     {t('boveda.retiro.avisaremos')} {t('boveda.retiro.alternativa')}
                   </Typography>
-                  {enlaceSubir && (
+                  {subirCorregida && (
                     <Box>
-                      <Button component={RouterLink} to={enlaceSubir} size="small" variant="outlined" startIcon={<Upload size={16} aria-hidden />}>
+                      {/* En lugar de este diálogo se abre el de subida: no se retira nada, se sube la versión corregida. */}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<Upload size={16} aria-hidden />}
+                        onClick={() => {
+                          onCerrar();
+                          abrirSubida(subirCorregida);
+                        }}
+                      >
                         {t('boveda.retiro.subirCorregida')}
                       </Button>
                     </Box>

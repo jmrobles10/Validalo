@@ -137,6 +137,10 @@ public sealed class ApiFixture : IAsyncLifetime
             b.UseSetting("Validalo:Migraciones:AccesoAislado:Habilitada", "false");
             // Tampoco la de la certificación bancaria por cuenta: su prueba la ejecuta a mano sobre sus datos.
             b.UseSetting("Validalo:Migraciones:CertificacionPorCuenta:Habilitada", "false");
+            // Ni la liga por número de las certificaciones generales ya leídas: su prueba la ejecuta a mano sobre sus datos.
+            b.UseSetting("Validalo:Migraciones:CertificacionPorNumero:Habilitada", "false");
+            // Ni la de las personas declaradas a mano a la ficha legal: su prueba la ejecuta a mano sobre sus datos.
+            b.UseSetting("Validalo:Migraciones:PersonasEnLaFicha:Habilitada", "false");
             b.ConfigureTestServices(s =>
             {
                 // El transporte SMTP se reemplaza, no el enviador: el aislamiento del sandbox (SB-4) sigue activo en las pruebas y lo que

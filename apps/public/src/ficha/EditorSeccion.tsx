@@ -65,7 +65,6 @@ export function EditorSeccion({ definicion, periodo, estado, inicial, onReinicia
   const [senalFaltantes, setSenalFaltantes] = useState(0);
   const nombre = periodo ? t('ficha.nombreConPeriodo', { nombre: inicial.nombre, periodo: String(periodo) }) : inicial.nombre;
   const paso = estado.orden.indexOf(definicion.codigo) + 1;
-  const rutaActual = enlaceSeccion(definicion.codigo, periodo);
   const salida = useSalidaSinGuardar(editor.sinGuardar);
   // Con cambios sin guardar, el tiempo real no pisa lo escrito: avisa y deja elegir (NT-12).
   useEdicionEnCurso(ALCANCES_PUBLICO.ficha, editor.sinGuardar);
@@ -184,7 +183,6 @@ export function EditorSeccion({ definicion, periodo, estado, inicial, onReinicia
             onCambiar={editor.cambiarSoportes}
             faltaSoporte={faltaSoporte}
             error={editor.errorEn('soportes')}
-            volver={rutaActual}
             deshabilitado={editor.guardando}
           />
           </Box>

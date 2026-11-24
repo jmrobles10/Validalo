@@ -2,7 +2,8 @@ import type { DocumentoBovedaDto, VigenciaDto } from '@validalo/api-client';
 import type { TFunction } from 'i18next';
 import { formatearDiaCivil } from '@validalo/ui';
 import { estadoDeVigencia, requiereAtencion, type EstadoVigencia } from '../vigencia/vigencia';
-import { enlaceSubirVersion, sePuedeSubirVersion } from './versiones';
+import type { SolicitudDeSubida } from './solicitudDeSubida';
+import { sePuedeSubirVersion, solicitudDeNuevaVersion } from './versiones';
 
 /** Cuántas líneas muestra el bloque «Por renovar» antes de pedir «Ver N más». */
 export const MAXIMO_LINEAS_AVISO = 4;
@@ -39,8 +40,8 @@ export interface LineaPorRenovar {
   cierre: string | null;
   /** La vigencia más urgente entre las empresas, para el chip. */
   vigencia: VigenciaDto;
-  /** Enlace para subir la versión nueva; `null` si se actualiza desde la revisión (formularios). */
-  subir: string | null;
+  /** Lo que se le pide al diálogo para subir la versión nueva; `null` si se actualiza desde la revisión (formularios). */
+  subir: SolicitudDeSubida | null;
   /** `aaaa-mm-dd` más próxima entre las empresas; ordena las líneas. */
   fecha: string | null;
 }
@@ -173,7 +174,7 @@ export function lineasPorRenovar(documentos: readonly DocumentoBovedaDto[], t: T
       empresas: enFrase ? null : lista.map((v) => ({ empresa: v.empresa, estado: v.estado, texto: textoDeVencimiento(v, t) })),
       cierre: enFrase ? null : final,
       vigencia: masUrgente.vigencia,
-      subir: sePuedeSubirVersion(documento) ? enlaceSubirVersion(documento) : null,
+      subir: sePuedeSubirVersion(documento) ? solicitudDeNuevaVersion(documento) : null,
       fecha: lista[0]?.vigencia.vigenteHasta ?? null,
     });
   }

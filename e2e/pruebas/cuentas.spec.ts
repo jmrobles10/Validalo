@@ -1,6 +1,7 @@
 import { expect, test, type Browser } from '@playwright/test';
 import { pdf } from '../soporte/archivos';
 import { abrirEmbebido } from '../soporte/embebido';
+import { irASector, tarjetaDeLaFicha } from '../soporte/empresa';
 import { completarInvitacion } from '../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero, type Escenario, type Persona } from '../soporte/semilla';
 
@@ -9,8 +10,11 @@ import { crearEscenario, invitar, nuevoTercero, type Escenario, type Persona } f
 const RUT = 'Registro Único Tributario';
 const CAMARA = 'Certificado de existencia y representación legal';
 
+/** El vínculo del tercero en la web de la empresa, en el sector «Cuenta bancaria»: ahí está la tarjeta de la cuenta designada. */
 async function vinculoEnLaEmpresa(browser: Browser, e: Escenario, persona: Persona, vinculoId: string) {
-  return abrirEmbebido(await (await browser.newContext()).newPage(), e, persona, e.norte, `vinculos/${vinculoId}`);
+  const app = await abrirEmbebido(await (await browser.newContext()).newPage(), e, persona, e.norte, `vinculos/${vinculoId}`);
+  await irASector(app, 'Cuenta bancaria');
+  return app;
 }
 
 test('el proveedor designa su cuenta para Norte y queda designada cuando la aprueban dos personas', async ({ page, browser }) => {
@@ -50,7 +54,7 @@ test('el proveedor designa su cuenta para Norte y queda designada cuando la apru
 
   // Olga (oficial de cumplimiento) la coteja con el número completo y la aprueba: falta otra persona.
   const olga = await vinculoEnLaEmpresa(browser, e, e.olga, enNorte.vinculoId);
-  const tarjetaOlga = olga.getByRole('region', { name: 'Cuenta bancaria designada' }).or(olga.locator('section', { hasText: 'Cuenta bancaria designada' }));
+  const tarjetaOlga = tarjetaDeLaFicha(olga, 'Cuenta bancaria designada');
   await expect(tarjetaOlga).toContainText('Por aprobar');
   await expect(tarjetaOlga).toContainText('03112345678');
   await expect(tarjetaOlga).toContainText('0 de 2 aprobaciones');
@@ -61,7 +65,7 @@ test('el proveedor designa su cuenta para Norte y queda designada cuando la apru
 
   // Ana (administradora) completa las dos: queda designada.
   const ana = await vinculoEnLaEmpresa(browser, e, e.ana, enNorte.vinculoId);
-  const tarjetaAna = ana.getByRole('region', { name: 'Cuenta bancaria designada' }).or(ana.locator('section', { hasText: 'Cuenta bancaria designada' }));
+  const tarjetaAna = tarjetaDeLaFicha(ana, 'Cuenta bancaria designada');
   await tarjetaAna.getByRole('button', { name: 'Aprobar' }).click();
   await ana.getByRole('dialog').getByRole('button', { name: 'Aprobar' }).click();
   await expect(tarjetaAna).toContainText('Designada');

@@ -1,24 +1,15 @@
 import type { FrameLocator, Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
-import { abrirDesdeBandeja } from '../../soporte/empresa';
+import { abrirDesdeBandeja, irASector, tarjetaDeLaFicha } from '../../soporte/empresa';
+
+// `irASector` y la tarjeta por su título viven en `soporte/empresa` (las usan también las pruebas); aquí siguen disponibles para los recorridos.
+export { irASector, tarjetaDeLaFicha as tarjeta };
 
 /**
  * Ayudas para recorrer la ficha del vínculo (`/vinculos/:id`) y el expediente (`/expedientes/:id`), que son una sola pantalla con una
  * barra lateral de sectores. Los recorridos las usan en lugar de buscar tarjetas sueltas: el sector va en la URL (`?sector=`) y cada
  * sector muestra sus propias tarjetas.
  */
-
-/** Pasa al sector de la barra lateral (por su nombre visible, p. ej. «Cuenta bancaria») y espera a que quede activo. */
-export async function irASector(app: FrameLocator, nombre: string): Promise<void> {
-  const boton = app.getByRole('navigation', { name: 'Sectores de la ficha' }).getByRole('button', { name: new RegExp(`^${nombre}`) });
-  await boton.click();
-  await expect(boton).toHaveAttribute('aria-current', 'page');
-}
-
-/** La tarjeta (sección) con ese título: el encabezado de la tarjeta y su sección contenedora. */
-export function tarjeta(app: FrameLocator, titulo: string): Locator {
-  return app.getByRole('heading', { name: titulo, exact: true }).locator('xpath=ancestor::section[1]');
-}
 
 /**
  * El chip de estado con ese estado canónico (`Activo`, `Invitado`, `Desvinculado`…). Su texto accesible incluye el detalle para

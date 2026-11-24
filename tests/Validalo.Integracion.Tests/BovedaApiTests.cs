@@ -207,6 +207,27 @@ public sealed partial class BovedaApiTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task Volver_a_subir_el_mismo_archivo_devuelto_responde_422_con_el_motivo_y_no_que_ya_lo_tiene()
+    {
+        var e = await EscenarioAsync();
+        var malicioso = Pdf("con JS otra vez", javascript: true);
+        var devuelta = await SubirAsync(e.Sesion, new IniciarCargaDto("cedula.pdf", malicioso.Length, "application/pdf", TipoCanonico: "RUT"), malicioso);
+        devuelta.Version.Estado.ShouldBe("Devuelta");
+
+        // Con el SHA-256 declarado se rechaza en el paso 1, con el motivo de la devolución.
+        var temprano = await TerceroAsync("POST", "/public/v1/boveda/documentos", e.Sesion.AccessToken,
+            new IniciarCargaDto("cedula.pdf", malicioso.Length, "application/pdf", TipoCanonico: "RUT", Sha256: Sha256(malicioso)), 422);
+        (await CodigoAsync(temprano)).ShouldBe("archivo-ya-devuelto");
+
+        // Sin declararlo, al confirmar.
+        var tardio = await SubirAsync(e.Sesion, new IniciarCargaDto("cedula.pdf", malicioso.Length, "application/pdf", TipoCanonico: "RUT"), malicioso, 422);
+        (await CodigoAsync(tardio)).ShouldBe("archivo-ya-devuelto");
+
+        var documento = await TerceroAsync<DocumentoDto>("GET", $"/public/v1/boveda/documentos/{devuelta.Version.DocumentoId}", e.Sesion.AccessToken, null, 200);
+        documento.Versiones.ShouldHaveSingleItem();
+    }
+
+    [Fact]
     public async Task Un_pdf_con_javascript_queda_devuelto_con_motivo_y_no_se_comparte()
     {
         var e = await EscenarioAsync();

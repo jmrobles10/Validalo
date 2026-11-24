@@ -21,9 +21,10 @@ type CampoDeTexto = Exclude<CampoCuenta, 'tipoCuenta' | 'otroBanco' | 'bancoCodi
  * Agregar una cuenta (CB-1). Valida como el dominio antes de enviar; si la API rechaza un dato, el error va en su campo.
  * Los errores aparecen al intentar guardar, no mientras se escribe. En el celular ocupa toda la pantalla. Cada cuenta se registra con su certificación bancaria:
  * sin el archivo no se guarda; al guardar, la cuenta se crea y enseguida se le sube la certificación (si eso falla, la cuenta queda guardada «sin certificación»
- * y se reintenta aquí o desde su tarjeta).
+ * y se reintenta aquí o desde su tarjeta). Con `onAgregada` (quien agrega la cuenta para seguir con ella, p. ej. desde el requisito de la certificación en el expediente), al quedar la cuenta con su
+ * certificación se le entrega la cuenta en vez de cerrar: quien llama decide qué sigue.
  */
-export function DialogoAgregarCuenta({ onCerrar }: { onCerrar: () => void }) {
+export function DialogoAgregarCuenta({ onCerrar, onAgregada }: { onCerrar: () => void; onAgregada?: (cuenta: CuentaBancariaPublicaDto) => void }) {
   const { t } = useTranslation();
   const tema = useTheme();
   const pantallaCompleta = useMediaQuery(tema.breakpoints.down('sm'));
@@ -79,6 +80,15 @@ export function DialogoAgregarCuenta({ onCerrar }: { onCerrar: () => void }) {
     mostrar(t('cuentas.nueva.exito', { numero: enmascararNumero(datos.numero) }));
     onCerrar();
   };
+  // La cuenta quedó con su certificación: se entrega a quien pidió seguir con ella, o se cierra como siempre.
+  const certificada = (cuenta: CuentaBancariaPublicaDto) => {
+    if (!onAgregada) {
+      terminar();
+      return;
+    }
+    mostrar(t('cuentas.nueva.exito', { numero: enmascararNumero(datos.numero) }));
+    onAgregada(cuenta);
+  };
   const errorTipo = errorDe('tipoCuenta');
   // Un error de la API que no es de un campo (sesión, red…) va arriba del formulario.
   const errorGeneral = registro.isError && !errorApi ? mensajeDeError(registro.error, t) : null;
@@ -96,7 +106,7 @@ export function DialogoAgregarCuenta({ onCerrar }: { onCerrar: () => void }) {
                 key={`${archivo.name}-${String(archivo.size)}-${String(archivo.lastModified)}`}
                 cuentaId={registrada.id}
                 archivo={archivo}
-                onLista={terminar}
+                onLista={() => certificada(registrada)}
                 onOtroArchivo={() => setArchivo(null)}
                 onDespues={terminar}
                 textoFallo={(motivo) => `${t('cuentas.certificacion.nueva.fallo', { motivo })} ${t('cuentas.certificacion.nueva.falloAyuda')}`}

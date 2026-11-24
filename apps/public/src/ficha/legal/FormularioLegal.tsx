@@ -1,13 +1,15 @@
 import { Alert, Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
 import type { PerfilDeFichaDto } from '@validalo/api-client';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router';
 import { CampoTexto, Rejilla, Subtitulo } from '../campos';
 import type { DatosLegales, PersonaRelacionada, PropsFormulario } from '../tipos';
 import { DialogoPersona } from './DialogoPersona';
+import { PersonasFueraDeLaFicha } from './PersonasFueraDeLaFicha';
 import { BotonDescargarDeclaracion } from '../pep/BotonDescargarDeclaracion';
-import { esRol, nombrePersona } from './personas';
+import { esRol, nombrePersona, PARAMETRO_AGREGAR } from './personas';
 
 /**
  * Información legal (`FICHA_LEGAL`, fase 1 de FM-7): las personas relacionadas como tarjetas (agregar, editar en un
@@ -17,7 +19,24 @@ export function FormularioLegal({ datos, onCambiar, mensaje, hayEnRuta, deshabil
   const { t } = useTranslation();
   const personas = datos.personas ?? [];
   // Índice de la persona en edición; `personas.length` = una nueva.
-  const [editando, setEditando] = useState<number | null>(null);
+  const [parametros, setParametros] = useSearchParams();
+  // «Registrar a la persona» de un documento pedido llega con `?agregar=<rol>`: se abre el diálogo de una persona nueva con ese rol ya elegido.
+  const rolPedido = parametros.get(PARAMETRO_AGREGAR);
+  const [editando, setEditando] = useState<number | null>(() => (rolPedido && esRol(rolPedido) ? personas.length : null));
+  // Datos con que abre el diálogo de una persona nueva: el rol pedido o una persona registrada en Personas que falta en la sección.
+  const [nuevaInicial, setNuevaInicial] = useState<PersonaRelacionada>(() => (rolPedido && esRol(rolPedido) ? { rol: rolPedido } : {}));
+  useEffect(() => {
+    // El parámetro se consume una vez: al recargar o volver no se reabre el diálogo.
+    if (rolPedido === null) return;
+    setParametros(
+      (actuales) => {
+        const siguientes = new URLSearchParams(actuales);
+        siguientes.delete(PARAMETRO_AGREGAR);
+        return siguientes;
+      },
+      { replace: true },
+    );
+  }, [rolPedido, setParametros]);
   const firma = datos.revisor_fiscal_firma ?? {};
 
   const guardarPersona = (i: number, persona: PersonaRelacionada) => {
@@ -46,7 +65,18 @@ export function FormularioLegal({ datos, onCambiar, mensaje, hayEnRuta, deshabil
           ))}
         </Stack>
       )}
-      <Button variant="outlined" startIcon={<Plus size={18} aria-hidden />} onClick={() => setEditando(personas.length)} disabled={deshabilitado} sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}>
+      <PersonasFueraDeLaFicha
+        personas={personas}
+        deshabilitado={deshabilitado}
+        onAgregar={(persona) => {
+          setNuevaInicial(persona);
+          setEditando(personas.length);
+        }}
+      />
+      <Button variant="outlined" startIcon={<Plus size={18} aria-hidden />} onClick={() => {
+        setNuevaInicial({});
+        setEditando(personas.length);
+      }} disabled={deshabilitado} sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}>
         {t('ficha.legal.agregar')}
       </Button>
       <Subtitulo>{t('ficha.legal.firma')}</Subtitulo>
@@ -56,7 +86,7 @@ export function FormularioLegal({ datos, onCambiar, mensaje, hayEnRuta, deshabil
       </Rejilla>
       {editando !== null && (
         <DialogoPersona
-          inicial={personas[editando] ?? {}}
+          inicial={personas[editando] ?? nuevaInicial}
           nueva={editando >= personas.length}
           mensaje={(campo) => mensaje(`personas[${String(editando)}].${campo}`)}
           hayEnRuta={hayEnRuta ? (prefijo) => hayEnRuta(`personas[${String(editando)}].${prefijo}`) : undefined}

@@ -4,7 +4,7 @@ import { abrirEmbebido } from '../../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea, regionDeArea } from '../../soporte/empresa';
 import { publicarFlujoDeFicha } from '../../soporte/ficha';
 import { crearTipoDeVinculo, invitarVinculo } from '../../soporte/flujos';
-import { aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento } from '../../soporte/proveedor';
+import { aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, subirVersionDesdeLaBoveda } from '../../soporte/proveedor';
 import { crearEscenario, nuevoTercero, type Empresa, type Escenario, type Persona } from '../../soporte/semilla';
 import { chipDeEstado, irASector } from '../nucleo/ficha';
 import { expect, paso, recorrido } from '../nucleo';
@@ -73,11 +73,7 @@ recorrido(
 
     // Siembra: el proveedor sube un RUT nuevo mientras el vínculo está bloqueado.
     await paginaTercero.goto('/boveda');
-    await paginaTercero.getByRole('article', { name: RUT }).getByRole('link', { name: 'Subir versión' }).click();
-    const selector = paginaTercero.waitForEvent('filechooser');
-    await paginaTercero.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf('RUT bloqueo v2'));
-    await expect(paginaTercero.getByText(`Es tu versión 2 de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+    await subirVersionDesdeLaBoveda(paginaTercero, RUT, pdf('RUT bloqueo v2'), 2);
 
     await page.reload();
     await expect(app.getByRole('heading', { level: 1, name: tercero.nombre })).toBeVisible();

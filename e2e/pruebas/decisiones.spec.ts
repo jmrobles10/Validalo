@@ -60,7 +60,7 @@ test('Compras observa el RUT, el tercero sube la versión corregida y la aprobac
   await expect(tarjeta(page, RUT)).toContainText('El documento no se puede leer con claridad.');
   await expect(tarjeta(page, RUT)).toContainText('“La página 2 está cortada.”');
   // La Cámara no se observó: no se le pide corregirla.
-  await expect(tarjeta(page, CAMARA).getByRole('link', { name: 'Subir versión corregida' })).toHaveCount(0);
+  await expect(tarjeta(page, CAMARA).getByRole('button', { name: 'Subir versión corregida' })).toHaveCount(0);
 
   await subirDocumento(page, RUT, pdf(`RUT ${c.invitacion.nombre} corregido`), { version: 2 });
   await esperarTarjeta(page, RUT, 'Versión 2');

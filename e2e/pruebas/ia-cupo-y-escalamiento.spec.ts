@@ -4,7 +4,7 @@ import { pdf } from '../soporte/archivos';
 import { capturar } from '../soporte/capturas';
 import { esperarCorreo } from '../soporte/correo';
 import { abrirEmbebido } from '../soporte/embebido';
-import { abrirDesdeBandeja, aprobarArea, irASeccion, regionDeArea } from '../soporte/empresa';
+import { abrirDesdeBandeja, aprobarArea, irASeccion, irASector, regionDeArea } from '../soporte/empresa';
 import { completarInvitacion, completarInvitacionYEsperarRevisionOAprobacion, esperarEstadoDelTercero } from '../soporte/proveedor';
 import { activarIa, crearEscenario, invitar, nuevoTercero, publicarFlujoConFicha, type Escenario, type Tercero } from '../soporte/semilla';
 
@@ -110,14 +110,17 @@ test('al agotar el cupo de IA el documento nuevo cae a una persona de inmediato,
   await expect(excepcionDe(sofia, primero)).toHaveCount(0);
   await capturar(paginaSofia, 'ia-cupo-excepcion');
 
-  // En el expediente, el documento dice que se revisa a mano y el área lo decide como siempre.
+  // En el expediente, el documento (en su sector, «Información tributaria») dice que se revisa a mano y el área lo decide como siempre, desde «Aprobaciones».
   await excepcion.getByRole('link', { name: /^Abrir el expediente/ }).click();
   await expect(sofia.getByRole('heading', { level: 1, name: segundo.nombre })).toBeVisible();
+  await irASector(sofia, 'Información tributaria');
   const documento = tarjetaDeDocumento(sofia, RUT);
-  await expect(documento).toContainText('Sin análisis automático: revísalo manualmente.');
+  // El aviso del documento sin lectura de IA: «Sin análisis automático: revísalo manualmente.» o, en la tarjeta nueva, «Sin lectura automática: revísalo y compáralo a mano…».
+  await expect(documento).toContainText(/Sin (análisis automático|lectura automática): revísalo/);
   await expect(documento.getByRole('region', { name: 'Revisión automática', exact: true })).toHaveCount(0);
   await expect(sofia.getByRole('region', { name: 'Decisión automática' })).toContainText('Requiere una persona');
   await expect(sofia.getByRole('region', { name: 'Decisión automática' })).toContainText('Sin análisis de IA');
+  await irASector(sofia, 'Aprobaciones');
   await aprobarArea(sofia, 'Revisión');
   await esperarEstadoDelTercero(paginaSegundo, 'Aprobado');
   // El tercero no ve nada de la IA de la empresa: ni la confianza ni el modelo.
@@ -153,37 +156,44 @@ test('un documento dudoso escala al modelo superior: la revisora ve la confianza
   // Asistido: la IA no decide, solo sugiere; así se ve qué hace con lo dudoso y con lo limpio sin que el sistema apruebe nada.
   await configurarRevision(e, { nivel: 'Asistido' });
 
-  // El RUT llega con una lectura dudosa (0,55) y la certificación, limpia (0,97).
+  // El RUT llega con una lectura dudosa (0,55) y la certificación, limpia (0,97). La certificación no es un documento suelto (CB-8): el tercero registra una cuenta con ella
+  // y la designa para Sur; Sur la recibe y su IA la lee en ese momento (ADR-0012), así que la lectura llega después de designarla y no al subir el archivo.
   const tercero = nuevoTercero('Aceros Escalados S.A.S.');
   const paginaTercero = await paginaDe(browser);
   await completarInvitacion(paginaTercero, await invitar(e, e.sur, tercero, 'CLIENTE'), [
     { nombre: RUT, archivo: rut(tercero, '[[confianza=0.55]]') },
-    { nombre: BANCARIA, archivo: pdf(`Certificacion bancaria ${tercero.nombre}`) },
+    { nombre: BANCARIA, archivo: pdf(`Certificacion bancaria ${tercero.nombre}`), cuenta: { titular: tercero.nombre } },
   ]);
 
   const paginaSofia = await paginaDe(browser);
   const sofia = await abrirEmbebido(paginaSofia, e, e.sofia, e.sur);
-  // El análisis y la sugerencia corren en segundo plano: se vuelve a abrir el expediente hasta que traiga las dos sugerencias.
+  // El análisis y la sugerencia corren en segundo plano: se vuelve a abrir el expediente hasta que traiga las dos sugerencias. Cada documento vive en su sector: el RUT en
+  // «Información tributaria» y la certificación bancaria en «Cuenta bancaria». La de la cuenta se lee cuando Sur la recibe al designarla, así que llega después del RUT.
   await expect(async () => {
     await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
+    await irASector(sofia, 'Información tributaria');
     await expect(tarjetaDeDocumento(sofia, RUT).getByRole('region', { name: 'Decisión automática' })).toContainText('La IA sugiere revisar', { timeout: 1500 });
+    await irASector(sofia, 'Cuenta bancaria');
     await expect(tarjetaDeDocumento(sofia, BANCARIA).getByRole('region', { name: 'Decisión automática' })).toContainText('La IA sugiere aprobar', { timeout: 1500 });
   }).toPass({ timeout: 60_000 });
-
-  // El RUT dudoso se revisó con un modelo de mayor capacidad y sigue siendo dudoso: la persona lo decide.
-  const panelRut = tarjetaDeDocumento(sofia, RUT).getByRole('region', { name: 'Revisión automática', exact: true });
-  await expect(panelRut).toContainText(/Confianza 55\s?%/);
-  await expect(panelRut).toContainText('Revisado por un modelo de mayor capacidad');
-  await expect(panelRut).toContainText('gpt-6.1-terra');
-  await expect(tarjetaDeDocumento(sofia, RUT).getByRole('region', { name: 'Decisión automática' })).toContainText('Confianza baja');
 
   // La certificación limpia la resolvió el modelo por omisión, sin escalar.
   const panelBancaria = tarjetaDeDocumento(sofia, BANCARIA).getByRole('region', { name: 'Revisión automática', exact: true });
   await expect(panelBancaria).toContainText(/Confianza 97\s?%/);
-  await expect(panelBancaria).toContainText('gpt-6-luna');
-  await expect(panelBancaria).not.toContainText('Revisado por un modelo de mayor capacidad');
-  await expect(regionDeArea(sofia, 'Revisión').getByRole('button', { name: /^Aprobar área/ })).toBeVisible();
+  // El modelo y el escalamiento se dicen en la tarjeta del documento (dentro del panel o en su pie): se mira la tarjeta entera.
+  await expect(tarjetaDeDocumento(sofia, BANCARIA)).toContainText('gpt-6-luna');
+  await expect(tarjetaDeDocumento(sofia, BANCARIA)).not.toContainText('Revisado por un modelo de mayor capacidad');
+
+  // El RUT dudoso se revisó con un modelo de mayor capacidad y sigue siendo dudoso: la persona lo decide.
+  await irASector(sofia, 'Información tributaria');
+  const panelRut = tarjetaDeDocumento(sofia, RUT).getByRole('region', { name: 'Revisión automática', exact: true });
+  await expect(panelRut).toContainText(/Confianza 55\s?%/);
+  await expect(tarjetaDeDocumento(sofia, RUT)).toContainText('Revisado por un modelo de mayor capacidad');
+  await expect(tarjetaDeDocumento(sofia, RUT)).toContainText('gpt-6.1-terra');
+  await expect(tarjetaDeDocumento(sofia, RUT).getByRole('region', { name: 'Decisión automática' })).toContainText('Confianza baja');
   await capturar(paginaSofia, 'ia-escalamiento-expediente');
+  await irASector(sofia, 'Aprobaciones');
+  await expect(regionDeArea(sofia, 'Revisión').getByRole('button', { name: /^Aprobar área/ })).toBeVisible();
 
   // El tercero no ve la confianza, el modelo ni el escalamiento: solo la empresa que recibió el análisis.
   await esperarEstadoDelTercero(paginaTercero, 'EnRevision');

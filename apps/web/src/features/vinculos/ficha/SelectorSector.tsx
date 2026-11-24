@@ -124,12 +124,16 @@ function ContadorPendientes({ indicador }: { indicador: IndicadorSector | undefi
       data-testid="contador"
       sx={{
         typography: 'caption',
+        lineHeight: 1,
+        display: 'inline-grid',
+        placeItems: 'center',
         flex: 'none',
         minWidth: 20,
         height: 20,
         px: 0.75,
         borderRadius: '10px',
-        textAlign: 'center',
+        boxSizing: 'border-box',
+        fontVariantNumeric: 'tabular-nums',
         bgcolor: advertencia ? 'estado.advertencia.fondo' : 'action.hover',
         color: advertencia ? 'estado.advertencia.texto' : 'text.secondary',
       }}

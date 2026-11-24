@@ -2,11 +2,11 @@
 
 export const personas = {
   titulo: 'Personas relacionadas',
-  sub: 'Las personas que representan a tu empresa o son sus socios y beneficiarios finales. Cada una tiene su propia bóveda: su cédula se valida una vez y sirve a todas las empresas con las que trabajas.',
+  sub: 'Las personas que representan a tu empresa o son sus socios y beneficiarios finales. Cada una tiene su propia bóveda: su cédula se valida una vez y sirve a todas las empresas con las que trabajas. Los representantes legales, suplentes y socios se registran en Información legal; aquí los ves con sus documentos y con lo que la IA detecta.',
   vacio: 'Aún no hay personas relacionadas',
-  vacioTexto: 'Se crean solas con la información legal de «Mi información» o puedes agregarlas aquí.',
+  vacioTexto: 'Registra a tus representantes legales, suplentes y socios en Información legal, en «Mi información», y aparecerán aquí. Los beneficiarios finales y miembros de consorcio se agregan aquí.',
   agregar: 'Agregar persona',
-  irAFicha: 'Información legal',
+  irAFicha: 'Ir a Información legal',
   enlaceDesdeFicha: 'Personas relacionadas',
   enlaceDesdeFichaTexto: 'Su cédula y antecedentes se suben una vez a la bóveda de cada persona.',
   roles: {
@@ -26,7 +26,9 @@ export const personas = {
   principal: 'Principal',
   participacion: '{{valor}} % de participación',
   cargo: 'Cargo: {{cargo}}',
-  deFicha: 'Sale de tu información legal; para quitarla, quítala de la ficha.',
+  deFicha: 'Se registra en tu información legal: para cambiarla o quitarla, hazlo allí.',
+  editarEnLaFicha: 'Editar en Información legal',
+  fueraDeLaFicha: 'La agregaste aquí antes de que la información legal fuera el único lugar para registrarla. Agrégala allí para que tu ficha quede completa.',
   declarada: 'Agregada por ti',
   documentos: {
     titulo: 'Documentos de {{nombre}}',
@@ -50,11 +52,11 @@ export const personas = {
   },
   propuesta: {
     titulo: 'Detectamos un cambio en tus documentos',
-    texto: 'La IA leyó en tu certificado de existencia y representación legal a {{nombre}} como {{rol}} (confianza {{confianza}} %). No cambiamos nada hasta que lo confirmes.',
+    texto: 'La IA leyó en tu certificado de existencia y representación legal a {{nombre}} como {{rol}} (confianza {{confianza}} %). No cambiamos nada hasta que lo confirmes; al confirmar, también la agregamos a tu información legal.',
     reemplaza: 'Reemplazaría a {{nombre}}.',
     confirmar: 'Confirmar cambio',
     descartar: 'No es correcto',
-    confirmada: '{{nombre}} quedó como {{rol}}.',
+    confirmada: '{{nombre}} quedó como {{rol}} y la agregamos a tu información legal. Revisa allí sus datos y completa lo que falte.',
     descartada: 'Descartamos el cambio detectado.',
     avisoTitulo_one: 'Hay un cambio de persona relacionada por confirmar',
     avisoTitulo_other: 'Hay {{count}} cambios de personas relacionadas por confirmar',
@@ -71,6 +73,8 @@ export const personas = {
   nueva: {
     titulo: 'Agregar una persona relacionada',
     ayuda: 'Es una persona natural: usa su cédula, cédula de extranjería o pasaporte. Si ya tiene bóveda por otra empresa, se reutiliza.',
+    enLaFicha: 'Un {{rol}} se registra en tu Información legal, que es el único lugar donde se llevan los representantes legales, suplentes y socios. Te llevamos allí con el rol ya elegido; al guardarlo, aparecerá en esta página con sus documentos.',
+    irALaFicha: 'Ir a Información legal',
     rol: 'Cómo se relaciona',
     nombre: 'Nombre completo',
     tipoIdentificacion: 'Tipo de documento',

@@ -42,11 +42,11 @@ const documento = (id: string, nombre: string, porEmpresa: ComparticionPublicaDt
 const linea = (d: DocumentoBovedaDto) => lineasPorRenovar([d], t).map((l) => `${l.documento}: ${l.texto}`);
 
 describe('aviso consolidado de la bóveda', () => {
-  it('con una empresa dice cuándo vence y enlaza la subida de la versión nueva', () => {
+  it('con una empresa dice cuándo vence y pide la subida de la versión nueva', () => {
     const lineas = lineasPorRenovar([documento('rut', 'Registro Único Tributario', [empresa('Constructora Norte', vigencia('PorVencer', '2026-11-30'))])], t);
     expect(lineas).toHaveLength(1);
     expect(lineas[0]?.texto).toBe('vence para Constructora Norte el 30/11/2026.');
-    expect(lineas[0]?.subir).toBe('/boveda/subir?documento=rut&tipo=RUT');
+    expect(lineas[0]?.subir).toEqual({ documento: 'rut', tipo: 'RUT' });
   });
 
   it('con dos empresas y fechas distintas dice antes de cuándo renovar para quedar al día con las dos', () => {
@@ -94,7 +94,7 @@ describe('aviso consolidado de la bóveda', () => {
       ]);
       expect(resumida?.empresas?.[3]).toEqual({ empresa: 'Empresa 04', estado: 'Vigente', texto: 'Vence el 01/06/2027' });
       expect(resumida?.cierre).toBe('Renueva antes del 20/11 y quedas al día con todas.');
-      expect(resumida?.subir).toBe('/boveda/subir?documento=camara&tipo=CAMARA');
+      expect(resumida?.subir).toEqual({ documento: 'camara', tipo: 'CAMARA' });
     });
 
     it('con una sola empresa que pide atención la nombra sin hablar de cuántas', () => {

@@ -64,33 +64,46 @@ public static class SincronizacionDePersonas
 
             var legal = await sesion.LoadAsync<SeccionDeFicha>(SeccionDeFicha.IdPara(terceroId, CodigosDeSeccion.Legal, null), ct);
             var datos = legal?.Vigente is { } version ? JsonDeFicha.Deserializar<DatosLegales>(version.Datos) : null;
-            var declaradas = PersonasDeLaFicha.Leer(datos, tercero.Identificacion);
             var existentes = await sesion.Query<RelacionEntreTerceros>().Where(r => r.DestinoId == terceroId).ToListAsync(ct);
-            if (declaradas.Count == 0 && !existentes.Any(r => r.DeFicha && r.Estado == EstadoDeRelacion.Confirmada))
-                return ResultadoDeSincronizacionDePersonas.SinCambios;
-
-            var (personaDe, nuevas) = await AsegurarPersonasAsync(sesion, tercero, declaradas, ahora, ct);
             // De dónde vienen las personas: la ficha que diligenció el tercero es una declaración suya; la que trajo un importador o un sistema de origen, una importación.
             var fuente = legal?.Vigente?.Origen is null or OrigenDeSeccion.Tercero ? FuenteDeRelacion.Declarada : FuenteDeRelacion.Importacion;
-            var cambios = ConciliacionDeRelaciones.Calcular(terceroId, declaradas, personaDe, existentes, hoy, ahora, terceroId.ToString(), fuente);
-            foreach (var cambio in cambios)
-            {
-                if (cambio.EsNueva)
-                    sesion.Events.StartStream<RelacionEntreTerceros>(cambio.RelacionId, cambio.Eventos.ToArray());
-                else
-                    (await sesion.Events.FetchForWriting<RelacionEntreTerceros>(cambio.RelacionId, ct)).AppendMany(cambio.Eventos.ToArray());
-            }
-
-            if (nuevas == 0 && cambios.Count == 0)
-                return ResultadoDeSincronizacionDePersonas.SinCambios;
-            await sesion.SaveChangesAsync(ct);
-            return new ResultadoDeSincronizacionDePersonas(nuevas, cambios.Count(c => c.EsNueva),
-                cambios.Count(c => !c.EsNueva && !c.Eventos.OfType<RelacionTerminada>().Any()), cambios.Count(c => c.Eventos.OfType<RelacionTerminada>().Any()));
+            var (conciliado, _) = await ConciliarEnSesionAsync(sesion, tercero, datos, fuente, existentes, hoy, ahora, ct);
+            if (conciliado.HuboCambios)
+                await sesion.SaveChangesAsync(ct);
+            return conciliado;
         });
 
         if (resultado.HuboCambios && mensajes is not null)
             await AvisarDeCambiosAsync(store, mensajes, terceroId, ct);
         return resultado;
+    }
+
+    /// <summary>
+    /// El cuerpo de la sincronización sobre una sesión ya abierta y <b>sin guardar</b>, para unos datos legales dados: la versión vigente de la ficha o la que se está por guardar. Así la
+    /// relación que se confirma al escribir una persona en la ficha y la que concilia la sincronización posterior son la misma cuenta, y esa sincronización ya no encuentra nada que
+    /// cambiar (no duplica eventos). Devuelve lo que tocó y los cambios que dejó en la sesión (quien los quiera ver: qué relaciones recibieron eventos).
+    /// </summary>
+    internal static async Task<(ResultadoDeSincronizacionDePersonas Resultado, IReadOnlyList<CambioEnRelacion> Cambios)> ConciliarEnSesionAsync(IDocumentSession sesion,
+        Tercero tercero, DatosLegales? datos, FuenteDeRelacion fuente, IReadOnlyList<RelacionEntreTerceros> existentes, DateOnly hoy, DateTimeOffset ahora, CancellationToken ct)
+    {
+        var declaradas = PersonasDeLaFicha.Leer(datos, tercero.Identificacion);
+        if (declaradas.Count == 0 && !existentes.Any(r => r.DeFicha && r.Estado == EstadoDeRelacion.Confirmada))
+            return (ResultadoDeSincronizacionDePersonas.SinCambios, []);
+
+        var (personaDe, nuevas) = await AsegurarPersonasAsync(sesion, tercero, declaradas, ahora, ct);
+        var cambios = ConciliacionDeRelaciones.Calcular(tercero.Id, declaradas, personaDe, existentes, hoy, ahora, tercero.Id.ToString(), fuente);
+        foreach (var cambio in cambios)
+        {
+            if (cambio.EsNueva)
+                sesion.Events.StartStream<RelacionEntreTerceros>(cambio.RelacionId, cambio.Eventos.ToArray());
+            else
+                (await sesion.Events.FetchForWriting<RelacionEntreTerceros>(cambio.RelacionId, ct)).AppendMany(cambio.Eventos.ToArray());
+        }
+
+        if (nuevas == 0 && cambios.Count == 0)
+            return (ResultadoDeSincronizacionDePersonas.SinCambios, []);
+        return (new ResultadoDeSincronizacionDePersonas(nuevas, cambios.Count(c => c.EsNueva),
+            cambios.Count(c => !c.EsNueva && !c.Eventos.OfType<RelacionTerminada>().Any()), cambios.Count(c => c.Eventos.OfType<RelacionTerminada>().Any())), cambios);
     }
 
     /// <summary>

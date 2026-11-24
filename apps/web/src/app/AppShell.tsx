@@ -1,7 +1,8 @@
-import { Box, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, Drawer, GlobalStyles, IconButton, Tooltip, Typography } from '@mui/material';
 import { SCOPES } from '@validalo/api-client';
-import { Logo, SelectorEmpresa, VARIABLE_TOPE, visualmenteOculto } from '@validalo/ui';
-import { Link2, Moon, Sun } from 'lucide-react';
+import { SelectorEmpresa, VARIABLE_TOPE, visualmenteOculto } from '@validalo/ui';
+import { Link2, Menu as IconoMenu, Moon, Sun } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { aOpcion, useEmpresaActiva, type ContextoEmpresa } from '../features/empresas/useEmpresas';
@@ -11,8 +12,7 @@ import { Campana } from '../features/notificaciones/Campana';
 import { useConteoExcepciones } from '../features/revisionAutomatica/api';
 import { textoDeConteo } from '../features/revisionAutomatica/modelo';
 import { useAlturaFija } from '../sesion/alturaFija';
-import { BotonConfiguracion } from './BotonConfiguracion';
-import { NavegacionPrincipal, type Pestana } from './NavegacionPrincipal';
+import { RielNavegacion, type Pestana } from './RielNavegacion';
 import { ANCHO_LIMITADO, RELLENO_CONTENIDO, rellenoAlineadoAlMarco } from './rellenoContenido';
 import { useSesion } from '../sesion/sesionStore';
 import { useYo } from '../sesion/useYo';
@@ -21,9 +21,9 @@ import { usePermisos } from '../shared/usePermisos';
 import { SECCIONES_CONFIGURACION } from './secciones';
 
 /**
- * AppShell embebido (dirección Registro): una sola fila de 48 px dentro del iframe del anfitrión, sin login ni menú
- * lateral propios. Logo, empresa activa, secciones (pestañas con «Más» adaptativo), campana, Configuración (engranaje)
- * y "Sesión desde SRM".
+ * AppShell de la web de empresa: a la izquierda, el riel fijo con las secciones (ícono + rótulo) y Configuración abajo;
+ * a la derecha, una barra de 48 px con la empresa activa, la sesión, la campana, la cuenta y el tema, y debajo el contenido
+ * (donde cada sección abre su propia barra lateral, si la tiene). En el celular el riel va en un cajón que abre el botón de menú.
  */
 export function AppShell() {
   const { t } = useTranslation();
@@ -40,6 +40,7 @@ export function AppShell() {
   // Embebida en una página de edición: alto fijo y `main` con scroll propio, para que el encabezado de la página se
   // pegue arriba de él (ver `sesion/alturaFija.ts`). Si no, desplaza la ventana y se pega bajo esta barra.
   const alturaFija = useAlturaFija((s) => s.altura);
+  const [cajonAbierto, setCajonAbierto] = useState(false);
 
   // Cuántas excepciones de la revisión automática esperan a una persona: el contador de su pestaña.
   const excepciones = useConteoExcepciones(empresa.id, permisos.puede(SCOPES.expedientesLeer));
@@ -76,13 +77,42 @@ export function AppShell() {
   const seccionActual =
     primerSegmento === 'expedientes' ? 'bandeja' : primerSegmento === 'terceros' ? 'vinculos' : primerSegmento === 'invitaciones' ? (enRuta('invitaciones/por-aprobar') ? 'invitaciones/por-aprobar' : 'invitaciones/lotes') : primerSegmento || 'vinculos';
 
+  const propsRiel = {
+    pestanas,
+    rutaBase: `/e/${empresa.id}`,
+    activa: activa?.clave ?? null,
+    nombreDe: (clave: Pestana['clave']) => t(`nav.${clave}`),
+    configuracion: primeraConfiguracion ? { destino: `/e/${empresa.id}/${primeraConfiguracion.ruta}`, activo: enConfiguracion } : undefined,
+  };
+
   return (
+    <Box sx={{ display: 'flex', bgcolor: 'background.default', ...(alturaFija === null ? { minHeight: '100vh' } : { height: alturaFija, overflow: 'hidden' }) }}>
+      {/* El canal reservado para la barra de scroll (`scrollbar-gutter: stable` del tema) pinta el fondo del lienzo: arriba,
+          a la altura de la barra superior, va del color de la barra y con su borde, para que esta parezca llegar hasta el borde. */}
+      {alturaFija === null && (
+        <GlobalStyles
+          styles={(th) => ({
+            html: {
+              background: `linear-gradient(${th.palette.background.paper} 0 ${String(th.densidad.cabeceraEmbebida - 1)}px, ${th.palette.divider} ${String(th.densidad.cabeceraEmbebida - 1)}px ${String(th.densidad.cabeceraEmbebida)}px, ${th.palette.background.default} ${String(th.densidad.cabeceraEmbebida)}px) fixed`,
+            },
+          })}
+        />
+      )}
+      {/* El riel queda fijo mientras el contenido desplaza la ventana (o, con alto fijo, ocupa todo el alto). */}
+      <RielNavegacion
+        {...propsRiel}
+        sx={{ display: { xs: 'none', sm: 'flex' }, position: 'sticky', top: 0, alignSelf: 'flex-start', height: alturaFija === null ? '100dvh' : '100%', zIndex: (th) => th.zIndex.appBar + 1 }}
+      />
+      <Drawer open={cajonAbierto} onClose={() => setCajonAbierto(false)} sx={{ display: { sm: 'none' } }} slotProps={{ paper: { sx: { borderRight: 0 } } }}>
+        <RielNavegacion {...propsRiel} onNavegar={() => setCajonAbierto(false)} sx={{ height: '100%', borderRight: 0 }} />
+      </Drawer>
     <Box
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        bgcolor: 'background.default',
-        ...(alturaFija === null ? { minHeight: '100vh' } : { height: alturaFija, overflow: 'hidden' }),
+        flex: 1,
+        minWidth: 0,
+        ...(alturaFija !== null && { height: '100%', overflow: 'hidden' }),
         // Con scroll de ventana, bajo esta barra; con scroll propio de `main`, el sticky se mide desde el borde del
         // contenido, así que se resta el relleno de `main` (`RELLENO_CONTENIDO`) para que la franja quede pegada a la barra.
         [VARIABLE_TOPE]: (t) => (alturaFija === null ? `${String(t.densidad.cabeceraEmbebida)}px` : `-${t.spacing(RELLENO_CONTENIDO.y)}`),
@@ -99,7 +129,8 @@ export function AppShell() {
           gap: 1.5,
           height: (t) => t.densidad.cabeceraEmbebida,
           // La barra va a todo el ancho (fondo y borde), pero su contenido se alinea con el marco limitado en pantallas muy anchas.
-          pl: rellenoAlineadoAlMarco(16),
+          // Mismo relleno que `main`: la empresa queda alineada con el borde izquierdo de las barras laterales y del contenido.
+          pl: (th) => rellenoAlineadoAlMarco(Number.parseFloat(th.spacing(RELLENO_CONTENIDO.x))),
           pr: rellenoAlineadoAlMarco(12),
           borderBottom: 1,
           borderColor: 'divider',
@@ -107,15 +138,16 @@ export function AppShell() {
           minWidth: 0,
         }}
       >
-        <Logo tamano={20} titulo={t('app.nombre')} />
-        <Box aria-hidden sx={{ flex: 'none', width: '1px', height: 24, bgcolor: 'divider' }} />
+        <IconButton aria-label={t('nav.abrirMenu')} onClick={() => setCajonAbierto(true)} sx={{ display: { sm: 'none' }, flex: 'none', ml: -1 }}>
+          <IconoMenu size={20} strokeWidth={1.75} />
+        </IconButton>
         <SelectorEmpresa
           etiqueta={t('empresas.etiqueta')}
           empresas={empresas.map(aOpcion)}
           actual={empresa.id}
           onCambiar={(id) => void navegar(`/e/${id}/${seccionActual}`)}
         />
-        <NavegacionPrincipal pestanas={pestanas} rutaBase={`/e/${empresa.id}`} activa={activa?.clave ?? null} nombreDe={(clave) => t(`nav.${clave}`)} />
+        <Box sx={{ flex: 1, minWidth: 0 }} />
         {sistema && (
           // El texto completo solo cabe en pantallas anchas: en las demás queda el ícono con el texto en un tooltip (y
           // oculto solo a la vista, para los lectores de pantalla), así caben más pestañas antes de pasar a «Más».
@@ -132,7 +164,6 @@ export function AppShell() {
           </Tooltip>
         )}
         <Campana empresaId={empresa.id} />
-        {primeraConfiguracion && <BotonConfiguracion destino={`/e/${empresa.id}/${primeraConfiguracion.ruta}`} activo={enConfiguracion} />}
         <MenuDeCuenta rutaMiCuenta={`/e/${empresa.id}/mi-cuenta`} />
         {!temaDelContenedor && (
           <Tooltip title={modo === 'dark' ? t('app.tema.claro') : t('app.tema.oscuro')}>
@@ -148,6 +179,7 @@ export function AppShell() {
           <Outlet context={contexto satisfies ContextoEmpresa} />
         </Box>
       </Box>
+    </Box>
     </Box>
   );
 }

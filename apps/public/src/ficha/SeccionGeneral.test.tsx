@@ -2,11 +2,15 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { reiniciarCliente } from '@validalo/api-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useDialogoSubir } from '../boveda/useDialogoSubir';
 import { documento, escribir, estadoFicha, guardada, json, montarFicha, seccion } from './pruebas/montar';
 
 // Los menús y las listas de MUI necesitan el retardo de un macrotask entre acciones: `userEvent.setup()` lo quita por omisión en la preparación de las pruebas (PV-5).
 
-afterEach(() => reiniciarCliente());
+afterEach(() => {
+  reiniciarCliente();
+  useDialogoSubir.getState().cerrar();
+});
 
 /** General ya guardada (con lo que fija la API: tipo, número y DV) y sin teléfono. */
 const GENERAL = seccion('FICHA_GENERAL', {
@@ -135,9 +139,9 @@ describe('Mi información: Información general', () => {
     await vi.waitFor(() => expect(guardados).toHaveLength(2));
     expect(guardados[1]?.cuerpo).toMatchObject({ soportes: [{ documentoId: 'd-rut', version: 2 }] });
 
-    const subir = screen.getByRole('link', { name: 'Subir un soporte' });
-    expect(subir.getAttribute('href')).toContain('/boveda/subir?tipo=SOPORTE_FICHA');
-    expect(subir.getAttribute('href')).toContain('volver=%2Fficha%2Fgeneral');
+    // «Subir un soporte» abre el diálogo de subida: no saca al tercero de la sección (sus cambios sin guardar siguen ahí).
+    await usuario.click(screen.getByRole('button', { name: 'Subir un soporte' }));
+    expect(useDialogoSubir.getState().solicitud).toEqual({ tipo: 'SOPORTE_FICHA', nombre: 'Soporte de mi información' });
   });
 });
 

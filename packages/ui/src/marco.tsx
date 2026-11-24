@@ -262,7 +262,9 @@ export function NavegacionLateral({
         </Box>
       )}
       {/* Zona de ítems: si no caben, desplaza en vertical (nunca en horizontal). */}
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+      {/* La zona con scroll recorta lo que se sale de ella: se extiende sobre el relleno del panel (margen negativo + relleno igual) para que la
+          sombra del ítem activo no se corte a los lados ni arriba y abajo. */}
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', mx: -0.75, px: 0.75, my: -0.5, py: 0.5 }}>
         {grupos.map((grupo, i) => (
           <Box key={grupo.clave}>
             {i > 0 && <Divider sx={{ my: 1 }} />}
@@ -376,13 +378,18 @@ function ElementoNavegacion({
             data-testid="contador"
             sx={{
               typography: 'caption',
+              // El número centrado en la píldora (sin esto el interlineado del caption lo dejaba corrido hacia arriba).
+              lineHeight: 1,
+              display: 'inline-grid',
+              placeItems: 'center',
               flex: 'none',
               minWidth: 20,
               height: 20,
               mr: 1,
               px: 0.75,
               borderRadius: '10px',
-              textAlign: 'center',
+              boxSizing: 'border-box',
+              fontVariantNumeric: 'tabular-nums',
               bgcolor: advertencia ? 'estado.advertencia.fondo' : 'action.hover',
               color: advertencia ? 'estado.advertencia.texto' : 'text.secondary',
               opacity: colapsada ? 0 : 1,

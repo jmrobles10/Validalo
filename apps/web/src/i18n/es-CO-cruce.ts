@@ -25,6 +25,7 @@ export const cruce = {
     titulo: 'Soporte de la información',
     respalda: 'Respalda: {{secciones}}',
     sinAnalisis: 'Tu empresa no recibió la lectura automática de esta versión: compara a mano con las secciones.',
+    sinCruceAutomatico: 'Sin cruce automático con lo declarado: no hay una cuenta o sección con la que compararlo todavía. Revísalo a mano.',
     seccionSinDiligenciar: '{{seccion}}: sin diligenciar.',
     seccionSinDiligenciarCorta: '{{seccion}} (sin diligenciar)',
     seccionSinCruce: '{{seccion}} (versión {{n}}): sin cruce.',

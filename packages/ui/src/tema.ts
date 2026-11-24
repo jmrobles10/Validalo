@@ -478,7 +478,9 @@ export function createValidaloTheme(modo: Modo = 'light', { app = 'web', colorEm
       },
       MuiDialogTitle: { styleOverrides: { root: { ...variante('h6'), padding: '18px 24px 4px' } } },
       MuiDialogContentText: { styleOverrides: { root: { ...body2, lineHeight: '20px' } } },
-      MuiDialogContent: { styleOverrides: { root: { padding: '12px 24px' } } },
+      // MUI quita el relleno superior del contenido que sigue al título; como el contenido desplaza (y recorta), la etiqueta del primer
+      // campo, que va sobre su borde, quedaba cortada. Se devuelve el relleno.
+      MuiDialogContent: { styleOverrides: { root: { padding: '12px 24px', '.MuiDialogTitle-root + &': { paddingTop: 10 } } } },
       MuiDialogActions: { styleOverrides: { root: { padding: '12px 24px 20px', gap: 8, flexWrap: 'wrap', '& > :not(style) ~ :not(style)': { marginLeft: 0 } } } },
       MuiDrawer: {
         styleOverrides: { paper: { width: web ? 480 : '100%', backgroundColor: c.superficieNivel1, backgroundImage: 'none', borderLeft: `1px solid ${c.bordeSutil}`, boxShadow: s.dialogo } },

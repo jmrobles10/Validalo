@@ -1,7 +1,7 @@
 import { Box, Stack, Typography } from '@mui/material';
 import type { ExpedientePublicoDto } from '@validalo/api-client';
 import { useTranslation } from 'react-i18next';
-import { enlaceDeSubida, esRequisitoDeSeccion, requisitosPorGrupo, type GrupoRequisito } from './requisitos';
+import { esRequisitoDeSeccion, requisitosPorGrupo, solicitudDeRequisito, type GrupoRequisito } from './requisitos';
 import { TarjetaRequisito } from './TarjetaRequisito';
 import { TarjetaRequisitoSeccion } from './TarjetaRequisitoSeccion';
 
@@ -46,7 +46,7 @@ export function RequisitosDelExpediente({ expediente, vinculoId, soloLectura = f
                 esRequisitoDeSeccion(r) ? (
                   <TarjetaRequisitoSeccion key={r.id} requisito={r} expediente={expediente} conAccion={!soloLectura} />
                 ) : (
-                  <TarjetaRequisito key={r.id} requisito={r} expediente={expediente} enlace={soloLectura ? null : enlaceDeSubida(r, vinculoId, expediente.id)} />
+                  <TarjetaRequisito key={r.id} requisito={r} expediente={expediente} subida={soloLectura ? null : solicitudDeRequisito(r, vinculoId, expediente.id)} />
                 ),
               )}
             </Box>

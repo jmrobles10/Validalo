@@ -1,4 +1,5 @@
 import type { ExpedientePublicoDto, ObservacionPublicaDto, RequisitoPublicoDto, VigenciaDto } from '@validalo/api-client';
+import type { SolicitudDeSubida } from '../boveda/solicitudDeSubida';
 import { enlaceSeccion } from '../ficha/secciones';
 import { requiereAtencion } from '../vigencia/vigencia';
 
@@ -26,6 +27,10 @@ export function accionDeRequisito(
       return null; // aprobado o eximido
   }
 }
+
+/** La acción de la tarjeta (subir, corregir, reemplazar): destacada salvo reemplazar, que es la menos urgente. */
+export const propiedadesDeLaAccion = (accion: Exclude<AccionRequisito, null>) =>
+  ({ variant: accion === 'reemplazar' ? 'text' : 'contained', sx: { mt: 1, ml: accion === 'reemplazar' ? 2.25 : 3.25 } }) as const;
 
 /**
  * Orden de lo que ve el tercero: primero lo que le toca (observado, por subir), luego lo que revisa la empresa y al
@@ -59,30 +64,22 @@ export function observacionesDeRequisito(requisito: RequisitoPublicoDto, expedie
 }
 
 /**
- * Enlace a «Subir documento» (o llenar el formulario) de este requisito: un canónico global va a la bóveda (con el
- * vínculo como contexto, para que apliquen las reglas de archivo de la empresa); un tipo propio de la empresa necesita
- * el vínculo. `expediente` y `requisito` dejan a la página leer las reglas, los campos y la plantilla del tipo; `volver`
- * trae al tercero de regreso a su revisión.
+ * Lo que pide subir (o llenar el formulario de) este requisito: un canónico global va a la bóveda (con el vínculo como contexto, para que apliquen las
+ * reglas de archivo de la empresa); un tipo propio de la empresa necesita el vínculo. `expediente` y `requisito` dejan al diálogo de subida (o a la página
+ * del formulario) leer las reglas, los campos y la plantilla del tipo; `volver` trae de regreso a la revisión al llenar un formulario, que sí es una página.
  */
-export function enlaceDeSubida(requisito: RequisitoPublicoDto, vinculoId: string | null, expedienteId: string): string | null {
-  const parametros = new URLSearchParams({ nombre: requisito.tipoDocumento.nombre, volver: `/expediente/${expedienteId}`, expediente: expedienteId, requisito: requisito.id });
+export function solicitudDeRequisito(requisito: RequisitoPublicoDto, vinculoId: string | null, expedienteId: string): SolicitudDeSubida | null {
+  const base: SolicitudDeSubida = { nombre: requisito.tipoDocumento.nombre, volver: `/expediente/${expedienteId}`, expediente: expedienteId, requisito: requisito.id };
   // El documento de una persona relacionada (ADR-0010) se sube a la bóveda de esa persona; sin persona todavía no hay a quién subírselo.
   if (requisito.persona) {
     if (!requisito.persona.personaId || !requisito.tipoDocumento.tipoCanonico) return null;
-    parametros.set('tipo', requisito.tipoDocumento.tipoCanonico);
-    parametros.set('persona', requisito.persona.personaId);
-    return `/boveda/subir?${parametros.toString()}`;
+    return { ...base, tipo: requisito.tipoDocumento.tipoCanonico, persona: requisito.persona.personaId };
   }
   if (requisito.tipoDocumento.tipoCanonico && requisito.tipoDocumento.ambito === 'Global') {
-    parametros.set('tipo', requisito.tipoDocumento.tipoCanonico);
-    if (vinculoId) parametros.set('vinculoId', vinculoId);
-  } else if (vinculoId) {
-    parametros.set('tipoDocumentoTenantId', requisito.tipoDocumento.id);
-    parametros.set('vinculoId', vinculoId);
-  } else {
-    return null;
+    return { ...base, tipo: requisito.tipoDocumento.tipoCanonico, ...(vinculoId ? { vinculoId } : {}) };
   }
-  return `/boveda/subir?${parametros.toString()}`;
+  if (vinculoId) return { ...base, tipoDocumentoTenantId: requisito.tipoDocumento.id, vinculoId };
+  return null;
 }
 
 /** Una sección de «Mi información» que pide la empresa (F2): no se sube aquí, se completa o corrige en el wizard. */

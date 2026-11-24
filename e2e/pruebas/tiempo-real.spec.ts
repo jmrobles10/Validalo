@@ -1,8 +1,8 @@
 import { expect, test, type Browser, type Frame, type FrameLocator, type Locator, type Page } from '@playwright/test';
 import { pdf } from '../soporte/archivos';
 import { abrirEmbebido } from '../soporte/embebido';
-import { abrirDesdeBandeja, observar } from '../soporte/empresa';
-import { completarInvitacion, fraseDeEstado, responder, subirDocumento } from '../soporte/proveedor';
+import { abrirDesdeBandeja, irASector, observar, tarjetaDeLaFicha } from '../soporte/empresa';
+import { completarInvitacion, fraseDeEstado, registrarCuentaConCertificacion, responder, subirDocumento } from '../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero, type Escenario, type Persona } from '../soporte/semilla';
 
 /**
@@ -45,34 +45,11 @@ async function noLeidas(campana: Locator): Promise<number> {
 const campanaDelTercero = (page: Page) => page.getByRole('button', { name: /^Notificaciones(, \d+ sin leer)?$/ });
 const campanaDeLaEmpresa = (app: FrameLocator) => app.getByRole('button', { name: /^Notificaciones(, \d+ sin leer)?$/ });
 
-/** Ventana aparte (otra persona, otro navegador) con el vínculo del tercero abierto en la web de la empresa. */
+/** Ventana aparte (otra persona, otro navegador) con el vínculo del tercero abierto en la web de la empresa, en el sector «Cuenta bancaria» (ahí está la cuenta designada). */
 async function vinculoEnLaEmpresa(browser: Browser, e: Escenario, persona: Persona, vinculoId: string): Promise<FrameLocator> {
-  return abrirEmbebido(await (await browser.newContext()).newPage(), e, persona, e.norte, `vinculos/${vinculoId}`);
-}
-
-/** El tercero registra una cuenta y sube la certificación bancaria (sin designarla todavía). */
-async function registrarCuentaConCertificacion(page: Page): Promise<void> {
-  await page.goto('/cuentas');
-  await page.getByRole('button', { name: 'Agregar cuenta' }).first().click();
-  const nueva = page.getByRole('dialog', { name: 'Agregar cuenta bancaria' });
-  await nueva.getByRole('combobox', { name: 'Banco' }).fill('Bancolombia'); // el banco sale del catálogo
-  await page.getByRole('option', { name: 'Bancolombia' }).click();
-  await nueva.getByRole('radio', { name: 'Ahorros' }).check();
-  await nueva.getByLabel('Número de cuenta').fill('031-123456-78');
-  await nueva.getByLabel('Titular de la cuenta').fill('Ferretería El Tornillo S.A.S.');
-  await nueva.getByLabel('Identificación del titular').fill('NIT 900123456');
-  await nueva.getByRole('button', { name: 'Guardar cuenta' }).click();
-  await expect(page.getByText(/· \*\*\*\*5678 ·/)).toBeVisible();
-
-  // La certificación bancaria se sube desde el enlace que le muestra el diálogo al intentar designar sin ella.
-  const porEmpresa = page.locator('section', { hasText: 'En qué cuenta te paga cada empresa' });
-  await porEmpresa.getByRole('button', { name: 'Elegir cuenta' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Designar cuenta' }).click();
-  await page.getByRole('link', { name: 'Subir certificación bancaria' }).click();
-  const selector = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Elegir archivo' }).click();
-  await (await selector).setFiles(pdf('Certificacion Bancolombia Tornillo'));
-  await expect(page.getByText(/Es tu versión 1 de Certificación bancaria/)).toBeVisible({ timeout: 30_000 });
+  const app = await abrirEmbebido(await (await browser.newContext()).newPage(), e, persona, e.norte, `vinculos/${vinculoId}`);
+  await irASector(app, 'Cuenta bancaria');
+  return app;
 }
 
 test('el tercero designa su cuenta: la ficha ya abierta de la empresa la muestra y la campana se enciende sin recargar; la aprobación vuelve al portal', async ({ page, browser }) => {
@@ -83,13 +60,14 @@ test('el tercero designa su cuenta: la ficha ya abierta de la empresa la muestra
     { nombre: RUT, archivo: pdf('RUT Tornillo') },
     { nombre: CAMARA, archivo: pdf('Camara Tornillo') },
   ]);
-  await registrarCuentaConCertificacion(page);
+  // La cuenta se registra con su certificación (CB-5) y queda sin designar: el tercero la designa más abajo, con la ficha de las dos personas ya abierta.
+  await registrarCuentaConCertificacion(page, pdf('Certificacion Bancolombia Tornillo'));
 
   // Olga y Ana (quienes aprueban cuentas) tienen el vínculo abierto: aún no hay cuenta designada.
   const olga = await vinculoEnLaEmpresa(browser, e, e.olga, enNorte.vinculoId);
   const ana = await vinculoEnLaEmpresa(browser, e, e.ana, enNorte.vinculoId);
-  const tarjetaOlga = olga.getByRole('region', { name: 'Cuenta bancaria designada' }).or(olga.locator('section', { hasText: 'Cuenta bancaria designada' }));
-  const tarjetaAna = ana.getByRole('region', { name: 'Cuenta bancaria designada' }).or(ana.locator('section', { hasText: 'Cuenta bancaria designada' }));
+  const tarjetaOlga = tarjetaDeLaFicha(olga, 'Cuenta bancaria designada');
+  const tarjetaAna = tarjetaDeLaFicha(ana, 'Cuenta bancaria designada');
   await expect(tarjetaOlga).toContainText('El tercero aún no ha designado una cuenta');
   await expect(tarjetaAna).toContainText('El tercero aún no ha designado una cuenta');
   const marcoOlga = await marcoDe(olga);

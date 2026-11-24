@@ -1,7 +1,7 @@
 import { pdf } from '../../soporte/archivos';
 import { abrirEmbebido } from '../../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea } from '../../soporte/empresa';
-import { abrirEmpresa, completarInvitacion, esperarEstadoDelTercero, esperarTarjeta, tarjeta } from '../../soporte/proveedor';
+import { abrirEmpresa, completarInvitacion, esperarEstadoDelTercero, esperarTarjeta, subirVersionDesdeLaBoveda, tarjeta } from '../../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero, SST } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -37,12 +37,7 @@ recorrido(
 
     // El tercero sube una versión nueva del RUT desde la bóveda.
     await page.goto('/boveda');
-    await page.getByRole('article', { name: RUT }).getByRole('link', { name: 'Subir versión' }).click();
-    await expect(page.getByRole('button', { name: 'Elegir archivo' })).toBeVisible();
-    const selector = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf(`RUT nuevo ${tercero.identificacion.numero}`));
-    await expect(page.getByText(`Es tu versión 2 de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+    await subirVersionDesdeLaBoveda(page, RUT, pdf(`RUT nuevo ${tercero.identificacion.numero}`), 2);
 
     // 1. «Mis empresas» dice que la empresa revisa la actualización.
     const tarjetaSur = page.getByRole('listitem').filter({ has: page.getByRole('heading', { level: 2, name: e.sur.nombre, exact: true }) });

@@ -1,9 +1,10 @@
-import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Link, Stack, Typography } from '@mui/material';
 import type { RelacionEntreTercerosDto } from '@validalo/api-client';
 import { EstadoVacio } from '@validalo/ui';
 import { Plus, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link as RouterLink } from 'react-router';
 import { CabeceraPagina, ErrorRecuperable, EsqueletoTarjetas } from '../shared/componentes';
 import { mensajeDeError } from '../shared/errores';
 import { useAvisos } from '../shared/useAvisos';
@@ -60,6 +61,15 @@ export function PaginaPersonas() {
   const consulta = useRelaciones();
   const [agregando, setAgregando] = useState(false);
   const [quitando, setQuitando] = useState<RelacionEntreTercerosDto | null>(null);
+  // Los representantes legales, suplentes y socios se registran en la información legal: la cabecera lo dice y lleva allí.
+  const sub = (
+    <>
+      {t('personas.sub')}{' '}
+      <Link component={RouterLink} to="/ficha/legal">
+        {t('personas.irAFicha')}
+      </Link>
+    </>
+  );
   const agregar = (
     <Button variant="contained" onClick={() => setAgregando(true)} startIcon={<Plus size={18} aria-hidden />} sx={{ width: { xs: '100%', sm: 'auto' } }}>
       {t('personas.agregar')}
@@ -69,7 +79,7 @@ export function PaginaPersonas() {
   if (consulta.isPending) {
     return (
       <>
-        <CabeceraPagina titulo={t('personas.titulo')} sub={t('personas.sub')} />
+        <CabeceraPagina titulo={t('personas.titulo')} sub={sub} />
         <EsqueletoTarjetas cantidad={2} />
       </>
     );
@@ -77,7 +87,7 @@ export function PaginaPersonas() {
   if (consulta.isError) {
     return (
       <>
-        <CabeceraPagina titulo={t('personas.titulo')} sub={t('personas.sub')} />
+        <CabeceraPagina titulo={t('personas.titulo')} sub={sub} />
         <ErrorRecuperable error={consulta.error} onReintentar={() => void consulta.refetch()} />
       </>
     );
@@ -87,7 +97,7 @@ export function PaginaPersonas() {
   const grupos = vigentesPorRol(consulta.data);
   return (
     <>
-      <CabeceraPagina titulo={t('personas.titulo')} sub={t('personas.sub')} accion={agregar} />
+      <CabeceraPagina titulo={t('personas.titulo')} sub={sub} accion={agregar} />
       {propuestas.length > 0 && (
         <Stack component="ul" spacing={1.5} sx={{ listStyle: 'none', m: 0, mb: 2.5, p: 0 }} aria-label={t('personas.propuesta.titulo')}>
           {propuestas.map((p) => (
@@ -96,7 +106,16 @@ export function PaginaPersonas() {
         </Stack>
       )}
       {grupos.length === 0 ? (
-        <EstadoVacio icono={UsersRound} titulo={t('personas.vacio')} texto={t('personas.vacioTexto')} />
+        <EstadoVacio
+          icono={UsersRound}
+          titulo={t('personas.vacio')}
+          texto={t('personas.vacioTexto')}
+          accion={
+            <Button component={RouterLink} to="/ficha/legal" variant="outlined">
+              {t('personas.irAFicha')}
+            </Button>
+          }
+        />
       ) : (
         <Stack spacing={3}>
           {grupos.map(({ rol, personas }) => (

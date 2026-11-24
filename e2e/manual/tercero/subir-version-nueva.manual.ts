@@ -1,7 +1,7 @@
 import { pdf } from '../../soporte/archivos';
 import { abrirEmbebido } from '../../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea } from '../../soporte/empresa';
-import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, fraseDeEstado, subirDocumento, tarjeta } from '../../soporte/proveedor';
+import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, elegirArchivoEnElDialogo, fraseDeEstado, subirDocumento, tarjeta } from '../../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero, SST } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -59,17 +59,14 @@ recorrido(
     await paso(page, {
       titulo: 'Abre tu bóveda y elige «Subir versión» del RUT',
       explicacion:
-        'En «Mi bóveda» cada documento aparece una sola vez, con su versión vigente y, en «Con tus empresas», la versión que cada una aprobó. Con «Subir versión» llevas el archivo nuevo a la pantalla de carga del documento. ' +
+        'En «Mi bóveda» cada documento aparece una sola vez, con su versión vigente y, en «Con tus empresas», la versión que cada una aprobó. Con «Subir versión» se abre la ventana de carga del documento, sin salir de tu bóveda. ' +
         'Al guardarlo, Valídalo lo registra como la versión 2 y las empresas que usan el RUT reciben el cambio para revisarlo.',
       resaltar: tarjetaBoveda,
       configuracion: { ajuste: 'Vigencia y reglas del tipo de documento', ruta: 'Configuración › Tipos de documento (/tipos-documento)' },
     });
-    await tarjetaBoveda.getByRole('link', { name: 'Subir versión' }).click();
-    await expect(page.getByRole('button', { name: 'Elegir archivo' })).toBeVisible();
-    const selector = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf(`RUT nuevo ${tercero.identificacion.numero}`));
-    await expect(page.getByText(`Es tu versión 2 de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+    await tarjetaBoveda.getByRole('button', { name: 'Subir versión' }).click();
+    await expect(page.getByRole('dialog', { name: `Nueva versión de ${RUT}` })).toBeVisible();
+    await elegirArchivoEnElDialogo(page, pdf(`RUT nuevo ${tercero.identificacion.numero}`), `Es tu versión 2 de ${RUT}`);
 
     // 3. La versión nueva queda en revisión.
     await page.goto('/empresas');

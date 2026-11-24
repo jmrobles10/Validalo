@@ -2,10 +2,10 @@ import { Box, Button, Stack, Typography } from '@mui/material';
 import { Upload } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router';
 import { ChipVigencia } from '../vigencia/ChipVigencia';
 import { DetalleVencimientos } from './DetalleVencimientos';
 import type { LineaPorRenovar } from './porRenovar';
+import { useDialogoSubir } from './useDialogoSubir';
 
 /**
  * Una línea del bloque «Por renovar»: el chip de vigencia, el documento con lo que pasa y las acciones («Subir versión nueva» y, cuando la
@@ -13,9 +13,11 @@ import type { LineaPorRenovar } from './porRenovar';
  */
 export function LineaDelAviso({ linea }: { linea: LineaPorRenovar }) {
   const { t } = useTranslation();
+  const abrirSubida = useDialogoSubir((s) => s.abrir);
   const [abierta, setAbierta] = useState(false);
   const idDetalle = `por-renovar-${linea.documentoId}`;
   const empresas = linea.empresas;
+  const subir = linea.subir;
 
   return (
     <Box component="li" sx={{ py: 0.5, pl: { sm: 4.25 }, listStyle: 'none' }}>
@@ -39,10 +41,9 @@ export function LineaDelAviso({ linea }: { linea: LineaPorRenovar }) {
               {abierta ? t('boveda.porRenovar.ocultarEmpresas') : t('boveda.porRenovar.verEmpresas')}
             </Button>
           )}
-          {linea.subir && (
+          {subir && (
             <Button
-              component={RouterLink}
-              to={linea.subir}
+              onClick={() => abrirSubida(subir)}
               variant="text"
               startIcon={<Upload size={16} aria-hidden />}
               aria-label={`${t('boveda.porRenovar.subir')}: ${linea.documento}`}

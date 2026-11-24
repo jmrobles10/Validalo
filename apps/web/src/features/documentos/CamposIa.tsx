@@ -1,6 +1,7 @@
 import { Box, Button } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ListaDeDatos, type FilaDeDato } from './ListaDeDatos';
 import type { CampoIa, ValorIa } from './revisionIa';
 
 /** Un valor: texto tal cual; una lista, como lista con viñetas; un objeto, como sus pares «Etiqueta: valor». */
@@ -31,31 +32,23 @@ function Valor({ valor }: { valor: ValorIa }) {
   );
 }
 
-/** Datos que extrajo la IA: lista de definiciones en dos columnas, con «Ver n datos más» si hay límite. */
-export function CamposIa({ campos, titulo, limite }: { campos: readonly CampoIa[]; titulo: string; limite?: number }) {
+/**
+ * Lo que leyó la IA, en la misma lista que `previas` (las filas que no cuentan para el límite, como «Legible» y «Tipo detectado»): con «Ver n datos más» si hay límite.
+ * Los valores largos (listas y objetos) ocupan todo el ancho; los cortos comparten fila de a dos si el contenedor es ancho.
+ */
+export function CamposIa({ campos, titulo, limite, previas = [] }: { campos: readonly CampoIa[]; titulo: string; limite?: number; previas?: readonly FilaDeDato[] }) {
   const { t } = useTranslation();
   const [todos, setTodos] = useState(false);
   const visibles = limite && !todos ? campos.slice(0, limite) : campos;
   const ocultos = campos.length - visibles.length;
+  const filas: FilaDeDato[] = [
+    ...previas,
+    ...visibles.map((campo) => ({ clave: campo.clave, etiqueta: campo.etiqueta, valor: <Valor valor={campo.valor} />, ancho: campo.valor.tipo !== 'texto' })),
+  ];
 
   return (
     <Box>
-      <Box
-        component="dl"
-        aria-label={titulo}
-        sx={{ typography: 'body2', m: 0, display: 'grid', gridTemplateColumns: 'minmax(0, max-content) minmax(0, 1fr)', columnGap: 1.5, rowGap: 0.5 }}
-      >
-        {visibles.map((campo) => (
-          <Box key={campo.clave} sx={{ display: 'contents' }}>
-            <Box component="dt" sx={{ color: 'text.secondary' }}>
-              {campo.etiqueta}
-            </Box>
-            <Box component="dd" sx={{ m: 0, overflowWrap: 'anywhere' }}>
-              <Valor valor={campo.valor} />
-            </Box>
-          </Box>
-        ))}
-      </Box>
+      <ListaDeDatos filas={filas} etiqueta={titulo} />
       {limite !== undefined && campos.length > limite && (
         <Button size="small" variant="text" onClick={() => setTodos((v) => !v)} sx={{ mt: 0.5, px: 0.5, minWidth: 0 }} aria-expanded={todos}>
           {todos ? t('ia.revision.verMenos') : t('ia.revision.verTodos', { count: ocultos })}

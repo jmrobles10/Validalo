@@ -54,7 +54,7 @@ export function VisorDocumento({ empresaId, vinculoId, documento, onCerrar }: { 
       slotProps={{
         paper: {
           sx: conArchivo
-            ? { width: { xs: 'calc(100% - 16px)', md: conPanel ? 'min(1280px, 94vw)' : 'min(1100px, 92vw)' }, height: 'min(90vh, 820px)', m: { xs: 1, md: 4 } }
+            ? { width: { xs: 'calc(100% - 16px)', md: conPanel ? 'min(1560px, 96vw)' : 'min(1280px, 94vw)' }, height: 'min(92vh, 960px)', m: { xs: 1, md: 4 } }
             : { width: 'min(640px, calc(100% - 16px))', maxHeight: 'min(90vh, 820px)', m: { xs: 1, md: 4 } },
         },
       }}
@@ -79,7 +79,7 @@ export function VisorDocumento({ empresaId, vinculoId, documento, onCerrar }: { 
         </IconButton>
       </Stack>
       {conArchivo ? (
-        <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: conPanel ? { xs: 'minmax(0,1fr)', md: 'minmax(0,1fr) 320px' } : 'minmax(0,1fr)', gridTemplateRows: conPanel ? { xs: 'minmax(0,1fr) auto', md: 'minmax(0,1fr)' } : 'minmax(0,1fr)' }}>
+        <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: conPanel ? { xs: 'minmax(0,1fr)', md: 'minmax(0,1fr) 340px', lg: 'minmax(0,1fr) 380px' } : 'minmax(0,1fr)', gridTemplateRows: conPanel ? { xs: 'minmax(0,1fr) auto', md: 'minmax(0,1fr)' } : 'minmax(0,1fr)' }}>
           <ArchivoEnVisor contenido={contenido} mime={descarga?.mime ?? null} titulo={titulo} errorAlPedir={errorAlPedir} />
           {conPanel && (
             <Box sx={{ p: 2, overflow: 'auto', maxHeight: { xs: 240, md: 'none' }, borderLeft: { md: 1 }, borderTop: { xs: 1, md: 0 }, borderColor: 'divider' }}>

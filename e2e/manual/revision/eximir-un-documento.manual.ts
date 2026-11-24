@@ -79,7 +79,7 @@ recorrido(
     // 4) El proveedor lo ve eximido y no se le vuelve a pedir.
     await esperarEstadoDelTercero(page, 'EnRevision');
     await expect(tarjeta(page, CAMARA)).toContainText('Eximido');
-    await expect(tarjeta(page, CAMARA).getByRole('link', { name: /^Subir/ })).toHaveCount(0);
+    await expect(tarjeta(page, CAMARA).getByRole('button', { name: /^Subir/ })).toHaveCount(0);
     await paso(page, {
       titulo: 'Así lo ve el proveedor',
       explicacion:

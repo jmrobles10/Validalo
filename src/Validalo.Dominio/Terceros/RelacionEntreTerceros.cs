@@ -72,8 +72,11 @@ public sealed record CambioDeRelacionDescartado(Guid RelacionId, string Por, Dat
 /// <summary>La relación pasó a ser (o dejó de ser) la principal de su tipo ante el tercero destino.</summary>
 public sealed record RelacionMarcadaPrincipal(Guid RelacionId, bool Principal, DateTimeOffset Fecha);
 
-/// <summary>Cambió la participación o el cargo de la persona en la relación.</summary>
-public sealed record RelacionActualizada(Guid RelacionId, decimal? Participacion, string? Cargo, DateTimeOffset Fecha);
+/// <summary>
+/// Cambió la participación o el cargo de la persona en la relación y, si <paramref name="DeFicha"/> viene (los eventos anteriores no lo traen), la ficha legal pasó a mantenerla: la persona
+/// que el tercero había declarado a mano figura ahora en su sección legal, que es el único lugar donde se registra.
+/// </summary>
+public sealed record RelacionActualizada(Guid RelacionId, decimal? Participacion, string? Cargo, DateTimeOffset Fecha, bool? DeFicha = null);
 
 /// <summary>La relación terminó: deja de contar desde ya (no es vigente en ninguna fecha); <paramref name="VigenteHasta"/> registra el último día en que valió.</summary>
 public sealed record RelacionTerminada(Guid RelacionId, DateOnly VigenteHasta, string Motivo, string Por, DateTimeOffset Fecha);
@@ -235,14 +238,18 @@ public sealed class RelacionEntreTerceros
     public RelacionMarcadaPrincipal? MarcarPrincipal(bool principal, DateTimeOffset ahora) =>
         Estado == EstadoDeRelacion.Confirmada && Principal != principal ? new RelacionMarcadaPrincipal(Id, principal, ahora) : null;
 
-    /// <summary>Cambia la participación o el cargo. Solo una confirmada; sin cambio ⇒ nulo.</summary>
-    public RelacionActualizada? Actualizar(decimal? participacion, string? cargo, DateTimeOffset ahora)
+    /// <summary>
+    /// Cambia la participación o el cargo y, con <paramref name="deFicha"/>, hace que la ficha legal la mantenga (la persona declarada a mano que ahora figura en la sección legal).
+    /// Solo una confirmada; sin cambio ⇒ nulo.
+    /// </summary>
+    public RelacionActualizada? Actualizar(decimal? participacion, string? cargo, DateTimeOffset ahora, bool? deFicha = null)
     {
         if (Estado != EstadoDeRelacion.Confirmada)
             return null;
         Validar(OrigenId, DestinoId, Tipo, participacion, cargo);
         var nuevoCargo = Texto(cargo);
-        return Participacion == participacion && Cargo == nuevoCargo ? null : new RelacionActualizada(Id, participacion, nuevoCargo, ahora);
+        var adopta = deFicha == true && !DeFicha;
+        return Participacion == participacion && Cargo == nuevoCargo && !adopta ? null : new RelacionActualizada(Id, participacion, nuevoCargo, ahora, adopta ? true : null);
     }
 
     /// <summary>Vuelve a declarar una relación terminada o descartada. Solo en esos estados (en los demás ⇒ nulo).</summary>
@@ -356,6 +363,8 @@ public sealed class RelacionEntreTerceros
     {
         Participacion = e.Participacion;
         Cargo = e.Cargo;
+        if (e.DeFicha is { } deFicha)
+            DeFicha = deFicha;
         ActualizadaEn = e.Fecha;
     }
 

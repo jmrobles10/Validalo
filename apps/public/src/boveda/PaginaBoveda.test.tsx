@@ -7,6 +7,7 @@ import { createValidaloTheme } from '@validalo/ui';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PaginaBoveda } from './PaginaBoveda';
+import { useDialogoSubir } from './useDialogoSubir';
 
 const json = (cuerpo: unknown) => new Response(JSON.stringify(cuerpo), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
@@ -73,7 +74,10 @@ function montar(documentos: DocumentoBovedaDto[], direccion = '/boveda') {
 
 const tarjeta = (nombre: string) => screen.getByRole('article', { name: nombre });
 
-afterEach(() => reiniciarCliente());
+afterEach(() => {
+  reiniciarCliente();
+  useDialogoSubir.getState().cerrar();
+});
 
 describe('mi bóveda con varias empresas', () => {
   it('con una sola empresa no hay filtro', async () => {
@@ -135,5 +139,36 @@ describe('mi bóveda con varias empresas', () => {
     montar(CUATRO(), '/boveda?empresa=fantasma');
     expect(await screen.findByRole('combobox', { name: 'Empresa' })).toHaveValue('Todas');
     expect(within(tarjeta('Registro Único Tributario')).getByRole('button', { name: /Al día con 4 empresas/ })).toBeInTheDocument();
+  });
+});
+
+describe('subir desde mi bóveda', () => {
+  it('«Subir documento» abre el diálogo de subida sin tipo elegido y no cambia de pantalla', async () => {
+    const usuario = userEvent.setup();
+    montar(CUATRO());
+
+    await usuario.click(await screen.findByRole('button', { name: 'Subir documento' }));
+
+    expect(useDialogoSubir.getState().solicitud).toEqual({});
+    expect(screen.getByLabelText('ubicación')).toBeEmptyDOMElement();
+  });
+
+  it('«Subir versión» de un documento abre el diálogo con ese documento', async () => {
+    const usuario = userEvent.setup();
+    montar(CUATRO());
+
+    await usuario.click(await within(await screen.findByRole('article', { name: 'Cámara de comercio' })).findByRole('button', { name: 'Subir versión' }));
+
+    expect(useDialogoSubir.getState().solicitud).toEqual({ documento: 'camara', tipo: 'CAMARA' });
+  });
+
+  it('con la bóveda vacía el botón también está en la cabecera', async () => {
+    const usuario = userEvent.setup();
+    montar([]);
+
+    expect(await screen.findByText('Aún no tienes documentos')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Subir documento' }));
+
+    expect(useDialogoSubir.getState().solicitud).toEqual({});
   });
 });

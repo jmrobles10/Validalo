@@ -95,6 +95,7 @@ export const esCO = {
     'mi-cuenta': 'Mi cuenta',
     configuracion: 'Configuración',
     principal: 'Secciones',
+    abrirMenu: 'Abrir el menú',
     conConteo: '{{nombre}} ({{conteo}})',
     mas: 'Más',
     masSecciones: 'Más secciones',

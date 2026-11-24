@@ -3,6 +3,7 @@ import type { DatoDeclaradoDto } from '@validalo/api-client';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatearDatoDeclarado } from './formatoDatos';
+import { ListaDeDatos } from './ListaDeDatos';
 
 export interface DatosDeclaradosProps {
   datos: readonly DatoDeclaradoDto[];
@@ -14,7 +15,7 @@ export interface DatosDeclaradosProps {
 
 /**
  * Lo que el tercero declaró en la versión (TD-4): etiqueta y valor formateado según el tipo del campo (fecha legible,
- * Sí/No, número con separadores es-CO). Lista de definiciones en dos columnas.
+ * Sí/No, número con separadores es-CO). Lista de definiciones en una grilla (de a dos pares por fila si hay ancho).
  */
 export function DatosDeclarados({ datos, limite, conTitulo = false }: DatosDeclaradosProps) {
   const { t } = useTranslation();
@@ -31,22 +32,10 @@ export function DatosDeclarados({ datos, limite, conTitulo = false }: DatosDecla
           {t('expedientes.datosDeclarados.titulo')}
         </Typography>
       )}
-      <Box
-        component="dl"
-        aria-label={conTitulo ? undefined : t('expedientes.datosDeclarados.titulo')}
-        sx={{ typography: 'body2', m: 0, display: 'grid', gridTemplateColumns: 'minmax(0, max-content) minmax(0, 1fr)', columnGap: 1.5, rowGap: 0.5 }}
-      >
-        {visibles.map((dato) => (
-          <Box key={dato.clave} sx={{ display: 'contents' }}>
-            <Box component="dt" sx={{ color: 'text.secondary' }}>
-              {dato.etiqueta}
-            </Box>
-            <Box component="dd" sx={{ m: 0, overflowWrap: 'anywhere', fontVariantNumeric: dato.tipo === 'Numero' ? 'tabular-nums' : undefined }}>
-              {formatearDatoDeclarado(dato, textos)}
-            </Box>
-          </Box>
-        ))}
-      </Box>
+      <ListaDeDatos
+        etiqueta={conTitulo ? undefined : t('expedientes.datosDeclarados.titulo')}
+        filas={visibles.map((dato) => ({ clave: dato.clave, etiqueta: dato.etiqueta, valor: formatearDatoDeclarado(dato, textos), numerico: dato.tipo === 'Numero' }))}
+      />
       {limite !== undefined && datos.length > limite && (
         <Button size="small" variant="text" onClick={() => setTodos((v) => !v)} sx={{ mt: 0.5, px: 0.5, minWidth: 0 }} aria-expanded={todos}>
           {todos ? t('expedientes.datosDeclarados.verMenos') : t('expedientes.datosDeclarados.verTodos', { count: ocultos })}

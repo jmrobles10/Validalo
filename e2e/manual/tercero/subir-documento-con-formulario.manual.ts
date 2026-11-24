@@ -1,6 +1,6 @@
 import { pdf } from '../../soporte/archivos';
 import { escribirFecha } from '../../soporte/fechas';
-import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, tarjeta } from '../../soporte/proveedor';
+import { abrirEmpresa, aceptarInvitacion, cerrarDialogoDeSubida, elegirArchivo, entrarPorInvitacion, tarjeta } from '../../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero, SST } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -35,10 +35,10 @@ recorrido(
       titulo: 'Encuentra el certificado en «Lo que te pide»',
       explicacion:
         'En «Lo que te pide» aparece el certificado de seguridad y salud en el trabajo, con las reglas de su tipo: formato PDF, JPG, PNG o WebP y tamaño máximo. ' +
-        'Como este documento tiene fecha de expedición, la pantalla de carga te pedirá esa fecha además del archivo. Pulsa «Subir documento» para abrirlo.',
+        'Como este documento tiene fecha de expedición, la ventana de carga te pedirá esa fecha además del archivo. Pulsa «Subir documento» para abrirla.',
       resaltar: tarjeta(page, SST.nombre),
       variantes: [
-        { cuando: 'El documento no tiene campos propios', entonces: 'La pantalla de carga solo pide el archivo.' },
+        { cuando: 'El documento no tiene campos propios', entonces: 'La ventana de carga solo pide el archivo.' },
         { cuando: 'Ya subiste una versión', entonces: 'El botón dice «Subir otra versión» y la nueva versión reemplaza la vigente en revisión.' },
       ],
       configuracion: {
@@ -48,36 +48,34 @@ recorrido(
       },
     });
 
-    // 2. La pantalla de carga con fecha y archivo.
-    await tarjeta(page, SST.nombre).getByRole('link', { name: /^Subir/ }).click();
-    await expect(page.getByRole('heading', { level: 1, name: `Subir ${SST.nombre}` })).toBeVisible();
+    // 2. La ventana de carga con fecha y archivo.
+    await tarjeta(page, SST.nombre).getByRole('button', { name: /^Subir/ }).click();
+    const dialogo = page.getByRole('dialog', { name: `Subir ${SST.nombre}` });
+    await expect(dialogo).toBeVisible();
     await paso(page, {
       titulo: 'Escribe la fecha de expedición y elige el archivo',
       explicacion:
         'Escribe la fecha de expedición del certificado en el selector de fecha (día, mes y año) y luego pulsa «Elegir archivo». ' +
-        'Valídalo usa esa fecha para calcular cuándo vence: el certificado vale 30 días desde su expedición. Si el archivo no cumple el formato o el tamaño, la pantalla te lo dice y no guarda nada.',
-      resaltar: [page.getByRole('button', { name: 'Elegir archivo' })],
+        'Valídalo usa esa fecha para calcular cuándo vence: el certificado vale 30 días desde su expedición. Si el archivo no cumple el formato o el tamaño, la ventana te lo dice y no guarda nada.',
+      resaltar: [dialogo.getByRole('button', { name: 'Elegir archivo' })],
     });
-    await escribirFecha(page, 'Fecha de expedición', hace3Dias);
-    const selector = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf(`SST ${tercero.identificacion.numero}`));
+    await escribirFecha(page, 'Fecha de expedición', hace3Dias, dialogo);
 
     // 3. Versión guardada y vigencia.
-    await expect(page.getByText(`Es tu versión 1 de ${SST.nombre}`)).toBeVisible({ timeout: 30_000 });
+    await elegirArchivo(page, pdf(`SST ${tercero.identificacion.numero}`), `Es tu versión 1 de ${SST.nombre}`);
     await paso(page, {
       titulo: 'Confirma la versión y su vigencia',
       explicacion:
         'Valídalo confirma «Es tu versión 1» del certificado y dice qué empresa ya lo tiene. El documento guarda su fecha de expedición y la fecha en que vence; cuando falten 10 días te avisamos por correo. ' +
         'Si el documento vence, tienes 5 días de gracia para subir uno nuevo antes de que la empresa lo marque como vencido.',
-      resaltar: page.getByText(`Es tu versión 1 de ${SST.nombre}`),
+      resaltar: dialogo.getByText(`Es tu versión 1 de ${SST.nombre}`),
       configuracion: {
         ajuste: 'Vigencia, aviso y gracia del certificado',
         ruta: 'Configuración › Tipos de documento (/tipos-documento)',
         efecto: 'Fija cuántos días vale el documento, cuándo se avisa y cuánta gracia tiene antes de vencerse.',
       },
     });
-    await page.getByRole('link', { name: 'Volver a mi revisión' }).click();
+    await cerrarDialogoDeSubida(page);
 
     // 4. El documento en «Tu revisión».
     await expect(tarjeta(page, SST.nombre)).toBeVisible();

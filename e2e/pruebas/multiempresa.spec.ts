@@ -43,7 +43,7 @@ test('Norte y Sur invitan al mismo proveedor: un solo RUT, decisiones privadas y
   await entrarPorInvitacion(page, enSur);
   await aceptarInvitacion(page, enSur);
   await expect(tarjeta(page, RUT)).toContainText('Versión 1');
-  await expect(tarjeta(page, RUT).getByRole('link', { name: 'Subir documento' })).toHaveCount(0);
+  await expect(tarjeta(page, RUT).getByRole('button', { name: 'Subir documento' })).toHaveCount(0);
   await subirDocumento(page, SST.nombre, pdf('SST Ferreteria'), { campos: { 'Fecha de expedición': haceDias(3) } });
   await esperarEstadoDelTercero(page, 'EnRevision');
 

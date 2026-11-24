@@ -171,6 +171,10 @@ public static class ServiciosInfraestructura
         servicios.AgregarProcesoDelLider<Aplicacion.Interesado.MigracionDeAccesoAisladoAlArrancar>();
         // Migración de datos de la certificación bancaria por cuenta (CB-1): corre una sola vez al arrancar, en el nodo líder.
         servicios.AgregarProcesoDelLider<Aplicacion.Vinculos.MigracionDeCertificacionPorCuentaAlArrancar>();
+        // Liga por número de las certificaciones bancarias generales que la IA ya leyó (CB-8): corre una sola vez al arrancar, en el nodo líder.
+        servicios.AgregarProcesoDelLider<Aplicacion.Vinculos.MigracionDeCertificacionPorNumeroAlArrancar>();
+        // Migración de datos de las personas declaradas a mano a la ficha legal (PR-17): corre una sola vez al arrancar, en el nodo líder.
+        servicios.AgregarProcesoDelLider<Aplicacion.Personas.MigracionDePersonasEnLaFichaAlArrancar>();
         // Plan y límites por grupo (OD-14…OD-17): medición de uso, bloqueo suave, avisos al 80 % y al 100 %.
         servicios.AddSingleton<Aplicacion.Plataforma.MedidorDeLlamadasApi>();
         servicios.AddHostedService(proveedor => proveedor.GetRequiredService<Aplicacion.Plataforma.MedidorDeLlamadasApi>());
@@ -433,6 +437,7 @@ public static class ServiciosInfraestructura
         opciones.PublishMessage<Aplicacion.Verificaciones.PersonasDeFichaCambiaron>().ToLocalQueue(ColaRequisitos).UseDurableInbox();
         opciones.PublishMessage<Aplicacion.Personas.SincronizarPersonasDeFicha>().ToLocalQueue(ColaRequisitos).UseDurableInbox();
         opciones.PublishMessage<Aplicacion.Personas.ReconciliarRelacionesConCamara>().ToLocalQueue(ColaRequisitos).UseDurableInbox();
+        opciones.PublishMessage<Aplicacion.Vinculos.LigarCertificacionGeneralPorNumero>().ToLocalQueue(ColaRequisitos).UseDurableInbox();
         opciones.PublishMessage<VencerPlazoDeRevalidacion>().ToLocalQueue(ColaRequisitos).UseDurableInbox();
         opciones.PublishMessage<RenovarPorVencimiento>().ToLocalQueue(ColaRequisitos).UseDurableInbox();
         opciones.PublishMessage<Aplicacion.Documentos.CorreoDeVencimientoPendiente>().ToLocalQueue(ColaCorreo).UseDurableInbox();

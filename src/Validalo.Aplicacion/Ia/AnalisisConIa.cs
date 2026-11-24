@@ -239,6 +239,9 @@ public static class AnalizarVersionConIaHandler
         // F5: con los hechos nuevos, se cruzan las secciones que el documento respalda (hecho compartido, sin otra llamada).
         if (analisis is not null && registrado && Dominio.Ficha.MapaDeRespaldo.RespaldaAlguna(documento.TipoCanonico))
             await mensajes.PublishAsync(new Validalo.Aplicacion.Ficha.CruzarFichaConDocumentos(documento.TerceroId));
+        // CB-8: la certificación bancaria general (sin cuenta) que la IA acaba de leer se liga sola a su cuenta si el número coincide con una sola cuenta activa del tercero sin certificación propia.
+        if (analisis is not null && registrado && LigaDeCertificacionPorNumero.EsCandidata(documento))
+            await mensajes.PublishAsync(new Vinculos.LigarCertificacionGeneralPorNumero(documento.Id));
         // ADR-0010: lo que la IA leyó de la Cámara (representantes) se reconcilia con las relaciones del tercero: una diferencia es una propuesta, no un cambio.
         if (analisis is not null && registrado && documento.Ambito == Dominio.Documentos.AmbitoDocumento.Global && documento.TipoCanonico == "CAMARA_COMERCIO")
             await mensajes.PublishAsync(new Validalo.Aplicacion.Personas.ReconciliarRelacionesConCamara(documento.TerceroId, documento.Id, version.Numero));

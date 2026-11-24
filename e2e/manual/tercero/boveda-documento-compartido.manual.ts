@@ -1,7 +1,7 @@
 import { pdf } from '../../soporte/archivos';
 import { abrirEmbebido } from '../../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea } from '../../soporte/empresa';
-import { abrirEmpresa, aceptarInvitacion, completarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento } from '../../soporte/proveedor';
+import { abrirEmpresa, aceptarInvitacion, completarInvitacion, entrarPorInvitacion, elegirArchivoEnElDialogo, esperarEstadoDelTercero, subirDocumento } from '../../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero, SST } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -60,12 +60,9 @@ recorrido(
     });
 
     // 2. Subir una versión nueva afecta a las dos.
-    await tarjetaRut.getByRole('link', { name: 'Subir versión' }).click();
-    await expect(page.getByRole('button', { name: 'Elegir archivo' })).toBeVisible();
-    const selector = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf(`RUT nuevo ${tercero.identificacion.numero}`));
-    await expect(page.getByText(`Es tu versión 2 de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+    await tarjetaRut.getByRole('button', { name: 'Subir versión' }).click();
+    await expect(page.getByRole('dialog', { name: `Nueva versión de ${RUT}` })).toBeVisible();
+    await elegirArchivoEnElDialogo(page, pdf(`RUT nuevo ${tercero.identificacion.numero}`), `Es tu versión 2 de ${RUT}`);
 
     await page.goto('/boveda');
     const tarjetaNueva = page.getByRole('article').filter({ has: page.getByRole('heading', { name: RUT, exact: true }) });

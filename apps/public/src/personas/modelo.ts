@@ -1,4 +1,5 @@
 import type { DeclararRelacionDto, DocumentoDePersonaDto, RelacionEntreTercerosDto } from '@validalo/api-client';
+import type { SolicitudDeSubida } from '../boveda/solicitudDeSubida';
 
 /** Cómo se relaciona una persona con el tercero (ADR-0010), en el orden en que se muestran. */
 export const ROLES = ['RepresentanteLegal', 'Suplente', 'Socio', 'BeneficiarioFinal', 'MiembroDe'] as const;
@@ -7,6 +8,14 @@ export type RolDePersona = (typeof ROLES)[number];
 export function esRol(valor: string): valor is RolDePersona {
   return (ROLES as readonly string[]).includes(valor);
 }
+
+/**
+ * Los roles que la ficha legal maneja: es el único lugar donde se registran (decisión de Producto del 2026-11-24). «Personas» solo los muestra, con
+ * sus documentos y lo que la IA detecta; el beneficiario final y el miembro de consorcio no tienen fila en la ficha y se declaran en Personas.
+ */
+export const ROLES_DE_LA_FICHA: readonly RolDePersona[] = ['RepresentanteLegal', 'Suplente', 'Socio'];
+
+export const seRegistraEnLaFicha = (rol: string): boolean => ROLES_DE_LA_FICHA.some((r) => r === rol);
 
 /** Tipos de documento con los que se declara una persona natural (el país de los colombianos es CO; el pasaporte genérico lleva el suyo). */
 export const TIPOS_DE_DOCUMENTO = ['CC', 'CE', 'PA', 'PASAPORTE', 'TI', 'PPT'] as const;
@@ -25,6 +34,43 @@ export function vigentesPorRol(relaciones: readonly RelacionEntreTercerosDto[]):
     rol,
     personas: vigentes.filter((r) => r.tipo === rol).sort((a, b) => Number(b.principal) - Number(a.principal) || a.nombre.localeCompare(b.nombre, 'es')),
   })).filter((g) => g.personas.length > 0);
+}
+
+/** Un documento de la persona que ya está cargado en su bóveda (con su versión y su estado). */
+export const estaCargado = (d: Pick<DocumentoDePersonaDto, 'documentoId' | 'version' | 'estado'>) => d.documentoId !== null && d.version !== null && d.estado !== null;
+
+/** Una persona relacionada con lo que ya tiene cargado en su bóveda, para mostrarla en «Mi bóveda» (ADR-0010: su cédula no está en la del tercero). */
+export interface PersonaConDocumentos {
+  personaId: string;
+  nombre: string;
+  /** Sus roles vigentes con el tercero, en el orden de `ROLES` (una misma persona puede ser representante y socia). */
+  roles: string[];
+  documentos: DocumentoDePersonaDto[];
+}
+
+/**
+ * Las personas con relación vigente que ya tienen algo cargado en su bóveda, una vez cada una aunque tenga varios roles (los documentos son de la
+ * persona, no de la relación). Las que no tienen nada cargado no salen: «Mi bóveda» solo muestra lo que hay. Ordenadas por su primer rol y por nombre.
+ */
+export function personasConDocumentosCargados(relaciones: readonly RelacionEntreTercerosDto[]): PersonaConDocumentos[] {
+  const posicion = (rol: string) => {
+    const i = ROLES.findIndex((r) => r === rol);
+    return i < 0 ? ROLES.length : i;
+  };
+  const porPersona = new Map<string, PersonaConDocumentos>();
+  for (const relacion of relaciones.filter(esVigente)) {
+    const documentos = relacion.documentos.filter(estaCargado);
+    if (documentos.length === 0) continue;
+    const existente = porPersona.get(relacion.personaId);
+    if (existente) {
+      if (!existente.roles.includes(relacion.tipo)) existente.roles.push(relacion.tipo);
+    } else {
+      porPersona.set(relacion.personaId, { personaId: relacion.personaId, nombre: relacion.nombre, roles: [relacion.tipo], documentos });
+    }
+  }
+  const personas = [...porPersona.values()];
+  for (const persona of personas) persona.roles.sort((a, b) => posicion(a) - posicion(b));
+  return personas.sort((a, b) => posicion(a.roles[0] ?? '') - posicion(b.roles[0] ?? '') || a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 /** Un documento que una empresa pide de esta persona y todavía no está vigente en su bóveda. */
@@ -46,10 +92,9 @@ export function confianzaComoPorcentaje(valor: number | string | null | undefine
   return numero === null ? null : Math.round(numero * 100);
 }
 
-/** Enlace a «Subir documento» de una persona: va a la bóveda de la persona y trae al tercero de regreso a sus personas. */
-export function enlaceDeSubidaDePersona(personaId: string, tipoCanonico: string, nombreDelDocumento: string): string {
-  const parametros = new URLSearchParams({ persona: personaId, tipo: tipoCanonico, nombre: nombreDelDocumento, volver: '/personas' });
-  return `/boveda/subir?${parametros.toString()}`;
+/** Lo que se le pide al diálogo de subida para el documento de una persona: va a la bóveda de la persona, no a la del tercero. */
+export function solicitudDeDocumentoDePersona(personaId: string, tipoCanonico: string, nombreDelDocumento: string): SolicitudDeSubida {
+  return { persona: personaId, tipo: tipoCanonico, nombre: nombreDelDocumento };
 }
 
 export interface DatosDePersona {

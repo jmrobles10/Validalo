@@ -4,13 +4,13 @@ import { destinoFijo, rutaSegura } from '../boveda/parametrosSubida';
 import {
   accionDeRequisito,
   debeRefrescar,
-  enlaceDeSubida,
   hayProcesamientoEnCurso,
   observacionesDeRequisito,
   observacionesGenerales,
   requisitosPorGrupo,
   SONDEO_DE_RESPALDO_MS,
   SONDEO_RAPIDO_MS,
+  solicitudDeRequisito,
 } from './requisitos';
 
 const requisito = (id: string, estado: RequisitoPublicoDto['estado'], cambios: Partial<RequisitoPublicoDto> = {}): RequisitoPublicoDto => ({
@@ -76,16 +76,21 @@ describe('documentos que pide la empresa', () => {
     expect(observacionesDeRequisito(camara, exp).map((o) => o.requisito)).toEqual(['CAMARA']);
   });
 
-  it('arma el enlace de subida: canónico global a la bóveda, tipo propio con su vínculo, el requisito y la vuelta a la revisión', () => {
-    const base = 'nombre=camara&volver=%2Fexpediente%2Fe1&expediente=e1&requisito=camara';
-    expect(enlaceDeSubida(requisito('camara', 'Pendiente'), null, 'e1')).toBe(`/boveda/subir?${base}&tipo=CAMARA`);
+  it('arma la solicitud de subida: canónico global a la bóveda, tipo propio con su vínculo, el requisito y la vuelta a la revisión', () => {
+    const base = { nombre: 'camara', volver: '/expediente/e1', expediente: 'e1', requisito: 'camara' };
+    expect(solicitudDeRequisito(requisito('camara', 'Pendiente'), null, 'e1')).toEqual({ ...base, tipo: 'CAMARA' });
     // Con el vínculo como contexto, la API aplica las reglas de archivo que configuró la empresa.
-    expect(enlaceDeSubida(requisito('camara', 'Pendiente'), 'v1', 'e1')).toBe(`/boveda/subir?${base}&tipo=CAMARA&vinculoId=v1`);
+    expect(solicitudDeRequisito(requisito('camara', 'Pendiente'), 'v1', 'e1')).toEqual({ ...base, tipo: 'CAMARA', vinculoId: 'v1' });
     const propio = requisito('anexo', 'Pendiente', { tipoDocumento: { id: 'td-anexo', codigo: 'ANEXO', nombre: 'Anexo', tipoCanonico: null, ambito: 'PorVinculo' } });
-    expect(enlaceDeSubida(propio, 'v1', 'e1')).toBe(
-      '/boveda/subir?nombre=Anexo&volver=%2Fexpediente%2Fe1&expediente=e1&requisito=anexo&tipoDocumentoTenantId=td-anexo&vinculoId=v1',
-    );
-    expect(enlaceDeSubida(propio, null, 'e1')).toBeNull();
+    expect(solicitudDeRequisito(propio, 'v1', 'e1')).toEqual({
+      nombre: 'Anexo',
+      volver: '/expediente/e1',
+      expediente: 'e1',
+      requisito: 'anexo',
+      tipoDocumentoTenantId: 'td-anexo',
+      vinculoId: 'v1',
+    });
+    expect(solicitudDeRequisito(propio, null, 'e1')).toBeNull();
   });
 
   describe('refresco del expediente', () => {

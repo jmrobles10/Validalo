@@ -8,6 +8,8 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAvisos } from '../shared/useAvisos';
 import { DialogoRetirar } from './DialogoRetirar';
+import type { SolicitudDeSubida } from './solicitudDeSubida';
+import { useDialogoSubir } from './useDialogoSubir';
 
 const json = (cuerpo: unknown, estado = 200) => new Response(JSON.stringify(cuerpo), { status: estado, headers: { 'Content-Type': 'application/json' } });
 
@@ -38,7 +40,7 @@ interface Llamada {
   cuerpo: unknown;
 }
 
-function montar(respuesta: () => Response | Promise<Response>, enlaceSubir: string | null = '/boveda/subir?documento=d1&tipo=RUT') {
+function montar(respuesta: () => Response | Promise<Response>, subirCorregida: SolicitudDeSubida | null = { documento: 'd1', tipo: 'RUT' }) {
   const llamadas: Llamada[] = [];
   configurarCliente({
     fetch: vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
@@ -53,7 +55,7 @@ function montar(respuesta: () => Response | Promise<Response>, enlaceSubir: stri
     <ThemeProvider theme={createValidaloTheme('light', { app: 'public' })}>
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <MemoryRouter>
-          <DialogoRetirar documentoId="d1" tipo="Registro Único Tributario" version={VERSION} enlaceSubir={enlaceSubir} onCerrar={alCerrar} />
+          <DialogoRetirar documentoId="d1" tipo="Registro Único Tributario" version={VERSION} subirCorregida={subirCorregida} onCerrar={alCerrar} />
         </MemoryRouter>
       </QueryClientProvider>
     </ThemeProvider>,
@@ -64,6 +66,7 @@ function montar(respuesta: () => Response | Promise<Response>, enlaceSubir: stri
 afterEach(() => {
   reiniciarCliente();
   useAvisos.getState().cerrar();
+  useDialogoSubir.getState().cerrar();
 });
 
 describe('retirar una versión: lo que pasará, antes del motivo', () => {
@@ -78,8 +81,9 @@ describe('retirar una versión: lo que pasará, antes del motivo', () => {
 
     expect(await screen.findByText('Tu Registro Único Tributario vigente pasará a ser la versión 7.')).toBeInTheDocument();
     expect(screen.getByText('Constructora Norte S.A.S. la aprobó: tendrá que revisar de nuevo tu Registro Único Tributario versión 7.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Subir una versión corregida' })).toHaveAttribute('href', '/boveda/subir?documento=d1&tipo=RUT');
+    expect(screen.getByRole('button', { name: 'Subir una versión corregida' })).toBeInTheDocument();
     expect(screen.getByText(/Les avisamos con tu motivo/)).toBeInTheDocument();
+    expect(useDialogoSubir.getState().solicitud).toBeNull();
 
     // El motivo se pide después del impacto; sin él no se puede confirmar.
     const confirmar = screen.getByRole('button', { name: 'Retirar versión' });
@@ -94,12 +98,23 @@ describe('retirar una versión: lo que pasará, antes del motivo', () => {
     expect(useAvisos.getState().actual?.mensaje).toBe('Retiraste la versión 8.');
   });
 
+  it('«Subir una versión corregida» cierra este diálogo y abre el de subida con ese documento, sin retirar nada', async () => {
+    const usuario = userEvent.setup();
+    const { llamadas, alCerrar } = montar(() => json(impacto()));
+
+    await usuario.click(await screen.findByRole('button', { name: 'Subir una versión corregida' }));
+
+    expect(alCerrar).toHaveBeenCalledTimes(1);
+    expect(useDialogoSubir.getState().solicitud).toEqual({ documento: 'd1', tipo: 'RUT' });
+    expect(llamadas.some((l) => l.ruta.endsWith('/retirar'))).toBe(false);
+  });
+
   it('si nadie la recibió lo dice y es simple: sin alternativa ni avisos', async () => {
     montar(() => json(impacto({ empresas: [], versionQueQuedaVigente: null })));
 
     expect(await screen.findByText('No tienes otra versión: te quedarás sin Registro Único Tributario vigente hasta que subas uno nuevo.')).toBeInTheDocument();
     expect(screen.getByText('Ninguna empresa la ha recibido: este cambio no afecta a nadie.')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Subir una versión corregida' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Subir una versión corregida' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Les avisamos/)).not.toBeInTheDocument();
     expect(await screen.findByLabelText(/Motivo/)).toBeInTheDocument();
   });
@@ -135,7 +150,7 @@ describe('retirar una versión: lo que pasará, antes del motivo', () => {
     expect(await screen.findByText('No es tu versión vigente: la vigente sigue siendo la 9.')).toBeInTheDocument();
     expect(screen.getByText('Tus empresas la recibieron, pero no les cambia nada.')).toBeInTheDocument();
     expect(screen.getByText('Constructora Norte S.A.S. la recibió: no le cambia nada.')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Subir una versión corregida' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Subir una versión corregida' })).not.toBeInTheDocument();
   });
 
   it('si no se pudo calcular el impacto no deja confirmar a ciegas y permite reintentar', async () => {

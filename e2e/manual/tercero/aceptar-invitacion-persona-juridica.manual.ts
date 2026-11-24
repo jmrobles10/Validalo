@@ -11,7 +11,7 @@ import {
   llenarTributaria,
   SOCIO,
 } from '../../soporte/ficha';
-import { abrirEmpresa, aceptarInvitacion, escribirCodigo, esperarEstadoDelTercero, fraseDeEstado, subirDocumento, tarjeta } from '../../soporte/proveedor';
+import { abrirEmpresa, aceptarInvitacion, escribirCodigo, cerrarDialogoDeSubida, elegirArchivo, esperarEstadoDelTercero, fraseDeEstado, subirDocumento, tarjeta } from '../../soporte/proveedor';
 import { invitar, nuevoTercero } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 import { escenarioConFichaCompleta } from '../nucleo/semillas';
@@ -237,28 +237,26 @@ recorrido(
 
     // 15. Subir un documento.
     await expect(fraseDeEstado(page, 'Abierto')).toBeVisible();
-    await tarjeta(page, RUT).getByRole('link', { name: /^Subir/ }).click();
-    await expect(page.getByRole('heading', { level: 1, name: `Subir ${RUT}` })).toBeVisible();
+    await tarjeta(page, RUT).getByRole('button', { name: /^Subir/ }).click();
+    const dialogoDeSubida = page.getByRole('dialog', { name: `Subir ${RUT}` });
+    await expect(dialogoDeSubida).toBeVisible();
     await paso(page, {
       titulo: 'Elige el archivo del documento',
       explicacion:
-        'Cada documento tiene su propia pantalla de carga con las reglas del tipo: formatos permitidos, tamaño máximo y, si aplica, los datos que debes escribir (por ejemplo, la fecha de expedición). ' +
-        'Pulsa «Elegir archivo» y selecciona el PDF (también puedes arrastrarlo a la pantalla); Valídalo lo guarda en tu bóveda.',
-      resaltar: page.getByRole('button', { name: 'Elegir archivo' }),
+        'Cada documento abre su propia ventana de carga, sin salir de tu revisión, con las reglas del tipo: formatos permitidos, tamaño máximo y, si aplica, los datos que debes escribir (por ejemplo, la fecha de expedición). ' +
+        'Pulsa «Elegir archivo» y selecciona el PDF (también puedes arrastrarlo a la ventana); Valídalo lo guarda en tu bóveda.',
+      resaltar: dialogoDeSubida.getByRole('button', { name: 'Elegir archivo' }),
       configuracion: { ajuste: 'Formatos, tamaño, campos y vigencia del tipo de documento', ruta: 'Configuración › Tipos de documento (/tipos-documento)' },
     });
-    const selector = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf(`RUT ${tercero.identificacion.numero}`));
-    await expect(page.getByText(`Es tu versión 1 de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+    await elegirArchivo(page, pdf(`RUT ${tercero.identificacion.numero}`), `Es tu versión 1 de ${RUT}`);
     await paso(page, {
       titulo: 'Confirma la versión que quedó guardada',
       explicacion:
         'Valídalo confirma «Listo. Es tu versión 1» del documento y dice qué empresa ya la tiene. Si más adelante subes otro archivo del mismo documento, quedará como versión 2 y las empresas que lo usan vuelven a revisarlo. ' +
-        'Pulsa «Volver a mi revisión» para seguir con el siguiente documento; también puedes ver tu bóveda o elegir otro archivo.',
-      resaltar: page.getByText(`Es tu versión 1 de ${RUT}`),
+        'Pulsa «Listo» para seguir con el siguiente documento; también puedes elegir otro archivo.',
+      resaltar: dialogoDeSubida.getByText(`Es tu versión 1 de ${RUT}`),
     });
-    await page.getByRole('link', { name: 'Volver a mi revisión' }).click();
+    await cerrarDialogoDeSubida(page);
     await subirDocumento(page, CAMARA, pdf(`Camara ${tercero.identificacion.numero}`));
 
     // 16. En revisión.

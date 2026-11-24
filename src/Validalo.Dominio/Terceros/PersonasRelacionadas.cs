@@ -52,6 +52,33 @@ public sealed record PersonaDeclarada(Identificacion Identificacion, string Nomb
 /// </summary>
 public static class PersonasDeLaFicha
 {
+    /// <summary>La representación que marca a un representante legal como el principal (la que reconoce <see cref="RepresentanteLegalPrincipal.EsPrincipal"/>).</summary>
+    public const string PrincipalComoRepresentacion = "Principal";
+
+    /// <summary>
+    /// ¿La ficha legal maneja este tipo de relación? Representante legal, suplente y socio se registran en la sección legal (decisión de Producto del 2026-11-24: es el único
+    /// lugar donde se registran); el beneficiario final y el miembro de consorcio no tienen fila en la ficha y se declaran en «Personas relacionadas».
+    /// </summary>
+    public static bool LaFichaManeja(TipoRelacionTerceros tipo) => RolDe(tipo) is not null;
+
+    /// <summary>El rol de la sección legal que corresponde al tipo de relación; nulo si la ficha no lo maneja.</summary>
+    public static RolPersonaRelacionada? RolDe(TipoRelacionTerceros tipo) => tipo switch
+    {
+        TipoRelacionTerceros.RepresentanteLegal => RolPersonaRelacionada.RepresentanteLegal,
+        TipoRelacionTerceros.Suplente => RolPersonaRelacionada.Suplente,
+        TipoRelacionTerceros.Socio => RolPersonaRelacionada.Socio,
+        _ => null
+    };
+
+    /// <summary>El tipo de relación del ADR que corresponde al rol de la sección legal; nulo si el rol no es una relación (apoderado, junta directiva, revisor fiscal, contador).</summary>
+    public static TipoRelacionTerceros? TipoDe(RolPersonaRelacionada? rol) => rol switch
+    {
+        RolPersonaRelacionada.RepresentanteLegal => TipoRelacionTerceros.RepresentanteLegal,
+        RolPersonaRelacionada.Suplente => TipoRelacionTerceros.Suplente,
+        RolPersonaRelacionada.Socio => TipoRelacionTerceros.Socio,
+        _ => null
+    };
+
     /// <summary>
     /// Las personas con una relación del ADR que trae la sección legal, sin repetir (persona, tipo) y con la principal de cada tipo ya marcada: la del representante legal
     /// es la que regla el ERP (<see cref="RepresentanteLegalPrincipal"/>: la primera con representación «Principal», si no la primera); la del suplente, la primera; la del
@@ -63,13 +90,7 @@ public static class PersonasDeLaFicha
         var filas = new List<(PersonaDeclarada Persona, bool EsPrincipal)>();
         foreach (var fila in legal?.Personas ?? [])
         {
-            var tipo = fila.Rol switch
-            {
-                RolPersonaRelacionada.RepresentanteLegal => TipoRelacionTerceros.RepresentanteLegal,
-                RolPersonaRelacionada.Suplente => TipoRelacionTerceros.Suplente,
-                RolPersonaRelacionada.Socio => TipoRelacionTerceros.Socio,
-                _ => (TipoRelacionTerceros?)null
-            };
+            var tipo = TipoDe(fila.Rol);
             if (tipo is null)
                 continue;
 
@@ -99,6 +120,61 @@ public static class PersonasDeLaFicha
 
         return resultado;
     }
+
+    /// <summary>
+    /// La sección legal con una persona que el tercero confirma (por ejemplo, lo que la IA leyó en la Cámara de comercio) y que debe quedar escrita en la ficha, que es el único
+    /// lugar donde se registran. Si la persona ya figura con ese rol (misma identificación normalizada), se actualiza <b>solo lo que trae</b>: el cargo, la participación del socio
+    /// y la representación «Principal»; el nombre solo si la fila no tenía ninguno y el resto de sus datos queda intacto. Si no figura, se agrega con lo que se sabe: el nombre
+    /// completo va en <c>Nombres</c> (los apellidos los completa el tercero y la sección queda en borrador hasta entonces). La principal de un representante legal queda
+    /// primera entre los de su rol, que es como la elige <see cref="RepresentanteLegalPrincipal"/>. Idempotente: repetirla sobre el resultado no cambia nada.
+    /// </summary>
+    public static DatosLegales ConPersona(DatosLegales? legal, PersonaDeclarada persona, Identificacion delTercero)
+    {
+        var rol = RolDe(persona.Tipo) ?? throw new ArgumentException($"La ficha legal no maneja el tipo {persona.Tipo}.", nameof(persona));
+        var filas = (legal?.Personas ?? []).ToList();
+        var indice = filas.FindIndex(f => f.Rol == rol && Identificar(f, delTercero)?.Clave == persona.Clave);
+        var principal = rol == RolPersonaRelacionada.RepresentanteLegal && persona.Principal;
+
+        var fila = indice < 0 ? NuevaFila(persona, rol, principal) : ActualizarFila(filas[indice], persona, rol, principal);
+        if (indice >= 0)
+            filas.RemoveAt(indice);
+        // La principal va antes que los demás de su rol; la que no lo es conserva su lugar (o va al final si es nueva).
+        var primera = principal ? filas.FindIndex(f => f.Rol == rol) : -1;
+        var posicion = primera >= 0 ? primera : indice >= 0 ? Math.Min(indice, filas.Count) : filas.Count;
+        filas.Insert(posicion, fila);
+        return (legal ?? new DatosLegales()) with { Personas = filas };
+    }
+
+    /// <summary>
+    /// La sección legal sin las personas que ya no cuentan con ese rol (misma identificación normalizada y mismo tipo de relación): la baja que trae confirmar a quien reemplaza
+    /// a la principal. Lo que no figura no cambia nada (idempotente).
+    /// </summary>
+    public static DatosLegales SinPersonas(DatosLegales? legal, IEnumerable<(TipoRelacionTerceros Tipo, string Clave)> salen, Identificacion delTercero)
+    {
+        var quitar = salen.ToList();
+        var filas = legal?.Personas ?? [];
+        var quedan = filas.Where(f => !quitar.Any(q => TipoDe(f.Rol) == q.Tipo && Identificar(f, delTercero)?.Clave == q.Clave)).ToList();
+        return quedan.Count == filas.Count ? legal ?? new DatosLegales() : (legal ?? new DatosLegales()) with { Personas = quedan };
+    }
+
+    private static PersonaRelacionada NuevaFila(PersonaDeclarada persona, RolPersonaRelacionada rol, bool principal) => new()
+    {
+        Rol = rol,
+        TipoRepresentacion = principal ? PrincipalComoRepresentacion : null,
+        TipoIdentificacion = persona.Identificacion.Tipo,
+        Numero = persona.Identificacion.Numero,
+        Nombres = persona.Nombre,
+        Cargo = persona.Cargo,
+        Porcentaje = rol == RolPersonaRelacionada.Socio ? persona.Participacion : null
+    };
+
+    private static PersonaRelacionada ActualizarFila(PersonaRelacionada fila, PersonaDeclarada persona, RolPersonaRelacionada rol, bool principal) => fila with
+    {
+        Nombres = string.IsNullOrWhiteSpace(fila.Nombres) && string.IsNullOrWhiteSpace(fila.Apellidos) ? persona.Nombre : fila.Nombres,
+        Cargo = string.IsNullOrWhiteSpace(persona.Cargo) ? fila.Cargo : persona.Cargo,
+        Porcentaje = rol == RolPersonaRelacionada.Socio && persona.Participacion is { } participacion ? participacion : fila.Porcentaje,
+        TipoRepresentacion = principal && !RepresentanteLegalPrincipal.EsPrincipal(fila.TipoRepresentacion) ? PrincipalComoRepresentacion : fila.TipoRepresentacion
+    };
 
     /// <summary>
     /// Identificación de la persona natural de una fila: los tipos colombianos (cédula, extranjería, tarjeta, PPT, pasaporte «PA») van con país CO; el pasaporte y la
@@ -201,8 +277,9 @@ public sealed record CambioEnRelacion(Guid RelacionId, bool EsNueva, IReadOnlyLi
 
 /// <summary>
 /// Concilia las relaciones que mantiene la ficha con lo que declara hoy (ADR-0010, punto 2): cada persona declarada queda con una relación vigente (se crea, se
-/// restablece si había terminado, se ajusta si cambió su principal, su participación o su cargo) y la relación de la ficha de quien ya no figura termina. Idempotente: si
-/// todo está igual, no emite nada. No toca las relaciones que no son de la ficha (las declaradas a mano, las de un importador, las propuestas por la IA).
+/// restablece si había terminado, se ajusta si cambió su principal, su participación o su cargo) y la relación de la ficha de quien ya no figura termina. Una propuesta de la IA que
+/// la ficha declara se confirma, y la relación que el tercero declaró a mano y que ahora figura en la ficha pasa a ser de la ficha (la ficha legal es el único lugar donde se registran
+/// estas personas). Idempotente: si todo está igual, no emite nada. Nunca termina una relación que no es de la ficha (las declaradas a mano que la ficha no trae, las de un importador).
 /// </summary>
 public static class ConciliacionDeRelaciones
 {
@@ -277,7 +354,8 @@ public static class ConciliacionDeRelaciones
     {
         if (relacion.MarcarPrincipal(persona.Principal, ahora) is { } principal)
             eventos.Add(principal);
-        if (relacion.Actualizar(persona.Participacion, persona.Cargo, ahora) is { } actualizada)
+        // Lo que la ficha declara, la ficha lo mantiene: la persona que el tercero había declarado a mano y que ahora figura en su sección legal pasa a ser de la ficha.
+        if (relacion.Actualizar(persona.Participacion, persona.Cargo, ahora, deFicha: true) is { } actualizada)
             eventos.Add(actualizada);
     }
 }

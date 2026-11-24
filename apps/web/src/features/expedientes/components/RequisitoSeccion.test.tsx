@@ -178,10 +178,11 @@ describe('Cruce con el documento en el requisito (F5)', () => {
       }),
     );
 
-    // La tarjeta da un solo aviso (el más importante); lo que respalda va en una línea y solo las secciones con cruce se detallan.
+    // La tarjeta da un solo aviso (el más importante); lo que respalda va en el pie, en una línea, y solo las secciones con cruce se detallan.
     expect(tarjeta.getByRole('alert')).toHaveTextContent('Hay diferencias en campos críticos');
+    expect(tarjeta.getByText(/Respalda:/)).toHaveTextContent('Respalda: Información general (versión 3) · Información tributaria (versión 1) · Información legal (sin diligenciar)');
     const soporte = tarjeta.getByRole('region', { name: 'Soporte de la información' });
-    expect(soporte).toHaveTextContent('Respalda: Información general (versión 3) · Información tributaria (versión 1) · Información legal (sin diligenciar)');
+    expect(soporte).not.toHaveTextContent('Respalda:');
     const filas = within(soporte).getAllByRole('listitem');
     expect(filas).toHaveLength(1);
     expect(filas[0]).toHaveTextContent('Información general (versión 3)');
@@ -189,7 +190,7 @@ describe('Cruce con el documento en el requisito (F5)', () => {
     expect(within(filas[0]!).getByRole('table', { name: 'Cruce con Registro Único Tributario · versión 2' })).toBeInTheDocument();
   });
 
-  it('un documento sin la lectura automática para la empresa lo avisa y compara a mano', () => {
+  it('un documento sin cruce con lo que respalda lo dice en el pie, en texto secundario y sin alerta de falta de lectura', () => {
     const tarjeta = montar(
       requisito({
         soporteDeSecciones: {
@@ -199,7 +200,10 @@ describe('Cruce con el documento en el requisito (F5)', () => {
         },
       }),
     );
-    expect(tarjeta.getByRole('alert')).toHaveTextContent('Sin lectura automática: revísalo y compáralo a mano con lo que declaró el tercero.');
+    // No se sabe que el archivo no se leyó (aquí ni siquiera hay hechos): no es el aviso de «sin lectura», es que no hay con qué cruzarlo.
+    expect(tarjeta.queryByRole('alert')).not.toBeInTheDocument();
+    expect(tarjeta.queryByText(/Sin lectura automática/)).not.toBeInTheDocument();
+    expect(tarjeta.getByText(/Sin cruce automático con lo declarado/)).toBeInTheDocument();
     expect(tarjeta.queryByText(/Hay diferencias en campos críticos/)).not.toBeInTheDocument();
   });
 });
@@ -263,8 +267,8 @@ describe('Documento que respalda las cuentas: la certificación bancaria (FD-5)'
     );
     const soporte = tarjeta.getByRole('region', { name: 'Soporte de la información' });
     // Las cuentas van por su nombre enmascarado, nunca «sin diligenciar»; solo la que tiene cruce se detalla.
-    expect(soporte).toHaveTextContent('Respalda: Cuenta de Bancolombia ****5678 · Cuenta de Davivienda ****1111');
-    expect(soporte).not.toHaveTextContent('sin diligenciar');
+    expect(tarjeta.getByText(/Respalda:/)).toHaveTextContent('Respalda: Cuenta de Bancolombia ****5678 · Cuenta de Davivienda ****1111');
+    expect(tarjeta.getByText(/Respalda:/)).not.toHaveTextContent('sin diligenciar');
     const filas = within(soporte).getAllByRole('listitem');
     expect(filas).toHaveLength(1);
     expect(filas[0]).toHaveTextContent('Cuenta de Bancolombia ****5678');

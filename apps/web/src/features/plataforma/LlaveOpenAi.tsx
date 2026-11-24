@@ -64,7 +64,8 @@ export function LlaveOpenAi({ configurada, ultimosCuatro, cambio, onCambio, onPr
         </Typography>
       )}
       {cambio.tipo === 'quitar' && <Alert severity="warning">{t('plataforma.planIa.seQuitara')}</Alert>}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+      {/* Alineada arriba: el botón se centra en el alto del control, no en el del campo con su texto de ayuda. */}
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'flex-start' } }}>
         {escribiendo && cambio.tipo !== 'quitar' && (
           <TextField
             type="password"

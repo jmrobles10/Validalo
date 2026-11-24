@@ -2,7 +2,7 @@ import type { Browser, FrameLocator, Page } from '@playwright/test';
 import { pdf } from '../../soporte/archivos';
 import { abrirEmbebido } from '../../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea } from '../../soporte/empresa';
-import { completarInvitacion, esperarEstadoDelTercero } from '../../soporte/proveedor';
+import { completarInvitacion, esperarEstadoDelTercero, subirVersionDeCertificacionDeCuenta, subirVersionDesdeLaBoveda } from '../../soporte/proveedor';
 import { activarIa, crearEscenario, invitar, nuevoTercero, publicarFlujoConFicha, type Escenario, type Tercero } from '../../soporte/semilla';
 import { areaDe } from '../nucleo/semillas';
 import { expect, paso, recorrido } from '../nucleo';
@@ -14,18 +14,24 @@ function marcasRut(tercero: Tercero, razonSocial = tercero.nombre): string {
   return `[[nit=${tercero.identificacion.numero}]][[razonSocial=${razonSocial}]]`;
 }
 
+/** El número de la cuenta del cliente: el mismo que dice su certificación. */
+const numeroDeCuenta = (tercero: Tercero): string => `${tercero.identificacion.numero}01`;
+
 function marcasBancaria(tercero: Tercero): string {
-  return `[[banco=Bancolombia]][[tipoCuenta=Ahorros]][[numeroCuenta=${tercero.identificacion.numero}01]][[titular=${tercero.nombre}]]`;
+  return `[[banco=Bancolombia]][[tipoCuenta=Ahorros]][[numeroCuenta=${numeroDeCuenta(tercero)}]][[titular=${tercero.nombre}]]`;
 }
 
-/** Cliente de Sur con RUT y certificación bancaria, aprobado por Sofía (Revisión). Devuelve su ventana de proveedor. */
+/**
+ * Cliente de Sur con RUT y certificación bancaria, aprobado por Sofía (Revisión). Devuelve su ventana de proveedor. La certificación bancaria no es un documento suelto: el cliente
+ * registra una cuenta con ella (la que dice su certificación) y la designa para Sur, que así la recibe.
+ */
 async function clienteAprobado(browser: Browser, e: Escenario, sofia: FrameLocator, nombre: string) {
   const tercero = nuevoTercero(nombre);
   const invitacion = await invitar(e, e.sur, tercero, 'CLIENTE');
   const ventana = await (await browser.newContext()).newPage();
   await completarInvitacion(ventana, invitacion, [
     { nombre: RUT, archivo: pdf(`RUT ${nombre} v1 ${marcasRut(tercero)}`) },
-    { nombre: BANCARIA, archivo: pdf(`Bancaria ${nombre} v1 ${marcasBancaria(tercero)}`) },
+    { nombre: BANCARIA, archivo: pdf(`Bancaria ${nombre} v1 ${marcasBancaria(tercero)}`), cuenta: { numero: numeroDeCuenta(tercero), titular: tercero.nombre, identificacion: `NIT ${tercero.identificacion.numero}` } },
   ]);
   await abrirDesdeBandeja(sofia, nombre, 'Revisión', 'Cliente');
   await aprobarArea(sofia, 'Revisión');
@@ -36,11 +42,7 @@ async function clienteAprobado(browser: Browser, e: Escenario, sofia: FrameLocat
 /** El tercero sube una versión nueva desde su bóveda. */
 async function actualizarDesdeLaBoveda(ventana: Page, documento: string, archivo: ReturnType<typeof pdf>, version: number): Promise<void> {
   await ventana.goto('/boveda');
-  await ventana.getByRole('article', { name: documento }).getByRole('link', { name: 'Subir versión' }).click();
-  const selector = ventana.waitForEvent('filechooser');
-  await ventana.getByRole('button', { name: 'Elegir archivo' }).click();
-  await (await selector).setFiles(archivo);
-  await expect(ventana.getByText(`Es tu versión ${String(version)} de ${documento}`)).toBeVisible({ timeout: 30_000 });
+  await subirVersionDesdeLaBoveda(ventana, documento, archivo, version);
 }
 
 recorrido(
@@ -66,7 +68,8 @@ recorrido(
     const b = await clienteAprobado(browser, e, sofia, 'Aceros Con Cambios S.A.S.');
 
     await actualizarDesdeLaBoveda(a.ventana, RUT, pdf(`RUT ${a.tercero.nombre} v2 ${marcasRut(a.tercero)}`), 2);
-    await actualizarDesdeLaBoveda(a.ventana, BANCARIA, pdf(`Bancaria ${a.tercero.nombre} v2 ${marcasBancaria(a.tercero)}`), 2);
+    // La certificación de una cuenta no vive en la bóveda: la versión nueva se sube desde «Mis cuentas».
+    await subirVersionDeCertificacionDeCuenta(a.ventana, 'Bancolombia', pdf(`Bancaria ${a.tercero.nombre} v2 ${marcasBancaria(a.tercero)}`), 2);
     await actualizarDesdeLaBoveda(b.ventana, RUT, pdf(`RUT ${b.tercero.nombre} v2 ${marcasRut(b.tercero, 'Otra Razón Social S.A.S.')}`), 2);
 
     // 1) La lista de revalidaciones: el análisis dice si cambió algo.

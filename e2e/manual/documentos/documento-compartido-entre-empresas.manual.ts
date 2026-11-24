@@ -5,7 +5,7 @@ import { abrirEmbebido } from '../../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea, regionDeArea } from '../../soporte/empresa';
 import { abrirFichaAceptada, abrirSeccion, guardarSeccionCompleta, llenarGeneralJuridica, publicarFlujoDeFicha } from '../../soporte/ficha';
 import { crearTipoDeVinculo, invitarVinculo } from '../../soporte/flujos';
-import { aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento } from '../../soporte/proveedor';
+import { aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, subirVersionDesdeLaBoveda } from '../../soporte/proveedor';
 import { crearEscenario, nuevoTercero, type Empresa, type Escenario, type Persona } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -83,11 +83,7 @@ recorrido(
 
     // El tercero sube un RUT nuevo y cambia su dirección: una versión nueva para las dos empresas.
     await pTercero.goto('/boveda');
-    await pTercero.getByRole('article', { name: RUT }).getByRole('link', { name: 'Subir versión' }).click();
-    const selector = pTercero.waitForEvent('filechooser');
-    await pTercero.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf('RUT compartido v2'));
-    await expect(pTercero.getByText(`Es tu versión 2 de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+    await subirVersionDesdeLaBoveda(pTercero, RUT, pdf('RUT compartido v2'), 2);
     await abrirSeccion(pTercero, 'general', 'Información general');
     await expect(pTercero.getByRole('textbox', { name: 'Dirección', exact: true })).toHaveValue(DIRECCION_VIEJA);
     await pTercero.getByRole('textbox', { name: 'Dirección', exact: true }).fill(DIRECCION_NUEVA);

@@ -1,10 +1,11 @@
 import { Alert, AlertTitle, Box, Chip, Stack, Tooltip, Typography } from '@mui/material';
 import type { HechosDto, HechosIaDto } from '@validalo/api-client';
-import { formatearFecha, LOCALE } from '@validalo/ui';
+import { LOCALE } from '@validalo/ui';
 import { Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { camposExtraidos, confianzaDe, estadoRevision, tipoNoCoincide, UMBRAL_CONFIANZA } from './revisionIa';
+import { camposExtraidos, confianzaDe, estadoRevision, textoDelAnalisis, tipoNoCoincide, UMBRAL_CONFIANZA } from './revisionIa';
 import { CamposIa } from './CamposIa';
+import type { FilaDeDato } from './ListaDeDatos';
 
 /** El tipo canónico que pide el requisito y su nombre, para avisar si el archivo parece ser otro. */
 export interface TipoEsperado {
@@ -17,16 +18,18 @@ export interface RevisionAutomaticaProps {
   tipoEsperado?: TipoEsperado | null;
   /** Cuántos datos extraídos se muestran antes de «Ver n datos más» (sin límite, todos). */
   limite?: number;
+  /** Sin el pie «Analizado el … · modelo»: quien aloja el panel lo junta con otras notas en una sola línea (la tarjeta del requisito). */
+  sinPie?: boolean;
 }
 
 const PORCENTAJE = new Intl.NumberFormat(LOCALE, { style: 'percent', maximumFractionDigits: 0 });
 
 /**
- * Panel «Revisión automática» de una versión (ADR-0012, IA-11): confianza, si se escaló a un modelo mayor, legibilidad,
- * tipo detectado, alertas de manipulación y los datos extraídos. Sin análisis visible para la empresa (`conIa` falso),
- * una línea discreta que pide revisarla a mano. El modelo solo va en texto pequeño.
+ * Panel «Revisión automática» de una versión (ADR-0012, IA-11): confianza, si se escaló a un modelo mayor, alertas de
+ * manipulación y, en una sola lista alineada, legibilidad, tipo detectado y los datos extraídos. Sin análisis visible para la
+ * empresa (`conIa` falso), una línea discreta que pide revisarla a mano. El modelo solo va en texto pequeño.
  */
-export function RevisionAutomatica({ hechos, tipoEsperado, limite }: RevisionAutomaticaProps) {
+export function RevisionAutomatica({ hechos, tipoEsperado, limite, sinPie = false }: RevisionAutomaticaProps) {
   const { t } = useTranslation();
   const estado = estadoRevision(hechos);
   if (estado === 'nada' || !hechos) return null;
@@ -37,10 +40,10 @@ export function RevisionAutomatica({ hechos, tipoEsperado, limite }: RevisionAut
       </Typography>
     );
   }
-  return <ConAnalisis ia={hechos.ia} tipoEsperado={tipoEsperado} limite={limite} />;
+  return <ConAnalisis ia={hechos.ia} tipoEsperado={tipoEsperado} limite={limite} sinPie={sinPie} />;
 }
 
-function ConAnalisis({ ia, tipoEsperado, limite }: { ia: HechosIaDto; tipoEsperado?: TipoEsperado | null; limite?: number }) {
+function ConAnalisis({ ia, tipoEsperado, limite, sinPie }: { ia: HechosIaDto; tipoEsperado?: TipoEsperado | null; limite?: number; sinPie: boolean }) {
   const { t } = useTranslation();
   const confianza = confianzaDe(ia);
   const alta = confianza !== null && confianza >= UMBRAL_CONFIANZA;
@@ -50,6 +53,11 @@ function ConAnalisis({ ia, tipoEsperado, limite }: { ia: HechosIaDto; tipoEspera
   const campos = camposExtraidos(ia.campos, textos);
   const otroTipo = tipoNoCoincide(ia.tipoDetectado, tipoEsperado?.codigo);
   const recortado = (ia.paginasOmitidas ?? 0) > 0 && ia.paginasEnviadas !== null;
+  // Legible y el tipo detectado van en la misma lista que los datos leídos (una sola grilla alineada), y no cuentan para el límite.
+  const previas: FilaDeDato[] = [
+    { clave: '#legible', etiqueta: t('ia.revision.legible'), valor: ia.legible ? t('ia.revision.legibleSi') : t('ia.revision.legibleNo'), advertencia: !ia.legible },
+    { clave: '#tipoDetectado', etiqueta: t('ia.revision.tipoDetectado'), valor: nombreTipo(ia.tipoDetectado) },
+  ];
 
   return (
     <Box component="section" aria-label={t('ia.revision.titulo')}>
@@ -79,26 +87,8 @@ function ConAnalisis({ ia, tipoEsperado, limite }: { ia: HechosIaDto; tipoEspera
             </Box>
           </Alert>
         )}
-        <Box
-          component="dl"
-          sx={{ typography: 'body2', m: 0, display: 'grid', gridTemplateColumns: 'minmax(0, max-content) minmax(0, 1fr)', columnGap: 1.5, rowGap: 0.5 }}
-        >
-          <Box component="dt" sx={{ color: 'text.secondary' }}>
-            {t('ia.revision.legible')}
-          </Box>
-          <Box component="dd" sx={{ m: 0, color: ia.legible ? undefined : 'estado.advertencia.texto' }}>
-            {ia.legible ? t('ia.revision.legibleSi') : t('ia.revision.legibleNo')}
-          </Box>
-          <Box component="dt" sx={{ color: 'text.secondary' }}>
-            {t('ia.revision.tipoDetectado')}
-          </Box>
-          <Box component="dd" sx={{ m: 0 }}>
-            {nombreTipo(ia.tipoDetectado)}
-          </Box>
-        </Box>
-        {campos.length > 0 ? (
-          <CamposIa campos={campos} titulo={t('ia.revision.campos')} limite={limite} />
-        ) : (
+        <CamposIa campos={campos} titulo={t('ia.revision.campos')} limite={limite} previas={previas} />
+        {campos.length === 0 && (
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             {t('ia.revision.sinCampos')}
           </Typography>
@@ -113,9 +103,11 @@ function ConAnalisis({ ia, tipoEsperado, limite }: { ia: HechosIaDto; tipoEspera
             {t('ia.revision.paginasOmitidas', { count: ia.paginasEnviadas ?? 0 })}
           </Typography>
         )}
-        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-          {t('ia.revision.analizado', { fecha: formatearFecha(ia.fecha), modelo: ia.modelo })}
-        </Typography>
+        {!sinPie && (
+          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+            {textoDelAnalisis(ia, t)}
+          </Typography>
+        )}
       </Stack>
     </Box>
   );

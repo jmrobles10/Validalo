@@ -3,7 +3,7 @@ import { pdf } from '../../soporte/archivos';
 import { abrirEmbebido } from '../../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea } from '../../soporte/empresa';
 import { llenarGeneralJuridica } from '../../soporte/ficha';
-import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento } from '../../soporte/proveedor';
+import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, subirVersionDesdeLaBoveda } from '../../soporte/proveedor';
 import { activarIa, crearEscenario, invitar, nuevoTercero, publicarFlujoConFicha } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -53,11 +53,7 @@ recorrido(
 
     // El tercero sube un RUT nuevo con otra dirección.
     await page.goto('/boveda');
-    await page.getByRole('article', { name: RUT }).getByRole('link', { name: 'Subir versión' }).click();
-    const selectorNuevo = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selectorNuevo).setFiles(rut(nit, 'Cl 80 # 10-20', 'v2'));
-    await expect(page.getByText(`Es tu versión 2 de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+    await subirVersionDesdeLaBoveda(page, RUT, rut(nit, 'Cl 80 # 10-20', 'v2'), 2);
 
     // 1. El aviso de la ficha.
     await page.goto('/ficha');

@@ -1,57 +1,16 @@
 import { Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
-import type { DocumentoDePersonaDto, RelacionEntreTercerosDto } from '@validalo/api-client';
-import { ChipEstado, formatearFecha } from '@validalo/ui';
-import { FileText, Upload, UserRoundX } from 'lucide-react';
+import type { RelacionEntreTercerosDto } from '@validalo/api-client';
+import { ChipEstado } from '@validalo/ui';
+import { Pencil, UserRoundX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router';
-import { comoNumero, documentosPorSubir, enlaceDeSubidaDePersona, esRol } from './modelo';
-
-const ESTADOS_DE_VERSION = ['Actual', 'EnAnalisis', 'Recibida', 'Devuelta', 'Superada', 'Vencida', 'Retirada'] as const;
-type EstadoDeVersion = (typeof ESTADOS_DE_VERSION)[number];
-const esEstadoDeVersion = (valor: string): valor is EstadoDeVersion => (ESTADOS_DE_VERSION as readonly string[]).includes(valor);
-
-/** Un documento de la bóveda de la persona: su estado y la acción de subirlo (o subir otra versión). Lo que pide una empresa va destacado. */
-function FilaDeDocumento({ documento, personaId }: { documento: DocumentoDePersonaDto; personaId: string }) {
-  const { t } = useTranslation();
-  const nombre = documento.tipoCanonico === 'CEDULA' || documento.tipoCanonico === 'PASAPORTE' || documento.tipoCanonico === 'CERTIFICADO_ANTECEDENTES'
-    ? t(`personas.documentos.${documento.tipoCanonico}`)
-    : documento.nombre;
-  const tiene = documento.version !== null && documento.estado !== null;
-  return (
-    <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', py: 0.75, minHeight: 44 }} component="li">
-      <Box sx={{ color: 'text.secondary', display: 'flex' }} aria-hidden>
-        <FileText size={16} />
-      </Box>
-      <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography variant="subtitle1" component="p">{nombre}</Typography>
-        <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }}>
-          {tiene && documento.cargadaEn
-            ? t('personas.documentos.cargado', { n: String(documento.version), fecha: formatearFecha(documento.cargadaEn) })
-            : documento.pedido
-              ? t('personas.documentos.pedido')
-              : t('personas.documentos.sinCargar')}
-        </Typography>
-      </Box>
-      {tiene && documento.estado && (
-        <Chip size="small" variant="outlined" label={esEstadoDeVersion(documento.estado) ? t(`personas.documentos.estado.${documento.estado}`) : documento.estado} />
-      )}
-      <Button
-        component={RouterLink}
-        to={enlaceDeSubidaDePersona(personaId, documento.tipoCanonico, nombre)}
-        size="small"
-        variant={documento.pedido && documento.estado !== 'Actual' ? 'contained' : 'text'}
-        startIcon={<Upload size={16} aria-hidden />}
-        aria-label={`${t(tiene ? 'personas.documentos.reemplazar' : 'personas.documentos.subir')}: ${nombre}`}
-      >
-        {t(tiene ? 'personas.documentos.reemplazar' : 'personas.documentos.subir')}
-      </Button>
-    </Stack>
-  );
-}
+import { FilaDeDocumento } from './FilaDeDocumento';
+import { comoNumero, documentosPorSubir, esRol, seRegistraEnLaFicha } from './modelo';
 
 /**
- * Una persona relacionada con el tercero: quién es, cómo se relaciona (principal, participación, cargo) y los documentos de su bóveda.
- * «Quitar» solo se ofrece si la declaró el tercero a mano: la que viene de su información legal se quita de la ficha.
+ * Una persona relacionada con el tercero: quién es, cómo se relaciona (principal, participación, cargo) y los documentos de su bóveda. Los representantes
+ * legales, suplentes y socios se registran en la información legal (el único lugar para ellos): la tarjeta lleva allí y no los quita. «Quitar» solo se
+ * ofrece si la declaró el tercero a mano (un beneficiario final, un miembro de consorcio o, de antes de esta regla, otra persona).
  */
 export function TarjetaPersona({ relacion, onQuitar }: { relacion: RelacionEntreTercerosDto; onQuitar: (relacion: RelacionEntreTercerosDto) => void }) {
   const { t } = useTranslation();
@@ -86,11 +45,21 @@ export function TarjetaPersona({ relacion, onQuitar }: { relacion: RelacionEntre
       </Box>
 
       {relacion.deFicha ? (
-        <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 0.5 }}>{t('personas.deFicha')}</Typography>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 0.5 }}>
+          <Typography variant="caption" component="p" sx={{ color: 'text.secondary', flex: 1, minWidth: 220 }}>{t('personas.deFicha')}</Typography>
+          <Button component={RouterLink} to="/ficha/legal" size="small" startIcon={<Pencil size={16} aria-hidden />}>
+            {t('personas.editarEnLaFicha')}
+          </Button>
+        </Stack>
       ) : (
-        <Button color="error" size="small" startIcon={<UserRoundX size={16} aria-hidden />} onClick={() => onQuitar(relacion)} sx={{ mt: 0.5 }}>
-          {t('personas.terminar.boton')}
-        </Button>
+        <>
+          {seRegistraEnLaFicha(relacion.tipo) && (
+            <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 0.5 }}>{t('personas.fueraDeLaFicha')}</Typography>
+          )}
+          <Button color="error" size="small" startIcon={<UserRoundX size={16} aria-hidden />} onClick={() => onQuitar(relacion)} sx={{ mt: 0.5 }}>
+            {t('personas.terminar.boton')}
+          </Button>
+        </>
       )}
     </Paper>
   );

@@ -1,9 +1,10 @@
 import { ThemeProvider } from '@mui/material';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { type VersionDocumentoDto } from '@validalo/api-client';
 import { createValidaloTheme } from '@validalo/ui';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EstadoDeSubida } from './EstadoDeSubida';
 
 /**
@@ -27,7 +28,7 @@ const version = (n: number): VersionDocumentoDto => ({
   hechos: null,
 });
 
-function montar(n: number, volver: string | null) {
+function montar(n: number, volver: string | null, onListo?: () => void) {
   render(
     <ThemeProvider theme={createValidaloTheme('light', { app: 'public' })}>
       <MemoryRouter>
@@ -37,6 +38,7 @@ function montar(n: number, volver: string | null) {
           onCancelar={() => undefined}
           onOtroArchivo={() => undefined}
           volver={volver}
+          onListo={onListo}
         />
       </MemoryRouter>
     </ThemeProvider>,
@@ -57,5 +59,16 @@ describe('una subida que terminó bien', () => {
 
     expect(screen.getByText('Listo. Es tu versión 1 de Registro Único Tributario.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Volver a mi revisión' })).toHaveAttribute('href', '/expediente/e1');
+  });
+
+  it('en el diálogo de subida la acción es «Listo»: cierra y no ofrece enlaces a otras pantallas', async () => {
+    const usuario = userEvent.setup();
+    const alTerminar = vi.fn();
+    montar(3, '/expediente/e1', alTerminar);
+
+    expect(screen.getByText('Listo. Es tu versión 3 de Registro Único Tributario.')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Listo' }));
+    expect(alTerminar).toHaveBeenCalledTimes(1);
   });
 });

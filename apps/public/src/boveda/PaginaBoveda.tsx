@@ -2,20 +2,23 @@ import { Button } from '@mui/material';
 import { EstadoVacio } from '@validalo/ui';
 import { FolderOpen, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router';
 import { useBoveda } from '../shared/api';
 import { CabeceraPagina, ErrorRecuperable, EsqueletoTarjetas } from '../shared/componentes';
 import { ContenidoBoveda } from './ContenidoBoveda';
+import { DocumentosDePersonas } from './DocumentosDePersonas';
+import { useDialogoSubir } from './useDialogoSubir';
 
 /**
  * Mi bóveda: cada documento con su versión vigente y con qué empresas está compartido. Jerarquía en un solo nivel (la página ya es el panel,
- * sin otra tarjeta dentro): el filtro por empresa, lo que hay que renovar y los documentos como filas (`ContenidoBoveda`).
+ * sin otra tarjeta dentro): el filtro por empresa, lo que hay que renovar y los documentos como filas (`ContenidoBoveda`). Debajo, los documentos de las
+ * personas relacionadas (`DocumentosDePersonas`). «Subir documento» abre el diálogo de subida: no saca al tercero de su bóveda.
  */
 export function PaginaBoveda() {
   const { t } = useTranslation();
   const consulta = useBoveda();
+  const abrirSubida = useDialogoSubir((s) => s.abrir);
   const subir = (
-    <Button component={RouterLink} to="/boveda/subir" variant="contained" startIcon={<Upload size={18} aria-hidden />} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+    <Button onClick={() => abrirSubida({})} variant="contained" startIcon={<Upload size={18} aria-hidden />} sx={{ width: { xs: '100%', sm: 'auto' } }}>
       {t('boveda.subir')}
     </Button>
   );
@@ -32,6 +35,7 @@ export function PaginaBoveda() {
       ) : (
         <ContenidoBoveda documentos={consulta.data.documentos} />
       )}
+      {!consulta.isPending && !consulta.isError && <DocumentosDePersonas />}
     </>
   );
 }

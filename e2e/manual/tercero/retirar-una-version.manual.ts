@@ -1,7 +1,7 @@
 import { pdf } from '../../soporte/archivos';
 import { abrirEmbebido } from '../../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea } from '../../soporte/empresa';
-import { abrirEmpresa, completarInvitacion, esperarEstadoDelTercero } from '../../soporte/proveedor';
+import { abrirEmpresa, completarInvitacion, esperarEstadoDelTercero, subirVersionDesdeLaBoveda } from '../../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -38,12 +38,7 @@ recorrido(
 
     // Sube una versión 2 del RUT (la equivocada) desde la bóveda; las dos áreas la aprueban.
     await page.goto('/boveda');
-    await page.getByRole('article', { name: RUT }).getByRole('link', { name: 'Subir versión' }).click();
-    await expect(page.getByRole('button', { name: 'Elegir archivo' })).toBeVisible();
-    const selector = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf('RUT Retiro v2'));
-    await expect(page.getByText(`Es tu versión 2 de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+    await subirVersionDesdeLaBoveda(page, RUT, pdf('RUT Retiro v2'), 2);
     await expect(async () => {
       await abrirDesdeBandeja(ruben, tercero.nombre, 'Compras');
       await expect(ruben.getByRole('region', { name: 'Compras', exact: true }).first()).toContainText(`${RUT} · v2`, { timeout: 1500 });
@@ -83,7 +78,7 @@ recorrido(
       explicacion:
         'Antes de pedir el motivo, el diálogo dice qué versión queda vigente: al retirar la 2, tu RUT vuelve a ser la versión 1. ' +
         'También dice qué pasa con cada empresa: Norte la aprobó y tendrá que revisar de nuevo la versión 1. Escribe el motivo; lo ven las empresas a las que les afecta. ' +
-        'Si el problema era el archivo y no quieres retirarlo, usa «Subir una versión corregida»: tus empresas la revisan una sola vez.',
+        'Si el problema era el archivo y no quieres retirarlo, usa «Subir una versión corregida»: se abre la ventana de carga del mismo documento y tus empresas la revisan una sola vez.',
       resaltar: dialogo,
     });
 

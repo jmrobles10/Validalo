@@ -7,7 +7,7 @@ import { abrirDesdeBandeja, aprobarArea, irASeccion, regionDeArea } from '../sop
 import { publicarFlujoDeFicha } from '../soporte/ficha';
 import { crearTipoDeVinculo, invitarVinculo } from '../soporte/flujos';
 import { abrirConsolaDePlataforma } from '../soporte/plataforma';
-import { aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento } from '../soporte/proveedor';
+import { aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, subirVersionDesdeLaBoveda } from '../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero, type Empresa, type Escenario, type Persona } from '../soporte/semilla';
 
 /**
@@ -118,11 +118,7 @@ test('Un vínculo bloqueado no recibe la versión nueva y, al desbloquearlo, que
 
   // Mientras está bloqueado, el tercero sube un RUT nuevo desde su bóveda: no le llega al vínculo bloqueado (B-5).
   await page.goto('/boveda');
-  await page.getByRole('article', { name: RUT }).getByRole('link', { name: 'Subir versión' }).click();
-  const selector = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Elegir archivo' }).click();
-  await (await selector).setFiles(pdf('RUT bloqueo v2'));
-  await expect(page.getByText(`Es tu versión 2 de ${RUT}`)).toBeVisible({ timeout: 30_000 });
+  await subirVersionDesdeLaBoveda(page, RUT, pdf('RUT bloqueo v2'), 2);
   await expect(ana.getByRole('main')).not.toContainText('En verificación');
 
   // Al desbloquearlo se pone al día: se abre la actualización, el vínculo queda «En revisión» y el certificado «En verificación» (VR-3, VR-11).

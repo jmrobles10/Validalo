@@ -1,5 +1,5 @@
 import { Alert, Box, Button, LinearProgress, Stack, Typography } from '@mui/material';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mensajeFallo, mensajeProblema } from '../boveda/mensajesSubida';
 import { useSubida } from '../boveda/useSubida';
@@ -33,15 +33,14 @@ export function SubidaDeCertificacion({
 }) {
   const { t } = useTranslation();
   const { estado, subir } = useSubida();
-  const iniciada = useRef(false);
   // Un token embebido de un expediente solo sube para el vínculo con el que se emitió: se le dice cuál.
   const vinculoDelToken = useSesionTercero((s) => (MODO_EMBEBIDO ? (s.sesion?.vinculoOrigen ?? null) : null));
   const destino = destinoDeCertificacion(cuentaId, vinculoDelToken);
 
-  // Se sube una sola vez al montarse; reintentar la repite con el mismo archivo.
+  // Se sube al montarse; reintentar la repite con el mismo archivo. Sin marca de «ya empezó»: en desarrollo (StrictMode) React monta, desmonta y vuelve
+  // a montar, y el desmontaje cancela la primera subida (`useSubida` aborta al salir); con la marca, la segunda no arrancaba y quedaba en «Preparando…».
+  // La primera se cancela antes de pedir nada a la API (después del hash), así que no hay doble carga.
   useEffect(() => {
-    if (iniciada.current) return;
-    iniciada.current = true;
     subir(archivo, destino);
     // `subir` cambia en cada render y la subida no debe reiniciarse por eso.
     // eslint-disable-next-line react-hooks/exhaustive-deps

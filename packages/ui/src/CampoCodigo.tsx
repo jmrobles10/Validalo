@@ -62,7 +62,7 @@ export function CampoCodigo({ valor, onCambiar, etiqueta, etiquetaDigito, longit
   };
 
   return (
-    <Box role="group" aria-label={etiqueta} sx={{ display: 'grid', gridTemplateColumns: `repeat(${String(longitud)}, minmax(0, 52px))`, gap: 1 }}>
+    <Box role="group" aria-label={etiqueta} sx={{ display: 'grid', gridTemplateColumns: `repeat(${String(longitud)}, minmax(0, 52px))`, justifyContent: 'center', gap: 1 }}>
       {digitos.map((d, i) => (
         <Box
           key={i}

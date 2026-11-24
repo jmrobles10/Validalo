@@ -14,7 +14,7 @@ export interface ResumenVersionProps {
   /** Hechos de la versión con archivo: la revisión automática (IA-11). Una versión de solo formulario no los pasa. */
   hechos?: HechosDto | null;
   tipoEsperado?: TipoEsperado | null;
-  /** En la tarjeta del requisito: sin la vigencia ni la línea de «sin análisis», que la tarjeta resume en un solo aviso. */
+  /** En la tarjeta del requisito: sin la vigencia, la línea de «sin análisis» ni el pie «Analizado el …», que la tarjeta resume en un solo aviso y en una sola línea al pie. */
   compacto?: boolean;
 }
 
@@ -31,7 +31,7 @@ export function ResumenVersion({ datos, vigencia, limite, conTitulo, hechos, tip
     <Stack spacing={1}>
       {conVigencia && vigencia && <VigenciaDocumento vigencia={vigencia} />}
       <DatosDeclarados datos={datos} limite={limite} conTitulo={conTitulo} />
-      {conRevision && <RevisionAutomatica hechos={hechos} tipoEsperado={tipoEsperado} limite={limite} />}
+      {conRevision && <RevisionAutomatica hechos={hechos} tipoEsperado={tipoEsperado} limite={limite} sinPie={compacto} />}
     </Stack>
   );
 }
