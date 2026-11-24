@@ -135,6 +135,8 @@ public sealed class ApiFixture : IAsyncLifetime
             b.UseSetting("Validalo:Habeas:Intervalo", "00:00:00");
             // La migración de los vínculos aceptados antes del acceso aislado no corre sola al arrancar: las pruebas de la migración la ejecutan a mano sobre sus datos.
             b.UseSetting("Validalo:Migraciones:AccesoAislado:Habilitada", "false");
+            // Tampoco la de la certificación bancaria por cuenta: su prueba la ejecuta a mano sobre sus datos.
+            b.UseSetting("Validalo:Migraciones:CertificacionPorCuenta:Habilitada", "false");
             b.ConfigureTestServices(s =>
             {
                 // El transporte SMTP se reemplaza, no el enviador: el aislamiento del sandbox (SB-4) sigue activo en las pruebas y lo que

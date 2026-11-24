@@ -33,7 +33,8 @@ public static class BovedaEndpoints
 
         return new BovedaDto(terceroId,
         [
-            .. documentos.Where(d => !d.EnCuarentena && (d.Ambito == AmbitoDocumento.Global || tercero.Vinculos.Any(v => v.VinculoId == d.VinculoId))).Select(d => new DocumentoBovedaDto(d.Id, d.Resumen(), d.Ambito.ToString(), d.Clase.ToString(), d.VinculoId,
+            // La certificación de una cuenta (CB-1) se ve y se reemplaza en «Mis cuentas», en la tarjeta de su cuenta: no es un documento suelto de la bóveda.
+            .. documentos.Where(d => !d.EnCuarentena && d.CuentaBancariaId is null && (d.Ambito == AmbitoDocumento.Global || tercero.Vinculos.Any(v => v.VinculoId == d.VinculoId))).Select(d => new DocumentoBovedaDto(d.Id, d.Resumen(), d.Ambito.ToString(), d.Clase.ToString(), d.VinculoId,
                 d.VersionActual is { } actual ? d.VersionRequerida(actual).ADto(d.Id, null, hoy) : null, d.Versiones.Count, d.PorEmpresa(vinculos, expedientes, hoy)))
         ]);
     }

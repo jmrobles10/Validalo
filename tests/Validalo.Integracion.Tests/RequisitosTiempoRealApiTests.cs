@@ -54,7 +54,7 @@ public sealed class RequisitosTiempoRealApiTests(ApiFixture fixture, ITestOutput
 
         var cuenta = await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken,
             new RegistrarCuentaBancariaDto("Bancolombia", "Ahorros", "031-123456-78", "Aceros del Norte S.A.S.", "NIT 900123456"), 201);
-        await SubirAsync(sesion, "CERTIFICACION_BANCARIA", Pdf("Certificación Bancolombia"));
+        await SubirCertificacionAsync(sesion, cuenta.Id, Pdf("Certificación Bancolombia"));
         await TerceroAsync<CuentaBancariaPublicaDto>("POST", $"/public/v1/vinculos/{vinculo.Id}/cuenta-designada", sesion.AccessToken, new DesignarCuentaDto(cuenta.Id), 200);
 
         // A quien aprueba cuentas le llega la notificación por el stream (y queda en su bandeja) y el aviso de que cambió la cuenta del vínculo.

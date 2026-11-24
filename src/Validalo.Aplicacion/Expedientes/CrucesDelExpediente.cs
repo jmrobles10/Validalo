@@ -1,6 +1,7 @@
 using Marten;
 using Validalo.Aplicacion.Comun;
 using Validalo.Aplicacion.Ficha;
+using Validalo.Aplicacion.Vinculos;
 using Validalo.Contratos;
 using Validalo.Dominio.Documentos;
 using Validalo.Dominio.Expedientes;
@@ -8,6 +9,7 @@ using Validalo.Dominio.Ficha;
 using Validalo.Dominio.Flujos;
 using Validalo.Dominio.Ia;
 using Validalo.Dominio.Terceros;
+using Validalo.Dominio.Vinculos;
 
 namespace Validalo.Aplicacion.Expedientes;
 
@@ -59,9 +61,10 @@ public sealed class CrucesDelExpediente
         var tercero = await sesionDelTenant.LoadAsync<Tercero>(terceroId, ct);
         var secciones = (await boveda.Query<SeccionDeFicha>().Where(s => s.TerceroId == terceroId).ToListAsync(ct)).ToDictionary(s => s.Id);
         var documentos = (await boveda.Query<Documento>().Where(d => d.TerceroId == terceroId).ToListAsync(ct)).ToList();
+        // Las cuentas que la empresa ve son las de su vínculo: la designada y la propuesta (CB-1: el tercero elige qué cuenta ve cada empresa); cada una se cruza con su propia
+        // certificación.
         var cuentas = porDocumento.Any(r => MapaDeRespaldo.RespaldaCuentas(r.TipoCanonico))
-            ? (IReadOnlyList<CuentaBancaria>)await boveda.Query<CuentaBancaria>().Where(c => c.TerceroId == terceroId && c.Estado == EstadoCuentaBancaria.Activa)
-                .OrderBy(c => c.RegistradaEn).ToListAsync(ct)
+            ? await CuentasDelVinculoAsync(sesionDelTenant, boveda, expediente.VinculoId, terceroId, ct)
             : [];
         var ids = documentos.Select(d => d.Id).ToArray();
         var consumidas = ids.Length == 0
@@ -141,57 +144,67 @@ public sealed class CrucesDelExpediente
                 }
             }
 
-            // La certificación bancaria respalda las cuentas del tercero (FD-5): cada cuenta activa frente a lo que dice el documento.
-            if (MapaDeRespaldo.RespaldaCuentas(requisito.TipoCanonico) && tercero is not null)
-                filas.AddRange(FilasDeCuentas(cuentas, tercero, documentos.FirstOrDefault(d => d.Id == v.DocumentoId), v.Numero, visible, protector, nombres));
+            // La certificación bancaria respalda las cuentas del vínculo (FD-5, CB-1): cada una frente a lo que dice su propia certificación.
+            var esDeCuentas = MapaDeRespaldo.RespaldaCuentas(requisito.TipoCanonico);
+            if (esDeCuentas && tercero is not null)
+                filas.AddRange(FilasDeCuentas(cuentas, tercero, documentos, expediente.VinculoId, consumidas, protector, nombres));
 
-            resultado._documentos[requisito.Id] = new SoporteDeSeccionesDto(!visible, filas.Any(f => f.Cruce?.DiscrepanciaCritica == true), filas);
+            // Sin lectura: la de la versión que cubre el requisito o, en las cuentas, que ninguna de sus certificaciones tenga cruce para la empresa.
+            var sinAnalisis = esDeCuentas ? filas.All(f => f.Cruce is null) : !visible;
+            resultado._documentos[requisito.Id] = new SoporteDeSeccionesDto(sinAnalisis, filas.Any(f => f.Cruce?.DiscrepanciaCritica == true), filas);
         }
 
         return resultado;
     }
 
     /// <summary>
-    /// Las cuentas activas del tercero frente a su certificación bancaria (FD-5): una fila por cuenta, con su cruce si la empresa recibió el
-    /// análisis de esa versión del documento. El número completo solo se descifra para comparar y nunca sale: el cruce lo muestra
-    /// enmascarado (CB-2). Sin cuentas, una sola fila sin cruce dice que no hay nada que respaldar todavía.
+    /// Las cuentas del vínculo (la designada y la propuesta) con su dueño: las que la empresa ve de entre las del tercero. En el orden en que las registró.
     /// </summary>
-    private static IEnumerable<SeccionRespaldadaDto> FilasDeCuentas(IReadOnlyList<CuentaBancaria> cuentas, Tercero tercero, Documento? certificacion, int version,
-        bool visible, IProtectorDeSecretos protector, IReadOnlyDictionary<Guid, string> nombres)
+    private static async Task<IReadOnlyList<CuentaBancaria>> CuentasDelVinculoAsync(IQuerySession sesionDelTenant, IQuerySession boveda, Guid vinculoId, Guid terceroId,
+        CancellationToken ct)
+    {
+        if (await sesionDelTenant.LoadAsync<Vinculo>(vinculoId, ct) is not { } vinculo)
+            return [];
+        var ids = new[] { vinculo.CuentaDesignada, vinculo.CuentaPropuesta }.Where(c => c is not null).Select(c => c!.Cuenta.CuentaId).Distinct().ToArray();
+        return ids.Length == 0
+            ? []
+            : [.. (await boveda.LoadManyAsync<CuentaBancaria>(ct, ids)).Where(c => c.TerceroId == terceroId).OrderBy(c => c.RegistradaEn)];
+    }
+
+    /// <summary>
+    /// Las cuentas del vínculo frente a <b>su</b> certificación bancaria (FD-5, CB-1): una fila por cuenta, con su cruce si la empresa recibió el análisis de la versión de la
+    /// certificación de esa cuenta que se le compartió. El número completo solo se descifra para comparar y nunca sale: el cruce lo muestra enmascarado (CB-2). Una cuenta sin
+    /// certificación propia queda sin cruce (se revisa a mano); sin cuentas, una sola fila sin cruce dice que el tercero no ha designado ninguna con esta empresa.
+    /// </summary>
+    private static IEnumerable<SeccionRespaldadaDto> FilasDeCuentas(IReadOnlyList<CuentaBancaria> cuentas, Tercero tercero, IReadOnlyList<Documento> documentos, Guid vinculoId,
+        IReadOnlySet<(Guid, int)> consumidas, IProtectorDeSecretos protector, IReadOnlyDictionary<Guid, string> nombres)
     {
         if (cuentas.Count == 0)
         {
-            yield return new SeccionRespaldadaDto(CodigosDeSeccion.CuentasBancarias, "Cuentas bancarias (ninguna registrada)", null, null, null);
+            yield return new SeccionRespaldadaDto(CodigosDeSeccion.CuentasBancarias, "Cuentas bancarias (ninguna designada con esta empresa)", null, null, null);
             yield break;
         }
 
-        var documento = certificacion?.Buscar(version);
         foreach (var cuenta in cuentas)
         {
             CruceDeSeccionDto? cruce = null;
-            if (visible && certificacion is not null && documento?.Ia is { } ia && Descifrar(protector, cuenta) is { } numero)
+            var certificacion = documentos.FirstOrDefault(d => d.CuentaBancariaId == cuenta.Id);
+            // La versión más reciente de esa certificación que se le compartió a la empresa y no está retirada ni devuelta.
+            var version = certificacion?.Versiones
+                .Where(x => certificacion.EstaCompartida(x.Numero, vinculoId) && x.Estado is not (EstadoVersion.Retirada or EstadoVersion.Devuelta) && !x.Suprimida)
+                .MaxBy(x => x.Numero);
+            if (certificacion is not null && version is not null && consumidas.Contains((certificacion.Id, version.Numero)) &&
+                CertificacionesDeCuentas.NumeroParaCotejar(() => protector.Desproteger(cuenta.NumeroProtegido)) is { } numero &&
+                CertificacionesDeCuentas.Cruzar(new DatosDeCuentaParaCruce(cuenta.Banco, cuenta.TipoCuenta.ToString(), numero, cuenta.Titular, cuenta.IdentificacionTitular),
+                    tercero, certificacion, version) is { } cruzado)
             {
-                cruce = ADto(CruceConDocumento.CruzarCuenta(
-                    new DatosDeCuentaParaCruce(cuenta.Banco, cuenta.TipoCuenta.ToString(), numero, cuenta.Titular, cuenta.IdentificacionTitular),
-                    tercero.Nombre, tercero.Identificacion.Numero, certificacion.Id, version, ia.Campos, ia.Confianza, ia.Legible, documento.CargadaEn), nombres);
+                cruce = ADto(cruzado, nombres);
             }
 
             yield return new SeccionRespaldadaDto(CodigosDeSeccion.CuentasBancarias, $"Cuenta de {cuenta.Banco} {cuenta.NumeroEnmascarado}", null, null, cruce);
         }
     }
 
-    /// <summary>El número de la cuenta para compararlo en memoria; si no se puede descifrar (clave retirada), la cuenta queda sin cruce.</summary>
-    private static string? Descifrar(IProtectorDeSecretos protector, CuentaBancaria cuenta)
-    {
-        try
-        {
-            return protector.Desproteger(cuenta.NumeroProtegido);
-        }
-        catch (Exception e) when (e is System.Security.Cryptography.CryptographicException or FormatException or ArgumentException)
-        {
-            return null;
-        }
-    }
 
     public static CruceDeSeccionDto ADto(CruceDeSeccion c, IReadOnlyDictionary<Guid, string> nombres) =>
         new(c.DocumentoId, c.VersionDocumento, c.TipoDocumento, nombres.GetValueOrDefault(c.DocumentoId) ?? c.TipoDocumento, c.Confianza, c.Legible, c.Fecha,

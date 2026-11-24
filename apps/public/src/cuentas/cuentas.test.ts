@@ -1,5 +1,6 @@
+import type { CampoCruzadoDto, CertificacionDeCuentaDto, CuentaBancariaPublicaDto } from '@validalo/api-client';
 import { describe, expect, it } from 'vitest';
-import { cuerpoRegistro, DATOS_VACIOS, enmascararNumero, validarCuenta } from './cuentas';
+import { camposQueNoCoinciden, camposSinVerificar, cuerpoRegistro, DATOS_VACIOS, destinoDeCertificacion, enmascararNumero, esDesignable, validarCuenta, verificacionDe } from './cuentas';
 
 const COMPLETOS = { ...DATOS_VACIOS, bancoCodigo: '1007', tipoCuenta: 'Ahorros', numero: '1234 5678', titular: 'Ana Pérez', identificacionTitular: '1020304050', moneda: 'COP' } as const;
 
@@ -74,5 +75,64 @@ describe('validar una cuenta como el dominio', () => {
       correo: 'marta@aceros.co',
       telefono: null,
     });
+  });
+});
+
+const CUENTA: CuentaBancariaPublicaDto = {
+  id: 'c1',
+  banco: 'Bancolombia',
+  tipoCuenta: 'Ahorros',
+  numeroEnmascarado: '****5678',
+  titular: 'Aceros del Norte S.A.S.',
+  identificacionTitular: '900123456-7',
+  moneda: 'COP',
+  estado: 'Activa',
+  registradaEn: '2026-10-02T10:00:00Z',
+  designadaEn: [],
+  faltaCertificacion: false,
+};
+
+const CERTIFICACION: CertificacionDeCuentaDto = {
+  documentoId: 'doc-1',
+  version: 1,
+  estado: 'Actual',
+  cargadaEn: '2026-10-03T10:00:00Z',
+  nombreArchivo: 'certificacion.pdf',
+  verificacion: 'Coincide',
+  discrepanciaCritica: false,
+  campos: [],
+};
+
+const campo = (campo: string, resultado: string, critico: boolean): CampoCruzadoDto => ({ campo, etiqueta: campo, declarado: 'a', extraido: 'b', resultado, critico, detalle: null });
+
+describe('la certificación bancaria de cada cuenta (CB-1)', () => {
+  it('la certificación se sube al documento propio de la cuenta, no al general de la bóveda', () => {
+    expect(destinoDeCertificacion('c9')).toEqual({ tipoCanonico: 'CERTIFICACION_BANCARIA', cuentaBancariaId: 'c9' });
+    // La sesión de un expediente embebido dice de qué vínculo es la subida.
+    expect(destinoDeCertificacion('c9', 'v1')).toEqual({ tipoCanonico: 'CERTIFICACION_BANCARIA', cuentaBancariaId: 'c9', vinculoId: 'v1' });
+  });
+
+  it('solo se designa una cuenta activa y con su certificación', () => {
+    expect(esDesignable(CUENTA)).toBe(true);
+    expect(esDesignable({ ...CUENTA, faltaCertificacion: true })).toBe(false);
+    expect(esDesignable({ ...CUENTA, estado: 'Retirada' })).toBe(false);
+  });
+
+  it('el resultado de la lectura sale de lo que dijo la API; una versión devuelta manda sobre él', () => {
+    expect(verificacionDe(CERTIFICACION)).toBe('Coincide');
+    expect(verificacionDe({ ...CERTIFICACION, verificacion: 'Discrepa' })).toBe('Discrepa');
+    expect(verificacionDe({ ...CERTIFICACION, verificacion: 'NoSeLee' })).toBe('NoSeLee');
+    expect(verificacionDe({ ...CERTIFICACION, estado: 'Devuelta', verificacion: 'Coincide' })).toBe('Devuelta');
+    // Un resultado que este cliente no conoce no inventa nada: queda sin leer.
+    expect(verificacionDe({ ...CERTIFICACION, verificacion: 'Otro' })).toBe('SinAnalisis');
+  });
+
+  it('lo que no coincide va primero lo crítico y lo que no se pudo verificar solo cuenta si es crítico', () => {
+    const certificacion = {
+      ...CERTIFICACION,
+      campos: [campo('banco', 'Discrepa', false), campo('numero', 'Discrepa', true), campo('titular', 'Coincide', true), campo('estado_cuenta', 'NoVerificable', true), campo('tipo_cuenta', 'NoVerificable', false)],
+    };
+    expect(camposQueNoCoinciden(certificacion).map((c) => c.campo)).toEqual(['numero', 'banco']);
+    expect(camposSinVerificar(certificacion).map((c) => c.campo)).toEqual(['estado_cuenta']);
   });
 });

@@ -360,6 +360,34 @@ Campos de la respuesta `200`:
 | `actual.contactoPagos.nombre` | texto | sí |  |
 | `actual.contactoPagos.correo` | texto | sí |  |
 | `actual.contactoPagos.telefono` | texto o null | no |  |
+| `actual.certificacion` | CertificacionDeCuentaDelVinculoDto o null | no |  |
+| `actual.certificacion.documentoId` | uuid | sí |  |
+| `actual.certificacion.version` | entero | sí |  |
+| `actual.certificacion.cargadaEn` | fecha y hora | sí |  |
+| `actual.certificacion.verificacion` | texto | sí |  |
+| `actual.certificacion.sinAnalisis` | booleano | sí |  |
+| `actual.certificacion.discrepanciaCritica` | booleano | sí |  |
+| `actual.certificacion.cruce` | CruceDeSeccionDto o null | no |  |
+| `actual.certificacion.cruce.documentoId` | uuid | sí |  |
+| `actual.certificacion.cruce.versionDocumento` | entero | sí |  |
+| `actual.certificacion.cruce.tipoDocumento` | texto | sí |  |
+| `actual.certificacion.cruce.nombreDocumento` | texto | sí |  |
+| `actual.certificacion.cruce.confianza` | number \| string | sí | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
+| `actual.certificacion.cruce.legible` | booleano | sí |  |
+| `actual.certificacion.cruce.fecha` | fecha y hora | sí |  |
+| `actual.certificacion.cruce.coincidencias` | entero | sí |  |
+| `actual.certificacion.cruce.discrepancias` | entero | sí |  |
+| `actual.certificacion.cruce.noVerificables` | entero | sí |  |
+| `actual.certificacion.cruce.discrepanciaCritica` | booleano | sí |  |
+| `actual.certificacion.cruce.campos` | lista de CampoCruzadoDto | sí |  |
+| `actual.certificacion.cruce.campos[].campo` | texto | sí |  |
+| `actual.certificacion.cruce.campos[].etiqueta` | texto | sí |  |
+| `actual.certificacion.cruce.campos[].declarado` | texto o null | no |  |
+| `actual.certificacion.cruce.campos[].extraido` | texto o null | no |  |
+| `actual.certificacion.cruce.campos[].resultado` | texto | sí |  |
+| `actual.certificacion.cruce.campos[].critico` | booleano | sí |  |
+| `actual.certificacion.cruce.campos[].detalle` | texto o null | no |  |
+| `actual.sinCertificacion` | booleano | no | por omisión false |
 | `propuesta` | CuentaDesignadaDto o null | no | mismos campos que `actual` |
 | `rechazada` | CuentaDesignadaDto o null | no | mismos campos que `actual` |
 | `aprobadoresRequeridos` | entero | sí |  |
@@ -403,7 +431,40 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "verificacion": "texto",
+      "sinAnalisis": true,
+      "discrepanciaCritica": true,
+      "cruce": {
+        "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "versionDocumento": 1,
+        "tipoDocumento": "texto",
+        "nombreDocumento": "Nombre de ejemplo",
+        "confianza": 1,
+        "legible": true,
+        "fecha": "2026-11-12T15:00:00Z",
+        "coincidencias": 1,
+        "discrepancias": 1,
+        "noVerificables": 1,
+        "discrepanciaCritica": true,
+        "campos": [
+          {
+            "campo": "texto",
+            "etiqueta": "texto",
+            "declarado": "texto",
+            "extraido": "texto",
+            "resultado": "texto",
+            "critico": true,
+            "detalle": "Texto de ejemplo."
+          }
+        ]
+      }
+    },
+    "sinCertificacion": false
   },
   "propuesta": {
     "cuentaId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -431,7 +492,40 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "verificacion": "texto",
+      "sinAnalisis": true,
+      "discrepanciaCritica": true,
+      "cruce": {
+        "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "versionDocumento": 1,
+        "tipoDocumento": "texto",
+        "nombreDocumento": "Nombre de ejemplo",
+        "confianza": 1,
+        "legible": true,
+        "fecha": "2026-11-12T15:00:00Z",
+        "coincidencias": 1,
+        "discrepancias": 1,
+        "noVerificables": 1,
+        "discrepanciaCritica": true,
+        "campos": [
+          {
+            "campo": "texto",
+            "etiqueta": "texto",
+            "declarado": "texto",
+            "extraido": "texto",
+            "resultado": "texto",
+            "critico": true,
+            "detalle": "Texto de ejemplo."
+          }
+        ]
+      }
+    },
+    "sinCertificacion": false
   },
   "rechazada": {
     "cuentaId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -459,7 +553,40 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "verificacion": "texto",
+      "sinAnalisis": true,
+      "discrepanciaCritica": true,
+      "cruce": {
+        "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "versionDocumento": 1,
+        "tipoDocumento": "texto",
+        "nombreDocumento": "Nombre de ejemplo",
+        "confianza": 1,
+        "legible": true,
+        "fecha": "2026-11-12T15:00:00Z",
+        "coincidencias": 1,
+        "discrepancias": 1,
+        "noVerificables": 1,
+        "discrepanciaCritica": true,
+        "campos": [
+          {
+            "campo": "texto",
+            "etiqueta": "texto",
+            "declarado": "texto",
+            "extraido": "texto",
+            "resultado": "texto",
+            "critico": true,
+            "detalle": "Texto de ejemplo."
+          }
+        ]
+      }
+    },
+    "sinCertificacion": false
   },
   "aprobadoresRequeridos": 1,
   "puedesAprobar": true
@@ -528,7 +655,40 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "verificacion": "texto",
+      "sinAnalisis": true,
+      "discrepanciaCritica": true,
+      "cruce": {
+        "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "versionDocumento": 1,
+        "tipoDocumento": "texto",
+        "nombreDocumento": "Nombre de ejemplo",
+        "confianza": 1,
+        "legible": true,
+        "fecha": "2026-11-12T15:00:00Z",
+        "coincidencias": 1,
+        "discrepancias": 1,
+        "noVerificables": 1,
+        "discrepanciaCritica": true,
+        "campos": [
+          {
+            "campo": "texto",
+            "etiqueta": "texto",
+            "declarado": "texto",
+            "extraido": "texto",
+            "resultado": "texto",
+            "critico": true,
+            "detalle": "Texto de ejemplo."
+          }
+        ]
+      }
+    },
+    "sinCertificacion": false
   },
   "propuesta": {
     "cuentaId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -556,7 +716,40 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "verificacion": "texto",
+      "sinAnalisis": true,
+      "discrepanciaCritica": true,
+      "cruce": {
+        "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "versionDocumento": 1,
+        "tipoDocumento": "texto",
+        "nombreDocumento": "Nombre de ejemplo",
+        "confianza": 1,
+        "legible": true,
+        "fecha": "2026-11-12T15:00:00Z",
+        "coincidencias": 1,
+        "discrepancias": 1,
+        "noVerificables": 1,
+        "discrepanciaCritica": true,
+        "campos": [
+          {
+            "campo": "texto",
+            "etiqueta": "texto",
+            "declarado": "texto",
+            "extraido": "texto",
+            "resultado": "texto",
+            "critico": true,
+            "detalle": "Texto de ejemplo."
+          }
+        ]
+      }
+    },
+    "sinCertificacion": false
   },
   "rechazada": {
     "cuentaId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -584,7 +777,40 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "verificacion": "texto",
+      "sinAnalisis": true,
+      "discrepanciaCritica": true,
+      "cruce": {
+        "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "versionDocumento": 1,
+        "tipoDocumento": "texto",
+        "nombreDocumento": "Nombre de ejemplo",
+        "confianza": 1,
+        "legible": true,
+        "fecha": "2026-11-12T15:00:00Z",
+        "coincidencias": 1,
+        "discrepancias": 1,
+        "noVerificables": 1,
+        "discrepanciaCritica": true,
+        "campos": [
+          {
+            "campo": "texto",
+            "etiqueta": "texto",
+            "declarado": "texto",
+            "extraido": "texto",
+            "resultado": "texto",
+            "critico": true,
+            "detalle": "Texto de ejemplo."
+          }
+        ]
+      }
+    },
+    "sinCertificacion": false
   },
   "aprobadoresRequeridos": 1,
   "puedesAprobar": true
@@ -661,7 +887,40 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "verificacion": "texto",
+      "sinAnalisis": true,
+      "discrepanciaCritica": true,
+      "cruce": {
+        "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "versionDocumento": 1,
+        "tipoDocumento": "texto",
+        "nombreDocumento": "Nombre de ejemplo",
+        "confianza": 1,
+        "legible": true,
+        "fecha": "2026-11-12T15:00:00Z",
+        "coincidencias": 1,
+        "discrepancias": 1,
+        "noVerificables": 1,
+        "discrepanciaCritica": true,
+        "campos": [
+          {
+            "campo": "texto",
+            "etiqueta": "texto",
+            "declarado": "texto",
+            "extraido": "texto",
+            "resultado": "texto",
+            "critico": true,
+            "detalle": "Texto de ejemplo."
+          }
+        ]
+      }
+    },
+    "sinCertificacion": false
   },
   "propuesta": {
     "cuentaId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -689,7 +948,40 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "verificacion": "texto",
+      "sinAnalisis": true,
+      "discrepanciaCritica": true,
+      "cruce": {
+        "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "versionDocumento": 1,
+        "tipoDocumento": "texto",
+        "nombreDocumento": "Nombre de ejemplo",
+        "confianza": 1,
+        "legible": true,
+        "fecha": "2026-11-12T15:00:00Z",
+        "coincidencias": 1,
+        "discrepancias": 1,
+        "noVerificables": 1,
+        "discrepanciaCritica": true,
+        "campos": [
+          {
+            "campo": "texto",
+            "etiqueta": "texto",
+            "declarado": "texto",
+            "extraido": "texto",
+            "resultado": "texto",
+            "critico": true,
+            "detalle": "Texto de ejemplo."
+          }
+        ]
+      }
+    },
+    "sinCertificacion": false
   },
   "rechazada": {
     "cuentaId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -717,7 +1009,40 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "verificacion": "texto",
+      "sinAnalisis": true,
+      "discrepanciaCritica": true,
+      "cruce": {
+        "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "versionDocumento": 1,
+        "tipoDocumento": "texto",
+        "nombreDocumento": "Nombre de ejemplo",
+        "confianza": 1,
+        "legible": true,
+        "fecha": "2026-11-12T15:00:00Z",
+        "coincidencias": 1,
+        "discrepancias": 1,
+        "noVerificables": 1,
+        "discrepanciaCritica": true,
+        "campos": [
+          {
+            "campo": "texto",
+            "etiqueta": "texto",
+            "declarado": "texto",
+            "extraido": "texto",
+            "resultado": "texto",
+            "critico": true,
+            "detalle": "Texto de ejemplo."
+          }
+        ]
+      }
+    },
+    "sinCertificacion": false
   },
   "aprobadoresRequeridos": 1,
   "puedesAprobar": true
@@ -765,6 +1090,24 @@ Campos de la respuesta `200`:
 | `[].contactoPagos.nombre` | texto | sí |  |
 | `[].contactoPagos.correo` | texto | sí |  |
 | `[].contactoPagos.telefono` | texto o null | no |  |
+| `[].certificacion` | CertificacionDeCuentaDto o null | no |  |
+| `[].certificacion.documentoId` | uuid | sí |  |
+| `[].certificacion.version` | entero | sí |  |
+| `[].certificacion.estado` | texto | sí |  |
+| `[].certificacion.cargadaEn` | fecha y hora | sí |  |
+| `[].certificacion.nombreArchivo` | texto | sí |  |
+| `[].certificacion.verificacion` | texto | sí |  |
+| `[].certificacion.discrepanciaCritica` | booleano | sí |  |
+| `[].certificacion.campos` | lista de CampoCruzadoDto | sí |  |
+| `[].certificacion.campos[].campo` | texto | sí |  |
+| `[].certificacion.campos[].etiqueta` | texto | sí |  |
+| `[].certificacion.campos[].declarado` | texto o null | no |  |
+| `[].certificacion.campos[].extraido` | texto o null | no |  |
+| `[].certificacion.campos[].resultado` | texto | sí |  |
+| `[].certificacion.campos[].critico` | booleano | sí |  |
+| `[].certificacion.campos[].detalle` | texto o null | no |  |
+| `[].certificacion.motivoDevolucion` | texto o null | no |  |
+| `[].faltaCertificacion` | booleano | no | por omisión false |
 
 <details><summary>Ejemplo de petición y respuesta</summary>
 
@@ -802,7 +1145,29 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "estado": "texto",
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "nombreArchivo": "Nombre de ejemplo",
+      "verificacion": "texto",
+      "discrepanciaCritica": true,
+      "campos": [
+        {
+          "campo": "texto",
+          "etiqueta": "texto",
+          "declarado": "texto",
+          "extraido": "texto",
+          "resultado": "texto",
+          "critico": true,
+          "detalle": "Texto de ejemplo."
+        }
+      ],
+      "motivoDevolucion": "Texto de ejemplo."
+    },
+    "faltaCertificacion": false
   }
 ]
 ```
@@ -862,6 +1227,24 @@ Campos de la respuesta `201`:
 | `contactoPagos.nombre` | texto | sí |  |
 | `contactoPagos.correo` | texto | sí |  |
 | `contactoPagos.telefono` | texto o null | no |  |
+| `certificacion` | CertificacionDeCuentaDto o null | no |  |
+| `certificacion.documentoId` | uuid | sí |  |
+| `certificacion.version` | entero | sí |  |
+| `certificacion.estado` | texto | sí |  |
+| `certificacion.cargadaEn` | fecha y hora | sí |  |
+| `certificacion.nombreArchivo` | texto | sí |  |
+| `certificacion.verificacion` | texto | sí |  |
+| `certificacion.discrepanciaCritica` | booleano | sí |  |
+| `certificacion.campos` | lista de CampoCruzadoDto | sí |  |
+| `certificacion.campos[].campo` | texto | sí |  |
+| `certificacion.campos[].etiqueta` | texto | sí |  |
+| `certificacion.campos[].declarado` | texto o null | no |  |
+| `certificacion.campos[].extraido` | texto o null | no |  |
+| `certificacion.campos[].resultado` | texto | sí |  |
+| `certificacion.campos[].critico` | booleano | sí |  |
+| `certificacion.campos[].detalle` | texto o null | no |  |
+| `certificacion.motivoDevolucion` | texto o null | no |  |
+| `faltaCertificacion` | booleano | no | por omisión false |
 
 **Errores de negocio que lanza**
 
@@ -905,7 +1288,29 @@ Respuesta `201`:
     "nombre": "Constructora Norte S.A.S.",
     "correo": "contacto@empresa.co",
     "telefono": "+57 601 555 1234"
-  }
+  },
+  "certificacion": {
+    "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "version": 1,
+    "estado": "texto",
+    "cargadaEn": "2026-11-12T15:00:00Z",
+    "nombreArchivo": "Nombre de ejemplo",
+    "verificacion": "texto",
+    "discrepanciaCritica": true,
+    "campos": [
+      {
+        "campo": "texto",
+        "etiqueta": "texto",
+        "declarado": "texto",
+        "extraido": "texto",
+        "resultado": "texto",
+        "critico": true,
+        "detalle": "Texto de ejemplo."
+      }
+    ],
+    "motivoDevolucion": "Texto de ejemplo."
+  },
+  "faltaCertificacion": false
 }
 ```
 
@@ -973,7 +1378,29 @@ Respuesta `200`:
     "nombre": "Constructora Norte S.A.S.",
     "correo": "contacto@empresa.co",
     "telefono": "+57 601 555 1234"
-  }
+  },
+  "certificacion": {
+    "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "version": 1,
+    "estado": "texto",
+    "cargadaEn": "2026-11-12T15:00:00Z",
+    "nombreArchivo": "Nombre de ejemplo",
+    "verificacion": "texto",
+    "discrepanciaCritica": true,
+    "campos": [
+      {
+        "campo": "texto",
+        "etiqueta": "texto",
+        "declarado": "texto",
+        "extraido": "texto",
+        "resultado": "texto",
+        "critico": true,
+        "detalle": "Texto de ejemplo."
+      }
+    ],
+    "motivoDevolucion": "Texto de ejemplo."
+  },
+  "faltaCertificacion": false
 }
 ```
 
@@ -981,7 +1408,7 @@ Respuesta `200`:
 
 ### `POST /public/v1/vinculos/{id}/cuenta-designada`
 
-**Designar cuenta.** El tercero designa una cuenta suya, activa, para cobrarle a la empresa de este vínculo. Exige tener la certificación bancaria en la bóveda (422 `certificacion-requerida`). Queda propuesta hasta que la empresa la apruebe.
+**Designar cuenta.** El tercero designa una cuenta suya, activa, para cobrarle a la empresa de este vínculo. Exige que **esa cuenta** tenga su certificación bancaria vigente (422 `certificacion-requerida`: la de otra cuenta, o la general sin cuenta de antes, no sirve). Queda propuesta hasta que la empresa la apruebe y, en la misma transacción, se le comparte la certificación de la cuenta (y solo esa) para que la IA la lea y la empresa la vea junto a la cuenta (CB-1).
 
 **Sesión del tercero · Portal del tercero (`/public/v1`) · SDK: `designarCuenta`**
 
@@ -1012,7 +1439,6 @@ Mismos campos de `CuentaBancariaPublicaDto` que se detallan en `POST /public/v1/
 - `404` `cuenta-no-encontrada`
 - `404` `vinculo-no-encontrado`
 - `409` `cuenta-retirada`
-- `422` `certificacion-requerida`
 
 <details><summary>Ejemplo de petición y respuesta</summary>
 
@@ -1051,7 +1477,29 @@ Respuesta `200`:
     "nombre": "Constructora Norte S.A.S.",
     "correo": "contacto@empresa.co",
     "telefono": "+57 601 555 1234"
-  }
+  },
+  "certificacion": {
+    "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "version": 1,
+    "estado": "texto",
+    "cargadaEn": "2026-11-12T15:00:00Z",
+    "nombreArchivo": "Nombre de ejemplo",
+    "verificacion": "texto",
+    "discrepanciaCritica": true,
+    "campos": [
+      {
+        "campo": "texto",
+        "etiqueta": "texto",
+        "declarado": "texto",
+        "extraido": "texto",
+        "resultado": "texto",
+        "critico": true,
+        "detalle": "Texto de ejemplo."
+      }
+    ],
+    "motivoDevolucion": "Texto de ejemplo."
+  },
+  "faltaCertificacion": false
 }
 ```
 
@@ -1670,6 +2118,34 @@ Campos de la respuesta `200`:
 | `cuentaDesignada.contactoPagos.nombre` | texto | sí |  |
 | `cuentaDesignada.contactoPagos.correo` | texto | sí |  |
 | `cuentaDesignada.contactoPagos.telefono` | texto o null | no |  |
+| `cuentaDesignada.certificacion` | CertificacionDeCuentaDelVinculoDto o null | no |  |
+| `cuentaDesignada.certificacion.documentoId` | uuid | sí |  |
+| `cuentaDesignada.certificacion.version` | entero | sí |  |
+| `cuentaDesignada.certificacion.cargadaEn` | fecha y hora | sí |  |
+| `cuentaDesignada.certificacion.verificacion` | texto | sí |  |
+| `cuentaDesignada.certificacion.sinAnalisis` | booleano | sí |  |
+| `cuentaDesignada.certificacion.discrepanciaCritica` | booleano | sí |  |
+| `cuentaDesignada.certificacion.cruce` | CruceDeSeccionDto o null | no |  |
+| `cuentaDesignada.certificacion.cruce.documentoId` | uuid | sí |  |
+| `cuentaDesignada.certificacion.cruce.versionDocumento` | entero | sí |  |
+| `cuentaDesignada.certificacion.cruce.tipoDocumento` | texto | sí |  |
+| `cuentaDesignada.certificacion.cruce.nombreDocumento` | texto | sí |  |
+| `cuentaDesignada.certificacion.cruce.confianza` | number \| string | sí | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
+| `cuentaDesignada.certificacion.cruce.legible` | booleano | sí |  |
+| `cuentaDesignada.certificacion.cruce.fecha` | fecha y hora | sí |  |
+| `cuentaDesignada.certificacion.cruce.coincidencias` | entero | sí |  |
+| `cuentaDesignada.certificacion.cruce.discrepancias` | entero | sí |  |
+| `cuentaDesignada.certificacion.cruce.noVerificables` | entero | sí |  |
+| `cuentaDesignada.certificacion.cruce.discrepanciaCritica` | booleano | sí |  |
+| `cuentaDesignada.certificacion.cruce.campos` | lista de CampoCruzadoDto | sí |  |
+| `cuentaDesignada.certificacion.cruce.campos[].campo` | texto | sí |  |
+| `cuentaDesignada.certificacion.cruce.campos[].etiqueta` | texto | sí |  |
+| `cuentaDesignada.certificacion.cruce.campos[].declarado` | texto o null | no |  |
+| `cuentaDesignada.certificacion.cruce.campos[].extraido` | texto o null | no |  |
+| `cuentaDesignada.certificacion.cruce.campos[].resultado` | texto | sí |  |
+| `cuentaDesignada.certificacion.cruce.campos[].critico` | booleano | sí |  |
+| `cuentaDesignada.certificacion.cruce.campos[].detalle` | texto o null | no |  |
+| `cuentaDesignada.sinCertificacion` | booleano | no | por omisión false |
 | `contactos` | lista de ContactoDeEmpresaDto o null | no |  |
 | `contactos[].nombre` | texto | sí |  |
 | `contactos[].cargo` | texto o null | no |  |
@@ -1978,7 +2454,40 @@ Respuesta `200`:
       "nombre": "Constructora Norte S.A.S.",
       "correo": "contacto@empresa.co",
       "telefono": "+57 601 555 1234"
-    }
+    },
+    "certificacion": {
+      "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "version": 1,
+      "cargadaEn": "2026-11-12T15:00:00Z",
+      "verificacion": "texto",
+      "sinAnalisis": true,
+      "discrepanciaCritica": true,
+      "cruce": {
+        "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "versionDocumento": 1,
+        "tipoDocumento": "texto",
+        "nombreDocumento": "Nombre de ejemplo",
+        "confianza": 1,
+        "legible": true,
+        "fecha": "2026-11-12T15:00:00Z",
+        "coincidencias": 1,
+        "discrepancias": 1,
+        "noVerificables": 1,
+        "discrepanciaCritica": true,
+        "campos": [
+          {
+            "campo": "texto",
+            "etiqueta": "texto",
+            "declarado": "texto",
+            "extraido": "texto",
+            "resultado": "texto",
+            "critico": true,
+            "detalle": "Texto de ejemplo."
+          }
+        ]
+      }
+    },
+    "sinCertificacion": false
   },
   "contactos": [
     {
@@ -2227,6 +2736,27 @@ Campos de la respuesta `200`:
 | `vinculos[].cuentaDesignada.actual.contactoPagos.nombre` | texto | sí |  |
 | `vinculos[].cuentaDesignada.actual.contactoPagos.correo` | texto | sí |  |
 | `vinculos[].cuentaDesignada.actual.contactoPagos.telefono` | texto o null | no |  |
+| `vinculos[].cuentaDesignada.actual.certificacion` | CertificacionDeCuentaDelVinculoDto o null | no |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.documentoId` | uuid | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.version` | entero | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cargadaEn` | fecha y hora | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.verificacion` | texto | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.sinAnalisis` | booleano | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.discrepanciaCritica` | booleano | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce` | CruceDeSeccionDto o null | no |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.documentoId` | uuid | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.versionDocumento` | entero | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.tipoDocumento` | texto | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.nombreDocumento` | texto | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.confianza` | number \| string | sí | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.legible` | booleano | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.fecha` | fecha y hora | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.coincidencias` | entero | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.discrepancias` | entero | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.noVerificables` | entero | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.discrepanciaCritica` | booleano | sí |  |
+| `vinculos[].cuentaDesignada.actual.certificacion.cruce.campos` | lista de CampoCruzadoDto | sí | no se expande más: ver el esquema en el contrato |
+| `vinculos[].cuentaDesignada.actual.sinCertificacion` | booleano | no | por omisión false |
 | `vinculos[].cuentaDesignada.propuesta` | CuentaDesignadaDto o null | no | mismos campos que `vinculos[].cuentaDesignada.actual` |
 | `vinculos[].cuentaDesignada.rechazada` | CuentaDesignadaDto o null | no | mismos campos que `vinculos[].cuentaDesignada.actual` |
 | `vinculos[].cuentaDesignada.aprobadoresRequeridos` | entero | sí |  |
@@ -2304,29 +2834,6 @@ Campos de la respuesta `200`:
 | `secciones[].soportes[].retirado` | booleano | no | por omisión false |
 | `secciones[].soportes[].nombre` | texto o null | no |  |
 | `secciones[].completitud` | CompletitudSeccionDto o null | no |  |
-| `secciones[].completitud.completa` | booleano | sí |  |
-| `secciones[].completitud.faltantes` | lista de FaltanteSeccionDto | sí |  |
-| `secciones[].completitud.faltantes[].campo` | texto o null | no |  |
-| `secciones[].completitud.faltantes[].regla` | texto o null | no |  |
-| `secciones[].completitud.faltantes[].mensaje` | texto | sí |  |
-| `secciones[].completitud.reglaVersion` | entero | sí |  |
-| `secciones[].huella` | texto o null | no |  |
-| `secciones[].origen` | texto o null | no |  |
-| `secciones[].fecha` | fecha y hora o null | no |  |
-| `secciones[].versiones` | entero | sí |  |
-| `secciones[].esquemaVersion` | entero | sí |  |
-| `secciones[].aceptaciones` | lista de AceptacionDeSeccionDto o null | no |  |
-| `secciones[].aceptaciones[].vinculoId` | uuid | sí |  |
-| `secciones[].aceptaciones[].versionAceptada` | entero o null | no |  |
-| `secciones[].aceptaciones[].aceptadaEn` | fecha y hora o null | no |  |
-| `secciones[].aceptaciones[].expedienteId` | uuid o null | no |  |
-| `secciones[].aceptaciones[].folio` | texto o null | no |  |
-| `secciones[].aceptaciones[].versionNuevaPendiente` | booleano | sí |  |
-| `secciones[].aceptaciones[].revalidacion` | RevalidacionDeSeccionDto o null | no |  |
-| `secciones[].aceptaciones[].revalidacion.expedienteId` | uuid | sí |  |
-| `secciones[].aceptaciones[].revalidacion.folio` | texto | sí |  |
-| `…` |  | no | Se omiten los campos restantes: el esquema es muy extenso. |
-| `…` |  | no | Se omiten los campos restantes: el esquema es muy extenso. |
 | `…` |  | no | Se omiten los campos restantes: el esquema es muy extenso. |
 
 **Errores de negocio que lanza**
@@ -2591,7 +3098,30 @@ Respuesta `200`:
             "nombre": "Constructora Norte S.A.S.",
             "correo": "contacto@empresa.co",
             "telefono": "+57 601 555 1234"
-          }
+          },
+          "certificacion": {
+            "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "version": 1,
+            "cargadaEn": "2026-11-12T15:00:00Z",
+            "verificacion": "texto",
+            "sinAnalisis": true,
+            "discrepanciaCritica": true,
+            "cruce": {
+              "documentoId": null,
+              "versionDocumento": null,
+              "tipoDocumento": null,
+              "nombreDocumento": null,
+              "confianza": null,
+              "legible": null,
+              "fecha": null,
+              "coincidencias": null,
+              "discrepancias": null,
+              "noVerificables": null,
+              "discrepanciaCritica": null,
+              "campos": null
+            }
+          },
+          "sinCertificacion": false
         },
         "propuesta": {
           "cuentaId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -2619,7 +3149,30 @@ Respuesta `200`:
             "nombre": "Constructora Norte S.A.S.",
             "correo": "contacto@empresa.co",
             "telefono": "+57 601 555 1234"
-          }
+          },
+          "certificacion": {
+            "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "version": 1,
+            "cargadaEn": "2026-11-12T15:00:00Z",
+            "verificacion": "texto",
+            "sinAnalisis": true,
+            "discrepanciaCritica": true,
+            "cruce": {
+              "documentoId": null,
+              "versionDocumento": null,
+              "tipoDocumento": null,
+              "nombreDocumento": null,
+              "confianza": null,
+              "legible": null,
+              "fecha": null,
+              "coincidencias": null,
+              "discrepancias": null,
+              "noVerificables": null,
+              "discrepanciaCritica": null,
+              "campos": null
+            }
+          },
+          "sinCertificacion": false
         },
         "rechazada": {
           "cuentaId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -2647,7 +3200,30 @@ Respuesta `200`:
             "nombre": "Constructora Norte S.A.S.",
             "correo": "contacto@empresa.co",
             "telefono": "+57 601 555 1234"
-          }
+          },
+          "certificacion": {
+            "documentoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "version": 1,
+            "cargadaEn": "2026-11-12T15:00:00Z",
+            "verificacion": "texto",
+            "sinAnalisis": true,
+            "discrepanciaCritica": true,
+            "cruce": {
+              "documentoId": null,
+              "versionDocumento": null,
+              "tipoDocumento": null,
+              "nombreDocumento": null,
+              "confianza": null,
+              "legible": null,
+              "fecha": null,
+              "coincidencias": null,
+              "discrepancias": null,
+              "noVerificables": null,
+              "discrepanciaCritica": null,
+              "campos": null
+            }
+          },
+          "sinCertificacion": false
         },
         "aprobadoresRequeridos": 1,
         "puedesAprobar": true

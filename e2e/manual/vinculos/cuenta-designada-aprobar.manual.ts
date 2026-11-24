@@ -45,17 +45,10 @@ recorrido(
     await nueva.getByLabel('Número de cuenta').fill('031-123456-78');
     await nueva.getByLabel('Titular de la cuenta').fill('Ferretería El Tornillo S.A.S.');
     await nueva.getByLabel('Identificación del titular').fill('NIT 900123456');
+    await nueva.getByTestId('entrada-archivo').setInputFiles(pdf('Certificacion Bancolombia Tornillo')); // cada cuenta se registra con su certificación (CB-1)
     await nueva.getByRole('button', { name: 'Guardar cuenta' }).click();
-    await expect(paginaTercero.getByText(/· \*\*\*\*5678 ·/)).toBeVisible();
+    await expect(paginaTercero.getByText(/· \*\*\*\*5678 ·/)).toBeVisible({ timeout: 30_000 });
     const porEmpresa = paginaTercero.locator('section', { hasText: 'En qué cuenta te paga cada empresa' });
-    await porEmpresa.getByRole('button', { name: 'Elegir cuenta' }).click();
-    await paginaTercero.getByRole('dialog').getByRole('button', { name: 'Designar cuenta' }).click();
-    await paginaTercero.getByRole('link', { name: 'Subir certificación bancaria' }).click();
-    const selector = paginaTercero.waitForEvent('filechooser');
-    await paginaTercero.getByRole('button', { name: 'Elegir archivo' }).click();
-    await (await selector).setFiles(pdf('Certificacion Bancolombia Tornillo'));
-    await expect(paginaTercero.getByText(/Es tu versión 1 de Certificación bancaria/)).toBeVisible({ timeout: 30_000 });
-    await paginaTercero.goto('/cuentas');
     await porEmpresa.getByRole('button', { name: 'Elegir cuenta' }).click();
     await paginaTercero.getByRole('dialog').getByRole('button', { name: 'Designar cuenta' }).click();
     await expect(paginaTercero.getByText(`Pendiente de aprobación de ${e.norte.nombre}`)).toBeVisible();

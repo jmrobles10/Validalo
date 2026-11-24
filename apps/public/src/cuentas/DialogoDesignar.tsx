@@ -1,22 +1,17 @@
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormControlLabel, FormLabel, Radio, RadioGroup, Stack, Typography } from '@mui/material';
-import { esErrorApi, type CuentaBancariaPublicaDto, type VinculoPublicoDto } from '@validalo/api-client';
-import { Upload } from 'lucide-react';
+import type { CuentaBancariaPublicaDto, VinculoPublicoDto } from '@validalo/api-client';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router';
 import { useDesignarCuenta } from '../shared/api';
 import { mensajeDeError } from '../shared/errores';
 import { useAvisos } from '../shared/useAvisos';
-import { designacionesDelVinculo, esActiva, esTipoCuenta, nombreCuenta } from './cuentas';
-
-/** A dónde lleva «Subir certificación bancaria»: la subida con el tipo elegido y de vuelta a «Mis cuentas». */
-const SUBIR_CERTIFICACION = `/boveda/subir?${new URLSearchParams({ tipo: 'CERTIFICACION_BANCARIA', nombre: 'Certificación bancaria', volver: '/cuentas' }).toString()}`;
+import { designacionesDelVinculo, esActiva, esDesignable, esTipoCuenta, nombreCuenta } from './cuentas';
 
 /**
  * Elegir la cuenta en la que te paga una empresa (CB-2), entre las activas (`cuentas` trae todas para saber cuál tiene
- * hoy la empresa). La aprobada y la que ya espera aprobación no se pueden volver a
- * elegir (la API diría `cuenta-ya-designada` o no haría nada). Sin certificación bancaria en la bóveda (422
- * `certificacion-requerida`) se ofrece subirla.
+ * hoy la empresa). La aprobada y la que ya espera aprobación no se pueden volver a elegir (la API diría `cuenta-ya-designada` o no
+ * haría nada), y una cuenta sin su certificación bancaria tampoco (CB-1: cada cuenta lleva la suya; la API respondería 422
+ * `certificacion-requerida`): aparece con el aviso de que la suba en su tarjeta.
  */
 export function DialogoDesignar({ vinculo, cuentas, onCerrar }: { vinculo: VinculoPublicoDto; cuentas: readonly CuentaBancariaPublicaDto[]; onCerrar: () => void }) {
   const { t } = useTranslation();
@@ -24,11 +19,12 @@ export function DialogoDesignar({ vinculo, cuentas, onCerrar }: { vinculo: Vincu
   const designacion = useDesignarCuenta(vinculo.id);
   const empresa = vinculo.empresa.nombre;
   const actuales = designacionesDelVinculo(vinculo.id, cuentas);
-  const bloqueadas = new Set([actuales.Aprobada?.cuenta.id, actuales.Propuesta?.cuenta.id].filter((id): id is string => Boolean(id)));
   const activas = cuentas.filter(esActiva);
+  const bloqueadas = new Set(
+    [actuales.Aprobada?.cuenta.id, actuales.Propuesta?.cuenta.id, ...activas.filter((c) => !esDesignable(c)).map((c) => c.id)].filter((id): id is string => Boolean(id)),
+  );
   const elegibles = activas.filter((c) => !bloqueadas.has(c.id));
   const [elegida, setElegida] = useState<string>(elegibles.length === 1 ? (elegibles.at(0)?.id ?? '') : '');
-  const sinCertificacion = esErrorApi(designacion.error) && designacion.error.codigo === 'certificacion-requerida';
 
   const confirmar = () => {
     const cuenta = elegibles.find((c) => c.id === elegida);
@@ -42,7 +38,13 @@ export function DialogoDesignar({ vinculo, cuentas, onCerrar }: { vinculo: Vincu
   };
 
   const detalle = (c: CuentaBancariaPublicaDto) =>
-    c.id === actuales.Aprobada?.cuenta.id ? t('cuentas.designar.yaDesignada', { empresa }) : c.id === actuales.Propuesta?.cuenta.id ? t('cuentas.designar.yaPropuesta') : t('cuentas.titularCon', { titular: c.titular, identificacion: c.identificacionTitular });
+    c.id === actuales.Aprobada?.cuenta.id
+      ? t('cuentas.designar.yaDesignada', { empresa })
+      : c.id === actuales.Propuesta?.cuenta.id
+        ? t('cuentas.designar.yaPropuesta')
+        : c.faltaCertificacion
+          ? t('cuentas.designar.sinCertificacion')
+          : t('cuentas.titularCon', { titular: c.titular, identificacion: c.identificacionTitular });
 
   return (
     <Dialog open onClose={designacion.isPending ? undefined : onCerrar} fullWidth maxWidth="xs" aria-labelledby="titulo-designar">
@@ -50,21 +52,7 @@ export function DialogoDesignar({ vinculo, cuentas, onCerrar }: { vinculo: Vincu
       <DialogContent>
         <Stack spacing={2}>
           <Typography sx={{ color: 'text.secondary' }}>{t('cuentas.designar.ayuda', { empresa })}</Typography>
-          {designacion.isError && (
-            <Alert
-              severity={sinCertificacion ? 'warning' : 'error'}
-              action={
-                sinCertificacion ? (
-                  <Button component={RouterLink} to={SUBIR_CERTIFICACION} color="inherit" size="small" startIcon={<Upload size={16} aria-hidden />}>
-                    {t('cuentas.designar.subirCertificacion')}
-                  </Button>
-                ) : undefined
-              }
-              sx={{ flexWrap: 'wrap', '& .MuiAlert-action': { ml: 0, pl: 0 } }}
-            >
-              {mensajeDeError(designacion.error, t)}
-            </Alert>
-          )}
+          {designacion.isError && <Alert severity="error">{mensajeDeError(designacion.error, t)}</Alert>}
           <FormControl>
             <FormLabel id="cuentas-para-designar">{t('cuentas.designar.opciones')}</FormLabel>
             <RadioGroup aria-labelledby="cuentas-para-designar" value={elegida} onChange={(e) => setElegida(e.target.value)}>

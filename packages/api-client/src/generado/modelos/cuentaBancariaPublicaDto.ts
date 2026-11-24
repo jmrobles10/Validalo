@@ -4,6 +4,7 @@
  * Validalo.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { CertificacionDeCuentaDto } from './certificacionDeCuentaDto';
 import type { ContactoDePagosDto } from './contactoDePagosDto';
 import type { DesignacionDeCuentaDto } from './designacionDeCuentaDto';
 
@@ -23,4 +24,6 @@ export interface CuentaBancariaPublicaDto {
   /** @nullable */
   bancoSwift?: string | null;
   contactoPagos?: null | ContactoDePagosDto;
+  certificacion?: null | CertificacionDeCuentaDto;
+  faltaCertificacion?: boolean;
 }

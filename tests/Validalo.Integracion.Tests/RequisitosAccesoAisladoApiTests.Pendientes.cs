@@ -413,7 +413,6 @@ public sealed partial class RequisitosAccesoAisladoApiTests
         await ApiAsync<VinculoDto>("POST", $"/api/v1/vinculos/{vinculo.Id}/referencias", erp, new ReferenciaExternaDto("ERPX", "S-1"), 200);
         var sesion = await SesionAsync(correo, "Norte"); // PROVEEDOR exige OTP: SesionAsync lo verifica con el código que llega al mismo correo
         await AceptarAsync(sesion, vinculo.Id);
-        await SubirAsync(sesion, "CERTIFICACION_BANCARIA", Pdf("Certificación"));
         // Dos cuentas del tercero registradas desde su cuenta (no desde el expediente).
         var propia1 = await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken, CuentaNueva("Bancolombia", "031-123456-78"), 201);
         var propia2 = await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken, CuentaNueva("Davivienda", "4700 1234 9999"), 201);
@@ -428,6 +427,13 @@ public sealed partial class RequisitosAccesoAisladoApiTests
 
         // Sí puede registrar la cuenta que pide el expediente y designarla; después solo ve esa.
         var delExpediente = await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", token, CuentaNueva("Bogotá", "1111 2222 3333"), 201);
+        // Su certificación también la sube desde el expediente (la de una cuenta ajena a su vínculo, no) y solo así puede designarla (CB-1).
+        var certificacion = Pdf("Certificación Bogotá");
+        (await CodigoAsync(await TerceroAsync("POST", "/public/v1/boveda/documentos", token,
+            new IniciarCargaDto("certificacion.pdf", certificacion.Length, "application/pdf", VinculoId: vinculo.Id, CuentaBancariaId: propia1.Id), 403))).ShouldBe("alcance-de-sesion");
+        (await CodigoAsync(await TerceroAsync("POST", designar, token, new DesignarCuentaDto(delExpediente.Id), 422))).ShouldBe("certificacion-requerida");
+        await SubirAsync(sesion, new IniciarCargaDto("certificacion.pdf", certificacion.Length, "application/pdf", VinculoId: vinculo.Id, CuentaBancariaId: delExpediente.Id),
+            certificacion, token);
         var propuesta = await TerceroAsync<CuentaBancariaPublicaDto>("POST", designar, token, new DesignarCuentaDto(delExpediente.Id), 200);
         propuesta.DesignadaEn.ShouldHaveSingleItem().Estado.ShouldBe("Propuesta");
         var vistas = await TerceroAsync<List<CuentaBancariaPublicaDto>>("GET", "/public/v1/boveda/cuentas-bancarias", token, null, 200);
@@ -437,6 +443,7 @@ public sealed partial class RequisitosAccesoAisladoApiTests
         (await CodigoAsync(await TerceroAsync("POST", $"/public/v1/boveda/cuentas-bancarias/{propia1.Id}/retirar", token, new { }, 403))).ShouldBe("alcance-de-sesion");
         (await CodigoAsync(await TerceroAsync("POST", $"/public/v1/boveda/cuentas-bancarias/{delExpediente.Id}/retirar", token, new { }, 403))).ShouldBe("alcance-de-sesion");
         // Una cuenta ya designada o propuesta con su vínculo vuelve a estar a su alcance aunque la haya registrado la cuenta del tercero.
+        await SubirCertificacionAsync(sesion, propia1.Id, Pdf("Certificación Bancolombia"));
         await TerceroAsync<CuentaBancariaPublicaDto>("POST", designar, sesion.AccessToken, new DesignarCuentaDto(propia1.Id), 200);
         (await TerceroAsync<List<CuentaBancariaPublicaDto>>("GET", "/public/v1/boveda/cuentas-bancarias", token, null, 200)).Select(c => c.Id).Order()
             .ShouldBe(new[] { delExpediente.Id, propia1.Id }.Order());
@@ -464,6 +471,8 @@ public sealed partial class RequisitosAccesoAisladoApiTests
         (await CodigoAsync(await TerceroAsync("POST", "/public/v1/boveda/cuentas-bancarias", token, CuentaNueva("Davivienda", "4700 1234 9999"), 403))).ShouldBe("alcance-de-sesion");
         (await CodigoAsync(await TerceroAsync("POST", $"/public/v1/vinculos/{vinculo.Id}/cuenta-designada", token, new DesignarCuentaDto(cuenta.Id), 403))).ShouldBe("alcance-de-sesion");
         (await CodigoAsync(await TerceroAsync("POST", $"/public/v1/boveda/cuentas-bancarias/{cuenta.Id}/retirar", token, new { }, 403))).ShouldBe("alcance-de-sesion");
+        (await CodigoAsync(await TerceroAsync("POST", "/public/v1/boveda/documentos", token,
+            new IniciarCargaDto("certificacion.pdf", 100, "application/pdf", VinculoId: vinculo.Id, CuentaBancariaId: cuenta.Id), 403))).ShouldBe("alcance-de-sesion");
         // La cuenta del tercero sigue intacta y su sesión sí la ve.
         (await TerceroAsync<List<CuentaBancariaPublicaDto>>("GET", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken, null, 200)).ShouldHaveSingleItem().Estado.ShouldBe("Activa");
     }

@@ -2,7 +2,7 @@ import {
   Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormControlLabel, FormHelperText, FormLabel, Radio, RadioGroup, Stack,
   TextField, Typography, useMediaQuery, useTheme,
 } from '@mui/material';
-import { esErrorApi } from '@validalo/api-client';
+import { esErrorApi, type CuentaBancariaPublicaDto } from '@validalo/api-client';
 import { useState, type SubmitEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCatalogoCompleto } from '../ficha/api';
@@ -12,12 +12,16 @@ import { useRegistrarCuenta } from '../shared/api';
 import { mensajeDeError } from '../shared/errores';
 import { useAvisos } from '../shared/useAvisos';
 import { CAMPO_POR_CODIGO, cuerpoRegistro, DATOS_VACIOS, enmascararNumero, esCodigoDeCampo, esTipoCuenta, TIPOS_CUENTA, validarCuenta, type CampoCuenta, type CodigoCampoCuenta, type DatosCuenta } from './cuentas';
+import { SelectorDeCertificacion } from './SelectorDeCertificacion';
+import { SubidaDeCertificacion } from './SubidaDeCertificacion';
 
 type CampoDeTexto = Exclude<CampoCuenta, 'tipoCuenta' | 'otroBanco' | 'bancoCodigo' | 'pais'>;
 
 /**
  * Agregar una cuenta (CB-1). Valida como el dominio antes de enviar; si la API rechaza un dato, el error va en su campo.
- * Los errores aparecen al intentar guardar, no mientras se escribe. En el celular ocupa toda la pantalla.
+ * Los errores aparecen al intentar guardar, no mientras se escribe. En el celular ocupa toda la pantalla. Cada cuenta se registra con su certificación bancaria:
+ * sin el archivo no se guarda; al guardar, la cuenta se crea y enseguida se le sube la certificación (si eso falla, la cuenta queda guardada «sin certificación»
+ * y se reintenta aquí o desde su tarjeta).
  */
 export function DialogoAgregarCuenta({ onCerrar }: { onCerrar: () => void }) {
   const { t } = useTranslation();
@@ -29,6 +33,8 @@ export function DialogoAgregarCuenta({ onCerrar }: { onCerrar: () => void }) {
   const opcionesBanco = (bancos.data ?? []).map((b) => ({ codigo: b.codigo, nombre: b.nombre }));
   const [datos, setDatos] = useState<DatosCuenta>(DATOS_VACIOS);
   const [intentado, setIntentado] = useState(false);
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [registrada, setRegistrada] = useState<CuentaBancariaPublicaDto | null>(null);
   const [errorApi, setErrorApi] = useState<CodigoCampoCuenta | null>(null);
   const locales = validarCuenta(datos);
   const errorDe = (campo: CampoCuenta): string | null => {
@@ -46,12 +52,9 @@ export function DialogoAgregarCuenta({ onCerrar }: { onCerrar: () => void }) {
   const enviar = (evento: SubmitEvent) => {
     evento.preventDefault();
     setIntentado(true);
-    if (Object.keys(locales).length > 0) return;
+    if (Object.keys(locales).length > 0 || !archivo) return;
     registro.mutate(cuerpoRegistro(datos), {
-      onSuccess: () => {
-        mostrar(t('cuentas.nueva.exito', { numero: enmascararNumero(datos.numero) }));
-        onCerrar();
-      },
+      onSuccess: setRegistrada,
       onError: (error) => setErrorApi(esErrorApi(error) && esCodigoDeCampo(error.codigo) ? error.codigo : null),
     });
   };
@@ -72,9 +75,45 @@ export function DialogoAgregarCuenta({ onCerrar }: { onCerrar: () => void }) {
     );
   };
 
+  const terminar = () => {
+    mostrar(t('cuentas.nueva.exito', { numero: enmascararNumero(datos.numero) }));
+    onCerrar();
+  };
   const errorTipo = errorDe('tipoCuenta');
   // Un error de la API que no es de un campo (sesión, red…) va arriba del formulario.
   const errorGeneral = registro.isError && !errorApi ? mensajeDeError(registro.error, t) : null;
+
+  // La cuenta ya está guardada: falta subirle la certificación (o reintentarlo, o cambiar el archivo si se devolvió).
+  if (registrada) {
+    return (
+      <Dialog open onClose={terminar} fullWidth maxWidth="sm" fullScreen={pantallaCompleta} aria-labelledby="titulo-nueva-cuenta">
+        <DialogTitle id="titulo-nueva-cuenta">{t('cuentas.nueva.titulo')}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            <Typography sx={{ color: 'text.secondary' }}>{t('cuentas.certificacion.nueva.subiendo')}</Typography>
+            {archivo ? (
+              <SubidaDeCertificacion
+                key={`${archivo.name}-${String(archivo.size)}-${String(archivo.lastModified)}`}
+                cuentaId={registrada.id}
+                archivo={archivo}
+                onLista={terminar}
+                onOtroArchivo={() => setArchivo(null)}
+                onDespues={terminar}
+                textoFallo={(motivo) => `${t('cuentas.certificacion.nueva.fallo', { motivo })} ${t('cuentas.certificacion.nueva.falloAyuda')}`}
+              />
+            ) : (
+              <SelectorDeCertificacion archivo={null} onArchivo={setArchivo} />
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="text" onClick={terminar} sx={{ color: 'text.primary' }}>
+            {t('cuentas.certificacion.nueva.despues')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open onClose={registro.isPending ? undefined : onCerrar} fullWidth maxWidth="sm" fullScreen={pantallaCompleta} aria-labelledby="titulo-nueva-cuenta">
@@ -133,6 +172,7 @@ export function DialogoAgregarCuenta({ onCerrar }: { onCerrar: () => void }) {
               {campoDeTexto('pagosCorreo', t('cuentas.nueva.pagosCorreo'), undefined, { autoComplete: 'off' })}
               {campoDeTexto('pagosTelefono', t('cuentas.nueva.pagosTelefono'), undefined, { inputMode: 'text', maxLength: 40 })}
             </Box>
+            <SelectorDeCertificacion archivo={archivo} onArchivo={setArchivo} deshabilitado={registro.isPending} error={intentado && !archivo ? t('cuentas.certificacion.nueva.requerida') : null} />
             <Typography sx={{ color: 'text.secondary' }}>
               {t('cuentas.nueva.protegido')}
             </Typography>

@@ -3,6 +3,7 @@ import type { CuentaDesignadaDto } from '@validalo/api-client';
 import { formatearFecha } from '@validalo/ui';
 import { Check, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { CertificacionDeLaCuenta } from './CertificacionDeLaCuenta';
 import { DatosCuenta, SeccionCuenta } from './DatosCuenta';
 import { nombresDe } from './modelo';
 
@@ -34,6 +35,7 @@ export function PropuestaCuenta({ cuenta, aprobadoresRequeridos, hayDesignada, p
         {t('cuentas.propuestaEl', { fecha: formatearFecha(cuenta.propuestaEn) })}
       </Typography>
       <DatosCuenta cuenta={cuenta} />
+      <CertificacionDeLaCuenta cuenta={cuenta} />
       <Alert severity="info">
         <Typography variant="body2" component="span" sx={{ display: 'block' }}>
           {progreso}

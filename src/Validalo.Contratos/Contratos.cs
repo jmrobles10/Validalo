@@ -486,10 +486,25 @@ public sealed record RegistrarCuentaBancariaDto(string? Banco, string? TipoCuent
 /// <summary>Con qué empresa está designada (o propuesta, o rechazada) una cuenta del tercero.</summary>
 public sealed record DesignacionDeCuentaDto(Guid VinculoId, Guid EmpresaId, string Empresa, string Estado, string? MotivoRechazo);
 
-/// <summary>Cuenta del tercero, siempre enmascarada, con las empresas a las que la designó.</summary>
+/// <summary>
+/// La certificación bancaria de una cuenta, como la ve su dueño (CB-1): el documento propio de la cuenta (su versión vigente, o la última devuelta si ninguna quedó vigente) y
+/// lo que la IA leyó frente a lo que el tercero declaró. <see cref="Verificacion"/>: <c>SinAnalisis</c> (aún no hay lectura: se lee cuando una empresa la recibe al designar la
+/// cuenta), <c>Coincide</c>, <c>Discrepa</c>, <c>NoVerificable</c> o <c>NoSeLee</c>. <see cref="Campos"/> trae el cruce campo por campo con el número siempre enmascarado;
+/// nunca la confianza, las alertas ni quién pagó el análisis. <see cref="DiscrepanciaCritica"/>: el número, el titular, el titular como el propio tercero o el estado de la
+/// cuenta no coinciden.
+/// </summary>
+public sealed record CertificacionDeCuentaDto(
+    Guid DocumentoId, int Version, string Estado, DateTimeOffset CargadaEn, string NombreArchivo, string Verificacion, bool DiscrepanciaCritica,
+    IReadOnlyList<CampoCruzadoDto> Campos, string? MotivoDevolucion = null);
+
+/// <summary>
+/// Cuenta del tercero, siempre enmascarada, con las empresas a las que la designó y su certificación bancaria. <see cref="FaltaCertificacion"/>: la cuenta está activa y
+/// no tiene una certificación vigente propia: no se puede designar hasta subirla (422 <c>certificacion-requerida</c>).
+/// </summary>
 public sealed record CuentaBancariaPublicaDto(Guid Id, string Banco, string TipoCuenta, string NumeroEnmascarado, string Titular,
     string IdentificacionTitular, string Moneda, string Estado, DateTimeOffset RegistradaEn, IReadOnlyList<DesignacionDeCuentaDto> DesignadaEn,
-    string? BancoCodigo = null, string? BancoSwift = null, ContactoDePagosDto? ContactoPagos = null);
+    string? BancoCodigo = null, string? BancoSwift = null, ContactoDePagosDto? ContactoPagos = null, CertificacionDeCuentaDto? Certificacion = null,
+    bool FaltaCertificacion = false);
 
 public sealed record DesignarCuentaDto(Guid CuentaId);
 
@@ -497,11 +512,22 @@ public sealed record AprobacionDeCuentaDto(string UsuarioId, string? Nombre, Dat
 
 /// <summary>
 /// Una cuenta designada (o propuesta) vista por la empresa. <see cref="Numero"/> completo solo para quien puede aprobar
-/// cuentas (<c>cuentas:aprobar</c>); para el resto, nulo.
+/// cuentas (<c>cuentas:aprobar</c>); para el resto, nulo. <see cref="Certificacion"/>: la certificación propia de la cuenta, compartida con esta empresa, con el resultado de
+/// cruzarla con lo que declaró el tercero (nula si la cuenta no tiene certificación: ver <see cref="SinCertificacion"/>).
 /// </summary>
 public sealed record CuentaDesignadaDto(Guid CuentaId, string Banco, string TipoCuenta, string NumeroEnmascarado, string? Numero, string Titular,
     string IdentificacionTitular, string Moneda, string Estado, DateTimeOffset PropuestaEn, IReadOnlyList<AprobacionDeCuentaDto> Aprobaciones,
-    DateTimeOffset? AprobadaEn, string? MotivoRechazo, string? BancoCodigo = null, string? BancoSwift = null, ContactoDePagosDto? ContactoPagos = null);
+    DateTimeOffset? AprobadaEn, string? MotivoRechazo, string? BancoCodigo = null, string? BancoSwift = null, ContactoDePagosDto? ContactoPagos = null,
+    CertificacionDeCuentaDelVinculoDto? Certificacion = null, bool SinCertificacion = false);
+
+/// <summary>
+/// La certificación de una cuenta como la ve la empresa del vínculo (CB-1): la versión que recibió, la lectura de IA que la empresa consumió cruzada con la cuenta (o
+/// <see cref="SinAnalisis"/>: la empresa no recibió esa lectura, revisión manual contra el documento) y el resumen en <see cref="Verificacion"/>
+/// (<c>SinAnalisis</c>, <c>Coincide</c>, <c>Discrepa</c>, <c>NoVerificable</c> o <c>NoSeLee</c>). <see cref="DiscrepanciaCritica"/>: el número, el titular, que el titular
+/// sea el tercero o el estado de la cuenta no coinciden; es evidencia que destaca quien aprueba, nada se bloquea solo.
+/// </summary>
+public sealed record CertificacionDeCuentaDelVinculoDto(
+    Guid DocumentoId, int Version, DateTimeOffset CargadaEn, string Verificacion, bool SinAnalisis, bool DiscrepanciaCritica, CruceDeSeccionDto? Cruce);
 
 /// <summary>
 /// La cuenta designada del vínculo: la aprobada vigente, la propuesta pendiente y la última rechazada.

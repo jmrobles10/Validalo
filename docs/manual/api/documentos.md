@@ -955,6 +955,7 @@ Respuesta `200`:
 | `sha256` | texto o null | no |  |
 | `datos` | objeto libre o null | no |  |
 | `terceroRelacionadoId` | uuid o null | no |  |
+| `cuentaBancariaId` | uuid o null | no |  |
 
 **Respuestas**
 
@@ -989,6 +990,7 @@ Campos de la respuesta `201`:
 
 **Errores de negocio que lanza**
 
+- `422` `destino-ambiguo`
 - `422` `tamano-invalido`
 
 <details><summary>Ejemplo de petición y respuesta</summary>
@@ -997,7 +999,7 @@ Campos de la respuesta `201`:
 curl -X POST "https://{host}/public/v1/boveda/documentos" \
   -H "Authorization: Bearer $TOKEN_DE_LA_SESION_DEL_TERCERO" \
   -H "Content-Type: application/json" \
-  -d '{"nombreArchivo":"Nombre de ejemplo","tamanoBytes":1,"tipoMime":"texto","tipoCanonico":"texto","tipoDocumentoTenantId":"3fa85f64-5717-4562-b3fc-2c963f66afa6","vinculoId":"3fa85f64-5717-4562-b3fc-2c963f66afa6","sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","datos":{},"terceroRelacionadoId":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
+  -d '{"nombreArchivo":"Nombre de ejemplo","tamanoBytes":1,"tipoMime":"texto","tipoCanonico":"texto","tipoDocumentoTenantId":"3fa85f64-5717-4562-b3fc-2c963f66afa6","vinculoId":"3fa85f64-5717-4562-b3fc-2c963f66afa6","sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","datos":{},"terceroRelacionadoId":"3fa85f64-5717-4562-b3fc-2c963f66afa6","cuentaBancariaId":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
 ```
 
 Respuesta `200`:

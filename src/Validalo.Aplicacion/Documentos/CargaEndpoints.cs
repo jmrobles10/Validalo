@@ -43,8 +43,12 @@ public static class CargaEndpoints
     public static async Task<IResult> Iniciar(IniciarCargaDto dto, HttpContext http, ISesiones sesiones, IAlmacenDeArchivos almacen,
         ReglasDeCarga reglas, Validalo.Aplicacion.Plataforma.ControlDePlan plan, TimeProvider reloj, CancellationToken ct)
     {
-        // El documento de una persona relacionada (ADR-0010) es un grupo aparte: solo un contacto del tercero, nunca una sesión aislada ni un token embebido.
-        var tercero = SesionDeTercero.De(http.User, dto.TerceroRelacionadoId is null ? GrupoDeAcceso.Subida : GrupoDeAcceso.Personas);
+        if (dto.CuentaBancariaId is not null && dto.TerceroRelacionadoId is not null)
+            throw ReglaDeNegocioException.Validacion("destino-ambiguo", "Un documento es de una cuenta bancaria o de una persona relacionada, no de las dos.");
+        // El documento de una persona relacionada (ADR-0010) es un grupo aparte: solo un contacto del tercero, nunca una sesión aislada ni un token embebido. La certificación
+        // de una cuenta (CB-1) es del grupo de las cuentas: tampoco una sesión aislada, y un token embebido de un expediente solo la de la cuenta de su vínculo.
+        var tercero = SesionDeTercero.De(http.User,
+            dto.CuentaBancariaId is not null ? GrupoDeAcceso.Cuentas : dto.TerceroRelacionadoId is null ? GrupoDeAcceso.Subida : GrupoDeAcceso.Personas);
         // Un token embebido de un expediente solo sube para el vínculo con el que se emitió.
         tercero.ExigirVinculoDelToken(dto.VinculoId);
         var nombre = CargaDeDocumento.NormalizarNombre(dto.NombreArchivo);
@@ -55,9 +59,11 @@ public static class CargaEndpoints
             throw ReglaDeNegocioException.Validacion("tamano-invalido", "Indica el tamaño del archivo en bytes.");
 
         // La propia persona natural que es el tercero (su representante soy yo) sube a su bóveda de siempre: no es «otra» persona.
-        var destino = dto.TerceroRelacionadoId is { } personaId && personaId != tercero.TerceroId
-            ? await ResolverDestinoDePersonaAsync(personaId, dto.TipoCanonico, tercero, sesiones, reglas, reloj, ct)
-            : await ResolverDestinoAsync(dto.TipoCanonico, dto.TipoDocumentoTenantId, dto.VinculoId, tercero, sesiones, reglas, ct);
+        var destino = dto.CuentaBancariaId is { } cuentaId
+            ? await ResolverDestinoDeCuentaAsync(cuentaId, dto.TipoCanonico, dto.TipoDocumentoTenantId, dto.VinculoId, dto.Datos, tercero, sesiones, reglas, ct)
+            : dto.TerceroRelacionadoId is { } personaId && personaId != tercero.TerceroId
+                ? await ResolverDestinoDePersonaAsync(personaId, dto.TipoCanonico, tercero, sesiones, reglas, reloj, ct)
+                : await ResolverDestinoAsync(dto.TipoCanonico, dto.TipoDocumentoTenantId, dto.VinculoId, tercero, sesiones, reglas, ct);
         destino.Reglas.ValidarDeclarado(mime, dto.TamanoBytes);
         // Un documento propio de una empresa (o el que está en su cuarentena) cuenta para el almacenamiento de su grupo: con el bloqueo suave y el límite alcanzado no se cargan más (OD-17).
         if ((destino.Tipo is { Ambito: AmbitoDocumento.PorVinculo } || destino.EnCuarentena) &&
@@ -240,6 +246,41 @@ public static class CargaEndpoints
 
         return new DestinoDeCarga(Documento.ClaveGlobal(personaId, canonico.Codigo), ahora => Documento.CrearGlobal(personaId, canonico, ahora),
             ClavesDeAlmacen.BucketBoveda, null, ReglasDeArchivo.Efectivas(canonico, null, reglas.TamanoMaximoBytes, reglas.MaximoPaginas), null);
+    }
+
+    /// <summary>
+    /// Dónde va la certificación bancaria de una cuenta (CB-1): el documento propio de la cuenta (una clave natural por cuenta), no el general del tipo. Solo del tercero de la
+    /// sesión (404 <c>cuenta-no-encontrada</c>: la cuenta de otro no se distingue de una que no existe), solo de una cuenta activa (409 <c>cuenta-retirada</c>) y, en un token
+    /// embebido de un expediente, solo de la cuenta de su vínculo (403 <c>alcance-de-sesion</c>). El tipo es siempre <c>CERTIFICACION_BANCARIA</c> (422 <c>documento-no-es-de-cuenta</c>
+    /// si piden otro) y no lleva campos. El <paramref name="vinculoId"/> es solo contexto (la empresa que paga el análisis de IA va primero), como en un global.
+    /// </summary>
+    internal static async Task<DestinoDeCarga> ResolverDestinoDeCuentaAsync(Guid cuentaId, string? tipoCanonico, Guid? tipoDocumentoTenantId, Guid? vinculoId,
+        IReadOnlyDictionary<string, System.Text.Json.JsonElement>? datos, SesionDeTercero tercero, ISesiones sesiones, ReglasDeCarga reglas, CancellationToken ct)
+    {
+        if (tipoDocumentoTenantId is not null || (!string.IsNullOrWhiteSpace(tipoCanonico) &&
+                                                  !string.Equals(tipoCanonico.Trim(), CatalogoCanonico.CertificacionBancaria, StringComparison.OrdinalIgnoreCase)))
+            throw ReglaDeNegocioException.Validacion("documento-no-es-de-cuenta",
+                "A una cuenta bancaria solo se le sube su certificación bancaria (tipo CERTIFICACION_BANCARIA).");
+        if (datos is { Count: > 0 })
+            throw ReglaDeNegocioException.Validacion("datos-no-permitidos", "Este documento no lleva campos: sube solo el archivo.");
+        var canonico = CatalogoCanonico.Requerido(CatalogoCanonico.CertificacionBancaria);
+
+        CuentaBancaria cuenta;
+        await using (var boveda = sesiones.ConsultaBoveda())
+            cuenta = await boveda.LoadAsync<CuentaBancaria>(cuentaId, ct) is { } propia && propia.TerceroId == tercero.TerceroId
+                ? propia
+                : throw ReglaDeNegocioException.NoEncontrado("cuenta-no-encontrada", "No existe esa cuenta.");
+        if (tercero.EsDeUnExpediente && !(await AlcanceDeEmbebido.CuentasDelExpedienteAsync(tercero, sesiones, ct)).EsDelAlcance(cuenta))
+            throw ReglaDeNegocioException.Prohibido("alcance-de-sesion",
+                "Esta sesión se abrió para un expediente y solo sube la certificación de la cuenta que registró para él: las demás cuentas del tercero no están a su alcance.");
+        if (cuenta.Estado != EstadoCuentaBancaria.Activa)
+            throw ReglaDeNegocioException.Conflicto("cuenta-retirada", "Esa cuenta está retirada: no se le sube una certificación.");
+
+        var contexto = vinculoId is { } id ? tercero.VinculoRequerido(id).VinculoId : (Guid?)null;
+        var nombre = Documento.NombreDeCertificacion(canonico.Nombre, cuenta.Banco, cuenta.NumeroEnmascarado);
+        return new DestinoDeCarga(Documento.ClaveDeCuenta(tercero.TerceroId, cuenta.Id),
+            ahora => Documento.CrearDeCuenta(tercero.TerceroId, cuenta.Id, canonico, nombre, ahora),
+            ClavesDeAlmacen.BucketBoveda, contexto, ReglasDeArchivo.Efectivas(canonico, null, reglas.TamanoMaximoBytes, reglas.MaximoPaginas), null);
     }
 
     /// <summary>

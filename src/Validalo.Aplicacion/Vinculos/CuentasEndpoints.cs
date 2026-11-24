@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Validalo.Aplicacion.Comun;
+using Validalo.Aplicacion.Documentos;
 using Validalo.Aplicacion.Expedientes;
 using Validalo.Aplicacion.Interesado;
 using Validalo.Contratos;
@@ -26,7 +27,7 @@ public static class CuentasPublicasEndpoints
 {
     [WolverineGet("/public/v1/boveda/cuentas-bancarias")]
     [Authorize(Policy = ReclamosTercero.Politica)]
-    public static async Task<IReadOnlyList<CuentaBancariaPublicaDto>> Listar(HttpContext http, ISesiones sesiones, CancellationToken ct)
+    public static async Task<IReadOnlyList<CuentaBancariaPublicaDto>> Listar(HttpContext http, ISesiones sesiones, IProtectorDeSecretos protector, CancellationToken ct)
     {
         var tercero = SesionDeTercero.De(http.User, GrupoDeAcceso.Cuentas);
         // Un token embebido de un expediente solo ve la cuenta de su vínculo (y solo si el expediente la exige o ya la tiene): nunca las demás del tercero.
@@ -34,9 +35,11 @@ public static class CuentasPublicasEndpoints
         await using var boveda = sesiones.ConsultaBoveda();
         var terceroId = tercero.TerceroId;
         var cuentas = await boveda.Query<CuentaBancaria>().Where(c => c.TerceroId == terceroId).OrderBy(c => c.RegistradaEn).ToListAsync(ct);
+        var certificaciones = await CertificacionesDeCuentas.DelTerceroAsync(boveda, terceroId, ct);
         await using var consulta = sesiones.ConsultaGlobal();
         var vistos = await VistaDelTercero.CargarAsync(consulta, tercero, [.. tercero.Vinculos.Select(v => v.VinculoId)], ct);
-        return [.. cuentas.Where(c => alcance is null || alcance.EsDelAlcance(c)).Select(c => APublica(c, vistos))];
+        var dueno = await consulta.LoadAsync<Tercero>(terceroId, ct);
+        return [.. cuentas.Where(c => alcance is null || alcance.EsDelAlcance(c)).Select(c => APublica(c, vistos, certificaciones.GetValueOrDefault(c.Id), dueno, protector))];
     }
 
     [WolverinePost("/public/v1/boveda/cuentas-bancarias")]
@@ -74,13 +77,14 @@ public static class CuentasPublicasEndpoints
         await using var boveda = sesiones.Boveda();
         boveda.Store(cuenta);
         await boveda.SaveChangesAsync(ct);
-        return TypedResults.Created($"/public/v1/boveda/cuentas-bancarias/{cuenta.Id}", APublica(cuenta, []));
+        // Nace sin certificación (el Portal la sube enseguida, en el mismo diálogo): hasta entonces no se puede designar y la cuenta lo dice (FaltaCertificacion).
+        return TypedResults.Created($"/public/v1/boveda/cuentas-bancarias/{cuenta.Id}", APublica(cuenta, [], null, null, protector));
     }
 
     /// <summary>Retira una cuenta. Si está designada o propuesta con alguna empresa, 409 <c>cuenta-en-uso</c>: primero designa otra.</summary>
     [WolverinePost("/public/v1/boveda/cuentas-bancarias/{id}/retirar")]
     [Authorize(Policy = ReclamosTercero.Politica)]
-    public static async Task<CuentaBancariaPublicaDto> Retirar(Guid id, HttpContext http, ISesiones sesiones, TimeProvider reloj, CancellationToken ct)
+    public static async Task<CuentaBancariaPublicaDto> Retirar(Guid id, HttpContext http, ISesiones sesiones, IProtectorDeSecretos protector, TimeProvider reloj, CancellationToken ct)
     {
         var tercero = SesionDeTercero.De(http.User, GrupoDeAcceso.Cuentas);
         // Retirar una cuenta es de la cuenta del tercero, no de un expediente: el token de un expediente solo ve y designa la de su vínculo.
@@ -98,17 +102,19 @@ public static class CuentasPublicasEndpoints
         cuenta.Retirar(reloj.GetUtcNow());
         boveda.Store(cuenta);
         await boveda.SaveChangesAsync(ct);
-        return APublica(cuenta, vistos);
+        var certificacion = await boveda.Query<Documento>().FirstOrDefaultAsync(d => d.CuentaBancariaId == id, ct);
+        return APublica(cuenta, vistos, certificacion, await consulta.LoadAsync<Tercero>(tercero.TerceroId, ct), protector);
     }
 
     /// <summary>
-    /// El tercero designa una cuenta suya, activa, para cobrarle a la empresa de este vínculo. Exige tener la certificación
-    /// bancaria en la bóveda (422 <c>certificacion-requerida</c>). Queda propuesta hasta que la empresa la apruebe.
+    /// El tercero designa una cuenta suya, activa, para cobrarle a la empresa de este vínculo. Exige que <b>esa cuenta</b> tenga su certificación bancaria vigente (422
+    /// <c>certificacion-requerida</c>: la de otra cuenta, o la general sin cuenta de antes, no sirve). Queda propuesta hasta que la empresa la apruebe y, en la misma transacción,
+    /// se le comparte la certificación de la cuenta (y solo esa) para que la IA la lea y la empresa la vea junto a la cuenta (CB-1).
     /// </summary>
     [WolverinePost("/public/v1/vinculos/{id}/cuenta-designada")]
     [Authorize(Policy = ReclamosTercero.Politica)]
     public static async Task<CuentaBancariaPublicaDto> Designar(Guid id, DesignarCuentaDto dto, HttpContext http, ISesiones sesiones, IProtectorDeSecretos protector,
-        IProtectorDeCamposDelGrupo campos, TimeProvider reloj, CancellationToken ct)
+        IProtectorDeCamposDelGrupo campos, IContextoSolicitud contexto, IMessageBus mensajes, TimeProvider reloj, CancellationToken ct)
     {
         var tercero = SesionDeTercero.De(http.User, GrupoDeAcceso.CuentaDesignada);
         var enSesion = tercero.VinculoRequerido(id);
@@ -125,31 +131,39 @@ public static class CuentasPublicasEndpoints
                     "Esta sesión se abrió para un expediente y solo designa la cuenta que registró para él: las demás cuentas del tercero no están a su alcance.");
             if (cuenta.Estado != EstadoCuentaBancaria.Activa)
                 throw ReglaDeNegocioException.Conflicto("cuenta-retirada", "Esa cuenta está retirada.");
-            var terceroId = tercero.TerceroId;
-            var certificacion = await boveda.Query<Documento>()
-                .Where(d => d.TerceroId == terceroId && d.TipoCanonico == "CERTIFICACION_BANCARIA").FirstOrDefaultAsync(ct);
-            if (certificacion?.VersionActual is null)
-                throw ReglaDeNegocioException.Validacion("certificacion-requerida", "Sube tu certificación bancaria antes de designar una cuenta.");
+            // Cada cuenta tiene su certificación (CB-1): designar exige la de esta cuenta, no cualquiera de la bóveda.
+            var cuentaId = cuenta.Id;
+            Documento.CertificacionVigenteRequerida(cuentaId, await boveda.Query<Documento>().FirstOrDefaultAsync(d => d.CuentaBancariaId == cuentaId, ct));
         }
 
         await Peticiones.ConReintentosAsync(async () =>
         {
-            await using var sesion = sesiones.ParaTenant(enSesion.TenantId);
+            var ahora = reloj.GetUtcNow();
+            await using var sesion = sesiones.ParaTenant(enSesion.TenantId, mensajes);
             var stream = await sesion.Events.FetchForWriting<Vinculo>(id, ct);
             if (stream.Aggregate is not { } vinculo || vinculo.TerceroId != tercero.TerceroId)
                 throw ReglaDeNegocioException.NoEncontrado("vinculo-no-encontrado", "No existe ese vínculo.");
-            if (vinculo.ProponerCuenta(ParaDesignar(cuenta, enSesion.TenantId, protector, campos), reloj.GetUtcNow()) is { } propuesta)
-            {
+            if (vinculo.ProponerCuenta(ParaDesignar(cuenta, enSesion.TenantId, protector, campos), ahora) is { } propuesta)
                 stream.AppendOne(propuesta);
-                await sesion.SaveChangesAsync(ct);
+
+            // La empresa recibe la certificación de esta cuenta (la versión actual) junto con la propuesta: de ahí la lee la IA y la ve quien aprueba. Idempotente.
+            var compartidos = await ComparticionDeDocumentos.CompartirCertificacionDeCuentaAsync(sesion, vinculo, enSesion.TenantId, cuenta.Id, OrigenComparticion.Automatica, ahora, ct);
+            if (compartidos.Count > 0)
+            {
+                await mensajes.PublishAsync(new Documentos.CalcularVigenciasDelVinculo(tercero.TerceroId, id));
+                await mensajes.PublishAsync(new Ia.AnalizarIaDelVinculo(tercero.TerceroId, id));
+                await ComparticionDeDocumentos.PedirSincronizacionAsync(mensajes, [(enSesion.TenantId, id)], contexto);
             }
 
+            await sesion.SaveChangesAsync(ct);
             return true;
         }, 5);
 
         await using var consulta = sesiones.ConsultaGlobal();
         var vistos = await VistaDelTercero.CargarAsync(consulta, tercero, [.. tercero.Vinculos.Select(v => v.VinculoId)], ct);
-        return APublica(cuenta, vistos);
+        await using var lectura = sesiones.ConsultaBoveda();
+        var delTercero = await lectura.Query<Documento>().FirstOrDefaultAsync(d => d.CuentaBancariaId == cuenta.Id, ct);
+        return APublica(cuenta, vistos, delTercero, await consulta.LoadAsync<Tercero>(tercero.TerceroId, ct), protector);
     }
 
     /// <summary>
@@ -162,7 +176,7 @@ public static class CuentasPublicasEndpoints
 
     private static ContactoDePagosDto? ADto(ContactoDePagos? c) => c is null ? null : new ContactoDePagosDto(c.Nombre, c.Correo, c.Telefono);
 
-    private static CuentaBancariaPublicaDto APublica(CuentaBancaria c, IReadOnlyList<VinculoVisto> vistos) =>
+    private static CuentaBancariaPublicaDto APublica(CuentaBancaria c, IReadOnlyList<VinculoVisto> vistos, Documento? certificacion, Tercero? dueno, IProtectorDeSecretos protector) =>
         new(c.Id, c.Banco, c.TipoCuenta.ToString(), c.NumeroEnmascarado, c.Titular, c.IdentificacionTitular, c.Moneda, c.Estado.ToString(),
             c.RegistradaEn,
             [
@@ -170,7 +184,8 @@ public static class CuentasPublicasEndpoints
                     .Where(d => d?.Cuenta.CuentaId == c.Id)
                     .Select(d => new DesignacionDeCuentaDto(v.Vinculo.Id, v.Vinculo.EmpresaId, v.Empresa?.Nombre ?? string.Empty, d!.Estado.ToString(),
                         d.MotivoRechazo)))
-            ], c.BancoCodigo, c.BancoSwift, ADto(c.ContactoPagos));
+            ], c.BancoCodigo, c.BancoSwift, ADto(c.ContactoPagos), CertificacionesDeCuentas.ParaElTercero(c, certificacion, dueno, protector.Desproteger),
+            c.Estado == EstadoCuentaBancaria.Activa && !CertificacionesDeCuentas.TieneVigente(certificacion));
 }
 
 /// <summary>La empresa ve y decide la cuenta designada de un vínculo (CB-2).</summary>
@@ -235,6 +250,24 @@ public static class CuentaDesignadaEndpoints
             ? new Dictionary<string, string>()
             : (await empresa.Sesion.LoadManyAsync<Usuario>(ct, ids)).ToDictionary(u => u.Id.ToString(), u => u.Nombre);
 
+        // La certificación de cada cuenta del vínculo (CB-1), con su cruce si la empresa recibió la lectura de IA de esa versión: la lee la bóveda y, con ella, el tercero.
+        var cuentas = new[] { vinculo.CuentaDesignada, vinculo.CuentaPropuesta, vinculo.CuentaRechazada }.Where(c => c is not null).Select(c => c!.Cuenta.CuentaId).Distinct().ToArray();
+        var certificaciones = new Dictionary<Guid, CertificacionDeCuentaDelVinculoDto?>();
+        if (cuentas.Length > 0)
+        {
+            await using var boveda = empresa.ConsultaBoveda();
+            var documentos = await CertificacionesDeCuentas.DelTerceroAsync(boveda, vinculo.TerceroId, ct);
+            var tercero = await empresa.Sesion.LoadAsync<Tercero>(vinculo.TerceroId, ct);
+            foreach (var designada in new[] { vinculo.CuentaDesignada, vinculo.CuentaPropuesta, vinculo.CuentaRechazada }.Where(c => c is not null))
+            {
+                var copia = designada!.Cuenta;
+                if (certificaciones.ContainsKey(copia.CuentaId))
+                    continue;
+                certificaciones[copia.CuentaId] = await CertificacionesDeCuentas.ParaLaEmpresaAsync(empresa.Sesion, empresa.EmpresaId, vinculo, copia,
+                    documentos.GetValueOrDefault(copia.CuentaId), tercero, () => campos.Desproteger(contexto.TenantRequerido(), copia.NumeroProtegido), ct);
+            }
+        }
+
         CuentaDesignadaDto? Dto(CuentaDesignada? c) => c is null
             ? null
             : new CuentaDesignadaDto(c.Cuenta.CuentaId, c.Cuenta.Banco, c.Cuenta.TipoCuenta, CuentaBancaria.Enmascarar(c.Cuenta.Ultimos4),
@@ -242,7 +275,8 @@ public static class CuentaDesignadaEndpoints
                 c.Cuenta.Moneda, c.Estado.ToString(), c.PropuestaEn,
                 [.. c.Aprobaciones.Select(a => new AprobacionDeCuentaDto(a.UsuarioId, nombres.GetValueOrDefault(a.UsuarioId), a.Fecha))],
                 c.AprobadaEn, c.MotivoRechazo, c.Cuenta.BancoCodigo, c.Cuenta.BancoSwift,
-                c.Cuenta.ContactoPagos is null ? null : new ContactoDePagosDto(c.Cuenta.ContactoPagos.Nombre, c.Cuenta.ContactoPagos.Correo, c.Cuenta.ContactoPagos.Telefono));
+                c.Cuenta.ContactoPagos is null ? null : new ContactoDePagosDto(c.Cuenta.ContactoPagos.Nombre, c.Cuenta.ContactoPagos.Correo, c.Cuenta.ContactoPagos.Telefono),
+                certificaciones.GetValueOrDefault(c.Cuenta.CuentaId), certificaciones.GetValueOrDefault(c.Cuenta.CuentaId) is null);
 
         var usuario = contexto.ActorTipo == ActorTipo.Usuario ? contexto.ActorId : null;
         var puedes = puedeAprobar && usuario is not null && vinculo.CuentaPropuesta is { } propuesta &&

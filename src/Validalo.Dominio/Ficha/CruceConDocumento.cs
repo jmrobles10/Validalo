@@ -779,3 +779,33 @@ public static class Normalizacion
 
 /// <summary>Lo declarado de una cuenta bancaria para cruzarla con su certificación; el número va en claro y solo en memoria (FD-5).</summary>
 public sealed record DatosDeCuentaParaCruce(string Banco, string TipoCuenta, string Numero, string Titular, string IdentificacionTitular);
+
+/// <summary>
+/// Qué dice la certificación de una cuenta frente a lo que el tercero declaró de ella (CB-1): <see cref="SinAnalisis"/> si aún no hay lectura (nadie la recibió con plan de IA, o
+/// falló); <see cref="NoSeLee"/> si el documento no se lee con seguridad; <see cref="Discrepa"/> si algún campo no coincide; <see cref="NoVerificable"/> si no hay diferencias pero
+/// algún dato crítico no se pudo verificar; <see cref="Coincide"/> si todo lo crítico coincide.
+/// </summary>
+public enum VerificacionDeCuenta
+{
+    SinAnalisis,
+    Coincide,
+    Discrepa,
+    NoVerificable,
+    NoSeLee
+}
+
+/// <summary>El resumen en una palabra del cruce de una cuenta con su certificación (lo que ven el tercero y quien aprueba la cuenta). Función pura.</summary>
+public static class ResumenDeCruceDeCuenta
+{
+    public static VerificacionDeCuenta De(CruceDeSeccion? cruce)
+    {
+        if (cruce is null)
+            return VerificacionDeCuenta.SinAnalisis;
+        if (!cruce.Legible)
+            return VerificacionDeCuenta.NoSeLee;
+        if (cruce.Discrepancias > 0)
+            return VerificacionDeCuenta.Discrepa;
+        // El banco y el tipo de cuenta son evidencia: que no se lean no impide dar la cuenta por verificada si lo crítico coincide.
+        return cruce.Campos.Any(c => c.Critico && c.Resultado == ResultadoDeCruce.NoVerificable) ? VerificacionDeCuenta.NoVerificable : VerificacionDeCuenta.Coincide;
+    }
+}

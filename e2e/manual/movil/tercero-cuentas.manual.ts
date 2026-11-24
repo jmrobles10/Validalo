@@ -57,13 +57,14 @@ recorrido(
         '«Guardar cuenta» la registra.',
       resaltar: nueva,
       variantes: [
-        { cuando: 'Designas la cuenta para una empresa', entonces: 'Hace falta certificación bancaria: la pantalla te lleva a subirla antes de designarla.' },
+        { cuando: 'No adjuntas la certificación bancaria', entonces: 'La cuenta no se guarda: cada cuenta lleva su propia certificación, la que expide tu banco para esa cuenta.' },
       ],
     });
 
-    // 3. Guardar.
+    // 3. Guardar con la certificación de la cuenta.
+    await nueva.getByTestId('entrada-archivo').setInputFiles(pdf('Certificacion Bancolombia Tornillo'));
     await nueva.getByRole('button', { name: 'Guardar cuenta' }).click();
-    await expect(page.getByText(/· \*\*\*\*5678 ·/)).toBeVisible();
+    await expect(page.getByText(/· \*\*\*\*5678 ·/)).toBeVisible({ timeout: 30_000 });
     await paso(page, {
       titulo: 'Comprueba la cuenta guardada',
       explicacion:

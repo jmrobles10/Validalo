@@ -1,4 +1,4 @@
-import { esErrorApi, type AprobacionDeCuentaDto, type CuentaDesignadaDto } from '@validalo/api-client';
+import { esErrorApi, type AprobacionDeCuentaDto, type CertificacionDeCuentaDelVinculoDto, type CuentaDesignadaDto } from '@validalo/api-client';
 import type { EstadoCuentaDesignada } from '@validalo/ui';
 import type { TFunction } from 'i18next';
 import { cuentas } from '../../../i18n/es-CO-cuentas';
@@ -38,3 +38,15 @@ export function nombresDe(aprobaciones: readonly AprobacionDeCuentaDto[], t: TFu
 /** Si quien consulta ya aprobó la propuesta (la API no le deja aprobar dos veces). */
 export const yaAprobo = (cuenta: CuentaDesignadaDto, usuarioId: string | null) =>
   usuarioId !== null && cuenta.aprobaciones.some((a) => a.usuarioId.toLowerCase() === usuarioId.toLowerCase());
+
+const VERIFICACIONES = ['SinAnalisis', 'Coincide', 'Discrepa', 'NoVerificable', 'NoSeLee'] as const;
+
+/** Lo que concluyó la lectura de la certificación frente a la cuenta (el resumen de `CertificacionDeCuentaDelVinculoDto.verificacion`). */
+export type VerificacionDeCuenta = (typeof VERIFICACIONES)[number];
+
+export const esVerificacionDeCuenta = (valor: string): valor is VerificacionDeCuenta => VERIFICACIONES.some((v) => v === valor);
+
+/** Las etiquetas de los campos críticos que difieren entre la cuenta y su certificación (número, titular, que el titular sea el tercero, estado de la cuenta). */
+export function camposCriticosQueDifieren(certificacion: Pick<CertificacionDeCuentaDelVinculoDto, 'cruce'>): string[] {
+  return (certificacion.cruce?.campos ?? []).filter((c) => c.critico && c.resultado === 'Discrepa').map((c) => c.etiqueta);
+}

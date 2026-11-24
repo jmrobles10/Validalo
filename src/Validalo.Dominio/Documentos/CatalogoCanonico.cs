@@ -94,6 +94,9 @@ public sealed record TipoDocumentoCanonico(
 /// <summary>Catálogo canónico (Anexo A de docs/03, fuente única de códigos). Los códigos retirados no existen aquí.</summary>
 public static class CatalogoCanonico
 {
+    /// <summary>Certificación bancaria: es de <b>una cuenta</b> del tercero (documento propio de la cuenta, <see cref="Documento.CuentaBancariaId"/>) además del documento general sin cuenta de antes.</summary>
+    public const string CertificacionBancaria = "CERTIFICACION_BANCARIA";
+
     /// <summary>Solo PDF: documentos que se expiden o descargan como PDF (RUT, Cámara, estados financieros, renta). Va antes de <see cref="Tipos"/>: los estáticos se inicializan en orden.</summary>
     private static readonly string[] SoloPdf = [InspectorDeArchivos.Pdf];
 

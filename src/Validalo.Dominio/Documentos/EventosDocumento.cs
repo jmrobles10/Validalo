@@ -79,7 +79,14 @@ public sealed record DocumentoCreado(
     Guid? EmpresaId,
     Guid? VinculoId,
     DateTimeOffset Fecha,
-    bool EnCuarentena = false);
+    bool EnCuarentena = false,
+    Guid? CuentaBancariaId = null);
+
+/// <summary>
+/// El documento <c>CERTIFICACION_BANCARIA</c> que el tercero ya tenía sin cuenta quedó ligado a su única cuenta activa (certificación por cuenta, CB-1): desde aquí es la
+/// certificación de esa cuenta, con su clave propia, y conserva sus versiones y sus comparticiones. Lo emite la migración de datos, una sola vez por documento.
+/// </summary>
+public sealed record DocumentoLigadoACuenta(Guid CuentaBancariaId, string NombreTipo, DateTimeOffset Fecha);
 
 /// <summary>
 /// El binario ya está en su clave definitiva (confirmado por hash); la versión nace <c>Recibida</c>. Con datos declarados

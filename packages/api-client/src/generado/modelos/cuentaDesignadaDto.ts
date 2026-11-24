@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { AprobacionDeCuentaDto } from './aprobacionDeCuentaDto';
+import type { CertificacionDeCuentaDelVinculoDto } from './certificacionDeCuentaDelVinculoDto';
 import type { ContactoDePagosDto } from './contactoDePagosDto';
 
 export interface CuentaDesignadaDto {
@@ -29,4 +30,6 @@ export interface CuentaDesignadaDto {
   /** @nullable */
   bancoSwift?: string | null;
   contactoPagos?: null | ContactoDePagosDto;
+  certificacion?: null | CertificacionDeCuentaDelVinculoDto;
+  sinCertificacion?: boolean;
 }

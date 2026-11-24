@@ -26,10 +26,14 @@ public sealed class RequisitosCuentasApiTests(ApiFixture fixture, ITestOutputHel
         (await CodigoAsync(await TerceroAsync("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken,
             new RegistrarCuentaBancariaDto("Bancolombia", "Nómina", "0311234567", "Aceros", "NIT 900123456"), 422))).ShouldBe("tipo-cuenta-invalido");
 
-        // Designarla exige la certificación bancaria en la bóveda.
+        // Una cuenta nace sin certificación y no se puede designar hasta que tenga la suya (CB-1): la certificación general de la bóveda no sirve.
+        cuenta.FaltaCertificacion.ShouldBeTrue();
+        cuenta.Certificacion.ShouldBeNull();
         var designar = $"/public/v1/vinculos/{vinculo.Id}/cuenta-designada";
         (await CodigoAsync(await TerceroAsync("POST", designar, sesion.AccessToken, new DesignarCuentaDto(cuenta.Id), 422))).ShouldBe("certificacion-requerida");
-        await SubirAsync(sesion, "CERTIFICACION_BANCARIA", Pdf("Certificación Bancolombia"));
+        await SubirAsync(sesion, "CERTIFICACION_BANCARIA", Pdf("Certificación general"));
+        (await CodigoAsync(await TerceroAsync("POST", designar, sesion.AccessToken, new DesignarCuentaDto(cuenta.Id), 422))).ShouldBe("certificacion-requerida");
+        await SubirCertificacionAsync(sesion, cuenta.Id, Pdf("Certificación Bancolombia"));
         var propuesta = await TerceroAsync<CuentaBancariaPublicaDto>("POST", designar, sesion.AccessToken, new DesignarCuentaDto(cuenta.Id), 200);
         propuesta.DesignadaEn.ShouldHaveSingleItem().Estado.ShouldBe("Propuesta");
 
@@ -67,6 +71,8 @@ public sealed class RequisitosCuentasApiTests(ApiFixture fixture, ITestOutputHel
         // Una cuenta nueva se rechaza con motivo: el tercero lo ve y la designada sigue siendo la anterior.
         var nueva = await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken,
             new RegistrarCuentaBancariaDto("Davivienda", "Corriente", "4700 1234 9999", "Aceros del Norte S.A.S.", "NIT 900123456"), 201);
+        (await CodigoAsync(await TerceroAsync("POST", designar, sesion.AccessToken, new DesignarCuentaDto(nueva.Id), 422))).ShouldBe("certificacion-requerida"); // la de la otra cuenta no es la suya
+        await SubirCertificacionAsync(sesion, nueva.Id, Pdf("Certificación Davivienda"));
         await TerceroAsync<CuentaBancariaPublicaDto>("POST", designar, sesion.AccessToken, new DesignarCuentaDto(nueva.Id), 200);
         (await CodigoAsync(await ApiAsync("POST", $"{url}/rechazar", Delegado(e.Norte, e.Carlos), new MotivoDto(" "), 422))).ShouldBe("motivo-requerido");
         var rechazada = await ApiAsync<CuentaDesignadaDelVinculoDto>("POST", $"{url}/rechazar", Delegado(e.Norte, e.Carlos),
@@ -114,7 +120,7 @@ public sealed class RequisitosCuentasApiTests(ApiFixture fixture, ITestOutputHel
         var designar = $"/public/v1/vinculos/{vinculo.Id}/cuenta-designada";
         var primera = await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken,
             new RegistrarCuentaBancariaDto("Bancolombia", "Ahorros", "031-123456-78", "Aceros del Norte S.A.S.", "NIT 900123456"), 201);
-        await SubirAsync(sesion, "CERTIFICACION_BANCARIA", Pdf("Certificación Bancolombia"));
+        await SubirCertificacionAsync(sesion, primera.Id, Pdf("Certificación Bancolombia"));
         await TerceroAsync<CuentaBancariaPublicaDto>("POST", designar, sesion.AccessToken, new DesignarCuentaDto(primera.Id), 200);
         await ApiAsync<CuentaDesignadaDelVinculoDto>("POST", $"{url}/rechazar", Delegado(e.Norte, e.Carlos), new MotivoDto("El titular no coincide con la certificación."), 200);
         var tras = await ApiAsync<ExpedienteDto>("GET", $"/api/v1/expedientes/{expedienteId}", Admin(e.Norte), null, 200);
@@ -123,6 +129,7 @@ public sealed class RequisitosCuentasApiTests(ApiFixture fixture, ITestOutputHel
         // Designa otra: con una sola aprobación aún espera; con la segunda persona la cuenta queda designada y el expediente se aprueba solo.
         var segunda = await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken,
             new RegistrarCuentaBancariaDto("Davivienda", "Corriente", "4700 1234 9999", "Aceros del Norte S.A.S.", "NIT 900123456"), 201);
+        await SubirCertificacionAsync(sesion, segunda.Id, Pdf("Certificación Davivienda"));
         await TerceroAsync<CuentaBancariaPublicaDto>("POST", designar, sesion.AccessToken, new DesignarCuentaDto(segunda.Id), 200);
         await ApiAsync<CuentaDesignadaDelVinculoDto>("POST", $"{url}/aprobar", Delegado(e.Norte, e.Carlos), new { }, 200);
         (await ApiAsync<ExpedienteDto>("GET", $"/api/v1/expedientes/{expedienteId}", Admin(e.Norte), null, 200)).Estado.ShouldBe("EnRevision");
@@ -155,7 +162,7 @@ public sealed class RequisitosCuentasApiTests(ApiFixture fixture, ITestOutputHel
         var url = $"/api/v1/vinculos/{vinculo.Id}/cuenta-designada";
         var cuenta = await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken,
             new RegistrarCuentaBancariaDto("Bancolombia", "Ahorros", "031-123456-78", "Aceros del Norte S.A.S.", "NIT 900123456"), 201);
-        await SubirAsync(sesion, "CERTIFICACION_BANCARIA", Pdf("Certificación Bancolombia"));
+        await SubirCertificacionAsync(sesion, cuenta.Id, Pdf("Certificación Bancolombia"));
         await TerceroAsync<CuentaBancariaPublicaDto>("POST", $"/public/v1/vinculos/{vinculo.Id}/cuenta-designada", sesion.AccessToken, new DesignarCuentaDto(cuenta.Id), 200);
         await ApiAsync<CuentaDesignadaDelVinculoDto>("POST", $"{url}/aprobar", Delegado(e.Norte, e.Carlos), new { }, 200);
         await ApiAsync<CuentaDesignadaDelVinculoDto>("POST", $"{url}/aprobar", Delegado(e.Norte, olga), new { }, 200);

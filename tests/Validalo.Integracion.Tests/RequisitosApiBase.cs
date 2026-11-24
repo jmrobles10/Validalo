@@ -342,16 +342,23 @@ public abstract partial class RequisitosApiBase(ApiFixture fixture, ITestOutputH
     }
 
     /// <summary>Paso 1, PUT directo a MinIO con la URL prefirmada y paso 2 (documento global del canónico).</summary>
-    protected async Task<ConfirmacionCargaDto> SubirAsync(SesionTerceroDto sesion, string canonico, byte[] contenido)
+    protected Task<ConfirmacionCargaDto> SubirAsync(SesionTerceroDto sesion, string canonico, byte[] contenido) =>
+        SubirAsync(sesion, new IniciarCargaDto(canonico.ToLowerInvariant() + ".pdf", contenido.Length, "application/pdf", TipoCanonico: canonico), contenido);
+
+    /// <summary>La certificación bancaria <b>de una cuenta</b> (CB-1): el documento propio de la cuenta, con sus versiones (paso 1 con <c>cuentaBancariaId</c>, PUT y paso 2).</summary>
+    protected Task<ConfirmacionCargaDto> SubirCertificacionAsync(SesionTerceroDto sesion, Guid cuentaId, byte[] contenido, Guid? vinculoId = null) =>
+        SubirAsync(sesion, new IniciarCargaDto("certificacion-bancaria.pdf", contenido.Length, "application/pdf", VinculoId: vinculoId, CuentaBancariaId: cuentaId), contenido);
+
+    /// <summary>Los dos pasos de la carga con el cuerpo del paso 1 que se indique.</summary>
+    protected async Task<ConfirmacionCargaDto> SubirAsync(SesionTerceroDto sesion, IniciarCargaDto inicio, byte[] contenido, string? token = null)
     {
-        var carga = await TerceroAsync<CargaPrefirmadaDto>("POST", "/public/v1/boveda/documentos", sesion.AccessToken,
-            new IniciarCargaDto(canonico.ToLowerInvariant() + ".pdf", contenido.Length, "application/pdf", TipoCanonico: canonico), 201);
+        var carga = await TerceroAsync<CargaPrefirmadaDto>("POST", "/public/v1/boveda/documentos", token ?? sesion.AccessToken, inicio, 201);
         using var put = new HttpRequestMessage(HttpMethod.Put, carga.Carga!.Url) { Content = new ByteArrayContent(contenido) };
         put.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(carga.Carga.Cabeceras["Content-Type"]);
         using var respuesta = await Http.SendAsync(put);
         respuesta.StatusCode.ShouldBe(HttpStatusCode.OK);
         return await TerceroAsync<ConfirmacionCargaDto>("POST",
-            $"/public/v1/boveda/documentos/{carga.DocumentoId}/versiones/{carga.Version}/confirmar", sesion.AccessToken, null, 200);
+            $"/public/v1/boveda/documentos/{carga.DocumentoId}/versiones/{carga.Version}/confirmar", token ?? sesion.AccessToken, null, 200);
     }
 
     /// <summary>La adjunción de versiones llega por el outbox: espera (hasta 20 s) a que el expediente cumpla la condición.</summary>

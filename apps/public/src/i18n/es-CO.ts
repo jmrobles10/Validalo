@@ -4,6 +4,7 @@ import { camposFicha, fichaObservada, ratificarSeccion, seccionEnExpediente } fr
 import { declaracionPep } from './es-CO-ficha-pep';
 import { evaluaciones } from './es-CO-evaluaciones';
 import { notificaciones } from './es-CO-notificaciones';
+import { certificacionDeCuenta } from './es-CO-cuentas-certificacion';
 import { personas } from './es-CO-personas';
 import { erroresPrivacidad, privacidad } from './es-CO-privacidad';
 
@@ -394,7 +395,7 @@ export const esCO = {
     sub: 'Registra tus cuentas una sola vez y elige en cuál te paga cada empresa. Cada empresa aprueba la cuenta antes de usarla.',
     agregar: 'Agregar cuenta',
     vacio: 'Aún no tienes cuentas',
-    vacioTexto: 'Agrega la cuenta en la que quieres recibir tus pagos. Para designarla con una empresa también necesitas tu certificación bancaria en la bóveda.',
+    vacioTexto: 'Agrega la cuenta en la que quieres recibir tus pagos con su certificación bancaria: cada cuenta lleva la suya y la usamos para verificar los datos que escribes.',
     tipos: { Ahorros: 'Ahorros', Corriente: 'Corriente' },
     resumen: '{{tipo}} · {{numero}} · {{moneda}}',
     titularCon: 'Titular: {{titular}} · {{identificacion}}',
@@ -457,10 +458,11 @@ export const esCO = {
       opcion: '{{banco}} · {{tipo}} {{numero}}',
       yaDesignada: 'Ya es tu cuenta con {{empresa}}.',
       yaPropuesta: 'Ya está pendiente de su aprobación.',
+      sinCertificacion: 'Falta su certificación bancaria: súbela en la tarjeta de la cuenta para poder designarla.',
       confirmar: 'Designar cuenta',
       exito: 'Designaste {{cuenta}} para {{empresa}}. Queda pendiente de su aprobación.',
-      subirCertificacion: 'Subir certificación bancaria',
     },
+    certificacion: certificacionDeCuenta,
     retiro: {
       titulo: 'Retirar la cuenta {{cuenta}}',
       texto: 'Ya no podrás designarla con ninguna empresa. Si una empresa la tiene designada o por aprobar, primero elige otra cuenta para esa empresa.',
@@ -791,7 +793,8 @@ export const esCO = {
     'numero-cuenta-invalido': 'El número de cuenta lleva entre 6 y 20 dígitos; puedes separarlos con espacios o guiones.',
     'moneda-invalida': 'La moneda es un código de tres letras, por ejemplo COP o USD.',
     'certificacion-requerida':
-      'Para designar una cuenta primero sube tu certificación bancaria a tu bóveda. Cuando la tengas, vuelve aquí y elige la cuenta.',
+      'Esta cuenta aún no tiene su certificación bancaria. Súbela en la tarjeta de la cuenta y vuelve a designarla: cada cuenta lleva la suya.',
+    'documento-no-es-de-cuenta': 'A una cuenta bancaria solo se le sube su certificación bancaria.',
     'cuenta-ya-designada': 'Esa ya es tu cuenta con esta empresa. Si quieres cambiarla, elige otra.',
     'cuenta-retirada': 'Esa cuenta está retirada. Elige otra o agrega una nueva.',
     'cuenta-no-encontrada': 'Esa cuenta ya no existe. Recarga la página.',

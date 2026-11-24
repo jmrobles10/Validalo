@@ -104,10 +104,17 @@ public sealed record ConfirmacionPlantillaDto(bool Duplicado, PlantillaVersionDt
 /// <remarks>
 /// <see cref="Datos"/>: solo para tipos <c>ArchivoYFormulario</c> (TD-4): los valores de los campos (texto, número, fecha
 /// <c>aaaa-mm-dd</c>, opción o <c>true</c>/<c>false</c>), validados aquí y guardados con la versión al confirmar.
+/// <para>
+/// <see cref="CuentaBancariaId"/> (CB-1): la certificación bancaria <b>de esa cuenta</b> del tercero. Es un documento propio de la cuenta (cada cuenta tiene el suyo, con sus
+/// versiones) y por eso <see cref="TipoCanonico"/> es <c>CERTIFICACION_BANCARIA</c> (o se omite). 404 <c>cuenta-no-encontrada</c> si no es una cuenta del tercero de la sesión,
+/// 409 <c>cuenta-retirada</c> si está retirada. La certificación se comparte con las empresas a las que la cuenta está designada o propuesta (nunca antes) y la IA la lee
+/// cuando una empresa la recibe.
+/// </para>
 /// </remarks>
 public sealed record IniciarCargaDto(
     string NombreArchivo, long TamanoBytes, string TipoMime, string? TipoCanonico = null, Guid? TipoDocumentoTenantId = null,
-    Guid? VinculoId = null, string? Sha256 = null, IReadOnlyDictionary<string, JsonElement>? Datos = null, Guid? TerceroRelacionadoId = null);
+    Guid? VinculoId = null, string? Sha256 = null, IReadOnlyDictionary<string, JsonElement>? Datos = null, Guid? TerceroRelacionadoId = null,
+    Guid? CuentaBancariaId = null);
 
 /// <summary>
 /// Versión solo de formulario (<c>POST /public/v1/boveda/formularios</c>, TD-4): el tipo del tenant (por id, o el

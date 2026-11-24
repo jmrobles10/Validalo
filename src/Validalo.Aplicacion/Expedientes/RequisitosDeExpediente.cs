@@ -373,9 +373,7 @@ public static class RequisitosDeExpediente
             return Vigente(documentos.FirstOrDefault(d => d.Ambito == AmbitoDocumento.PorVinculo && !d.EnCuarentena && d.VinculoId == vinculoId &&
                                                           d.TipoDocumentoTenantId == tipoDocumentoTenantId), vinculoId);
 
-        var global = tipoCanonico is null
-            ? null
-            : Vigente(documentos.FirstOrDefault(d => d.Ambito == AmbitoDocumento.Global && d.TipoCanonico == tipoCanonico), vinculoId);
+        var global = tipoCanonico is null ? null : GlobalVigente(documentos, tipoCanonico, vinculoId);
         var cuarentena = tipoCanonico is null
             ? null
             : Vigente(documentos.FirstOrDefault(d => d.EnCuarentena && d.VinculoId == vinculoId && d.TipoCanonico == tipoCanonico), vinculoId);
@@ -383,6 +381,18 @@ public static class RequisitosDeExpediente
             ? cuarentena
             : global;
     }
+
+    /// <summary>
+    /// La versión vigente del documento global del canónico. Casi siempre hay uno solo; la certificación bancaria puede tener varios (el general sin cuenta y uno por cada cuenta,
+    /// CB-1): cubre el que ya está compartido con el vínculo y no venció, y entre varios, el de una cuenta (la que el tercero designó con esa empresa) y el compartido más
+    /// recientemente, así lo que cubre el requisito es lo que la empresa debe revisar.
+    /// </summary>
+    private static VersionDeRequisito? GlobalVigente(IEnumerable<Documento> documentos, string tipoCanonico, Guid vinculoId) =>
+        documentos.Where(d => d.Ambito == AmbitoDocumento.Global && d.TipoCanonico == tipoCanonico)
+            .OrderByDescending(d => d.CuentaBancariaId is not null)
+            .ThenByDescending(d => d.Comparticiones.Where(c => c.VinculoId == vinculoId).Select(c => (DateTimeOffset?)c.Fecha).Max())
+            .Select(d => Vigente(d, vinculoId))
+            .FirstOrDefault(v => v is not null);
 
     /// <summary>La versión actual del documento si ya está compartida con el vínculo y no venció para él.</summary>
     private static VersionDeRequisito? Vigente(Documento? documento, Guid vinculoId)

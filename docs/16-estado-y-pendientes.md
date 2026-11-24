@@ -257,7 +257,7 @@ al cambio se indexan con su próximo evento (o reconstruyendo la proyección del
 - Persona natural frente a jurídica: ajustada con su tabla en FD-8. **Abiertas para Producto:** ¿el PEP de la natural es obligatorio?; ¿se capturan primer y segundo nombre y apellido por separado?
 - Sigue pendiente:
   - la revisión automática de H7 ya usa el cruce (CU-19); falta que lea también el cruce de las cuentas y el «sin soporte» (se ven en la revisión manual);
-  - el cruce de las cuentas con la certificación solo se ve en el requisito de la certificación: falta mostrarlo en la tarjeta de la **cuenta designada** para quien la aprueba (CB-2) y que no se guarde como hecho compartido;
+  - ~~el cruce de las cuentas con la certificación solo se ve en el requisito de la certificación~~: resuelto en CB-5…CB-9 (2026-11-24, una certificación por cuenta): se ve en la tarjeta de la **cuenta designada** para quien la aprueba y en la cuenta del tercero; sigue sin guardarse como hecho compartido (se calcula al leer). Quedan pendientes: que el requisito `CERTIFICACION_BANCARIA` de un flujo se cubra solo con la certificación de la cuenta designada y lleve a «Mis cuentas» (hoy sigue pudiendo cubrirse con el documento general, CB-8) y regenerar el manual con los recorridos;
   - la configuración por flujo de FM-15 («exigir siempre un documento nuevo»): hoy se cubre observando la sección y señalando el soporte;
   - sin plan de IA (o sin cupo) ningún tercero recibe valores propuestos ni cruce: queda la revisión manual.
 

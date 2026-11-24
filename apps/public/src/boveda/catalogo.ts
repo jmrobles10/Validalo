@@ -10,6 +10,7 @@ export interface TipoSubible {
   ayuda: string;
 }
 
+// La certificación bancaria no está aquí: es de una cuenta (CB-1) y se sube en «Mis cuentas», en la tarjeta de su cuenta.
 export const TIPOS_SUBIBLES: readonly TipoSubible[] = [
   { codigo: 'RUT', nombre: 'RUT', ayuda: 'El PDF que descargas de la DIAN, con fecha de expedición reciente.' },
   {
@@ -19,7 +20,6 @@ export const TIPOS_SUBIBLES: readonly TipoSubible[] = [
   },
   { codigo: 'CEDULA', nombre: 'Cédula de ciudadanía', ayuda: 'Las dos caras, legibles, en un solo PDF o en una foto.' },
   { codigo: 'ESTADOS_FINANCIEROS', nombre: 'Estados financieros', ayuda: 'Los del último cierre, firmados por el contador.' },
-  { codigo: 'CERTIFICACION_BANCARIA', nombre: 'Certificación bancaria', ayuda: 'La que expide tu banco, a nombre del titular de la cuenta.' },
   { codigo: 'DECLARACION_RENTA', nombre: 'Declaración de renta', ayuda: 'La del último año gravable.' },
   { codigo: 'SG_SST', nombre: 'Evaluación SG-SST', ayuda: 'La evaluación de estándares mínimos del sistema de seguridad y salud en el trabajo.' },
   { codigo: 'PASAPORTE', nombre: 'Pasaporte', ayuda: 'La página de datos, legible.' },

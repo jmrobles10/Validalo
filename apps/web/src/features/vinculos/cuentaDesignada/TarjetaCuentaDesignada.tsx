@@ -1,4 +1,4 @@
-import { Divider, Stack, Typography } from '@mui/material';
+import { Alert, Divider, Stack, Typography } from '@mui/material';
 import { SCOPES, type CuentaDesignadaDelVinculoDto, type CuentaDesignadaDto, type VinculoDto } from '@validalo/api-client';
 import { EsqueletoTarjeta, EstadoVacio, formatearFechaHora } from '@validalo/ui';
 import { Landmark } from 'lucide-react';
@@ -10,9 +10,10 @@ import { useAvisos } from '../../../shared/useAvisos';
 import { usePermisos } from '../../../shared/usePermisos';
 import { useEmpresaActiva } from '../../empresas/useEmpresas';
 import { useAprobarCuenta, useCuentaDesignada, useRechazarCuenta } from './api';
+import { CertificacionDeLaCuenta } from './CertificacionDeLaCuenta';
 import { CuentaRechazada, DatosCuenta, SeccionCuenta } from './DatosCuenta';
 import { DialogoRechazarCuenta } from './DialogoRechazarCuenta';
-import { mensajeErrorCuenta, nombresDe, yaAprobo } from './modelo';
+import { camposCriticosQueDifieren, mensajeErrorCuenta, nombresDe, yaAprobo } from './modelo';
 import { PropuestaCuenta } from './PropuestaCuenta';
 
 /** Cuenta bancaria del vínculo: la designada, la que el tercero propuso (cuatro ojos) y la última rechazada. */
@@ -76,6 +77,7 @@ function ContenidoCuenta({ datos, empresaId, vinculoId, tienePermiso }: Contenid
         {actual && (
           <SeccionCuenta titulo={t('cuentas.secciones.designada')} cuenta={actual} fecha={actual.aprobadaEn}>
             <DatosCuenta cuenta={actual} />
+            <CertificacionDeLaCuenta cuenta={actual} />
             {actual.aprobadaEn && (
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 {actual.aprobaciones.length > 0
@@ -106,9 +108,24 @@ function ContenidoCuenta({ datos, empresaId, vinculoId, tienePermiso }: Contenid
       {dialogo?.tipo === 'aprobar' && (
         <DialogoConfirmacion
           titulo={t('cuentas.aprobarTitulo')}
-          mensaje={dialogo.cuenta.aprobaciones.length + 1 >= aprobadoresRequeridos ? t('cuentas.aprobarUltima', { total }) : t('cuentas.aprobarPrimera')}
+          mensaje={
+            <>
+              {dialogo.cuenta.aprobaciones.length + 1 >= aprobadoresRequeridos ? t('cuentas.aprobarUltima', { total }) : t('cuentas.aprobarPrimera')}
+              {/* Lo crítico que no coincide con la certificación se destaca justo al decidir: es evidencia, no bloquea. */}
+              {dialogo.cuenta.certificacion?.discrepanciaCritica && (
+                <Alert severity="error" sx={{ mt: 1.5 }}>
+                  {t('cuentas.certificacion.aprobarConDiscrepancia', { campos: camposCriticosQueDifieren(dialogo.cuenta.certificacion).join(', ') })}
+                </Alert>
+              )}
+              {dialogo.cuenta.sinCertificacion === true && (
+                <Alert severity="warning" sx={{ mt: 1.5 }}>
+                  {t('cuentas.certificacion.aprobarSinCertificacion')}
+                </Alert>
+              )}
+            </>
+          }
           confirmar={t('cuentas.aprobar')}
-          tono="primary"
+          tono={dialogo.cuenta.certificacion?.discrepanciaCritica ? 'error' : 'primary'}
           ocupado={aprobar.isPending}
           onConfirmar={() => confirmarAprobacion(dialogo.cuenta)}
           onCerrar={() => setDialogo(null)}
