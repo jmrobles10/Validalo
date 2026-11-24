@@ -1,4 +1,5 @@
-import type { CuentaBancariaPublicaDto, DesignacionDeCuentaDto, RegistrarCuentaBancariaDto, VinculoPublicoDto } from '@validalo/api-client';
+import type { CampoCruzadoDto, CertificacionDeCuentaDto, CuentaBancariaPublicaDto, DesignacionDeCuentaDto, RegistrarCuentaBancariaDto, VinculoPublicoDto } from '@validalo/api-client';
+import type { DestinoCarga } from '../boveda/subida';
 import { situacionDelVinculo } from '../vinculos/situacion';
 
 export type TipoCuenta = 'Ahorros' | 'Corriente';
@@ -162,4 +163,33 @@ export function designacionesVisibles(cuenta: CuentaBancariaPublicaDto): (Design
       return estado ? [{ ...d, estado }] : [];
     })
     .sort((a, b) => orden[a.estado] - orden[b.estado] || a.empresa.localeCompare(b.empresa, 'es'));
+}
+
+/** El tipo canónico de la certificación bancaria: cada cuenta tiene la suya (CB-1). */
+export const TIPO_CERTIFICACION = 'CERTIFICACION_BANCARIA';
+
+/** A qué documento va la certificación de una cuenta: el propio de esa cuenta, no el general de la bóveda. */
+export const destinoDeCertificacion = (cuentaId: string): DestinoCarga => ({ tipoCanonico: TIPO_CERTIFICACION, cuentaBancariaId: cuentaId });
+
+/** Se puede designar con una empresa: activa y con su certificación vigente (la API responde 422 `certificacion-requerida` si no). */
+export const esDesignable = (cuenta: CuentaBancariaPublicaDto) => esActiva(cuenta) && !cuenta.faltaCertificacion;
+
+/** Lo que la IA concluyó de la certificación frente a lo que el tercero declaró; `Devuelta` si la versión no pasó la revisión del archivo. */
+export type VerificacionDeCertificacion = 'SinAnalisis' | 'Coincide' | 'Discrepa' | 'NoVerificable' | 'NoSeLee' | 'Devuelta';
+
+const VERIFICACIONES: readonly VerificacionDeCertificacion[] = ['SinAnalisis', 'Coincide', 'Discrepa', 'NoVerificable', 'NoSeLee', 'Devuelta'];
+
+export function verificacionDe(certificacion: CertificacionDeCuentaDto): VerificacionDeCertificacion {
+  if (certificacion.estado === 'Devuelta') return 'Devuelta';
+  return VERIFICACIONES.find((v) => v === certificacion.verificacion) ?? 'SinAnalisis';
+}
+
+/** Los campos que no coinciden (primero los críticos: el número, el titular, que el titular sea el tercero, el estado). */
+export function camposQueNoCoinciden(certificacion: CertificacionDeCuentaDto): CampoCruzadoDto[] {
+  return certificacion.campos.filter((c) => c.resultado === 'Discrepa').sort((a, b) => Number(b.critico) - Number(a.critico));
+}
+
+/** Los campos críticos que no se pudieron verificar (el documento no los trae). */
+export function camposSinVerificar(certificacion: CertificacionDeCuentaDto): CampoCruzadoDto[] {
+  return certificacion.campos.filter((c) => c.resultado === 'NoVerificable' && c.critico);
 }

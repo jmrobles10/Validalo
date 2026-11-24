@@ -5,12 +5,13 @@ import { Archive, Landmark } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FilaEmpresa } from '../shared/componentes';
+import { CertificacionDeCuenta } from './CertificacionDeCuenta';
 import { designacionesVisibles, esActiva, esTipoCuenta, nombreCuenta } from './cuentas';
 import { DialogoRetirarCuenta } from './DialogoRetirarCuenta';
 
 /**
  * Una cuenta del tercero (misma anatomía que la tarjeta de un documento de la bóveda): cabecera con banco, tipo, número
- * enmascarado y titular, y debajo una fila por empresa con el estado de la designación.
+ * enmascarado y titular, debajo su certificación bancaria (CB-1) y una fila por empresa con el estado de la designación.
  */
 export function TarjetaCuenta({ cuenta }: { cuenta: CuentaBancariaPublicaDto }) {
   const { t } = useTranslation();
@@ -45,6 +46,8 @@ export function TarjetaCuenta({ cuenta }: { cuenta: CuentaBancariaPublicaDto }) 
           )}
         </Stack>
       </Stack>
+
+      <CertificacionDeCuenta cuenta={cuenta} />
 
       <Box component="ul" aria-label={t('cuentas.empresas')} sx={{ p: 0, m: 0, mt: 0.75, pl: { sm: 6 } }}>
         {designaciones.length === 0 ? (
