@@ -169,6 +169,8 @@ public static class ServiciosInfraestructura
         servicios.AgregarProcesoDelLider<Aplicacion.Habeas.ProgramadorDeHabeas>();
         // Migración de datos de los vínculos aceptados antes del acceso aislado (decisión AV): corre una sola vez al arrancar, en el nodo líder.
         servicios.AgregarProcesoDelLider<Aplicacion.Interesado.MigracionDeAccesoAisladoAlArrancar>();
+        // Migración de datos de la certificación bancaria por cuenta (CB-1): corre una sola vez al arrancar, en el nodo líder.
+        servicios.AgregarProcesoDelLider<Aplicacion.Vinculos.MigracionDeCertificacionPorCuentaAlArrancar>();
         // Plan y límites por grupo (OD-14…OD-17): medición de uso, bloqueo suave, avisos al 80 % y al 100 %.
         servicios.AddSingleton<Aplicacion.Plataforma.MedidorDeLlamadasApi>();
         servicios.AddHostedService(proveedor => proveedor.GetRequiredService<Aplicacion.Plataforma.MedidorDeLlamadasApi>());

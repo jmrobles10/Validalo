@@ -51,7 +51,8 @@ public static class ComparticionDeDocumentos
         foreach (var candidato in documentos.OrderBy(d => d.CreadoEn))
         {
             var esDelVinculo = candidato.Ambito == AmbitoDocumento.PorVinculo && candidato.VinculoId == vinculo.Id;
-            var pedido = candidato.Ambito == AmbitoDocumento.Global && candidato.TipoCanonico is { } codigo && codigosGlobales.Contains(codigo);
+            // La certificación de una cuenta (CB-1) no la pide el flujo: se comparte solo cuando el tercero designa esa cuenta con la empresa (CompartirCertificacionDeCuentaAsync).
+            var pedido = candidato.Ambito == AmbitoDocumento.Global && candidato.CuentaBancariaId is null && candidato.TipoCanonico is { } codigo && codigosGlobales.Contains(codigo);
             if (!esDelVinculo && !pedido)
                 continue;
 
@@ -176,7 +177,8 @@ public static class ComparticionDeDocumentos
     private static async Task<IReadOnlyList<VinculoCandidato>> CandidatosAsync(IQuerySession consulta, Documento documento, DateOnly hoy, CancellationToken ct)
     {
         var propios = await CandidatosDelDuenoAsync(consulta, documento, ct);
-        if (documento.Ambito != AmbitoDocumento.Global)
+        // La certificación de una cuenta es del tercero y de las empresas con las que designó esa cuenta: no de quien se relaciona con él.
+        if (documento.Ambito != AmbitoDocumento.Global || documento.CuentaBancariaId is not null)
             return propios;
         // ADR-0010: si el dueño es una persona natural relacionada con otros terceros, sus documentos también van a los vínculos de esos terceros cuyo flujo se los pide.
         return [.. propios, .. await CandidatosPorRelacionAsync(consulta, documento, hoy, ct)];
@@ -231,7 +233,11 @@ public static class ComparticionDeDocumentos
 
         var empresaIds = vinculos.Select(v => v.EmpresaId).Distinct().ToArray();
         var empresas = (await consulta.LoadManyAsync<Empresa>(ct, empresaIds)).ToDictionary(e => e.Id);
-        var piden = await RequisitosDeExpediente.VinculosQuePidenAsync(consulta, vinculos, documento.TipoCanonico!, ct);
+        // Cada cuenta tiene su certificación (CB-1): la reciben las empresas con las que esa cuenta está designada o propuesta (las demás cuentas del tercero no se les muestran);
+        // el resto de los globales, las empresas cuyo flujo los pide.
+        var piden = documento.CuentaBancariaId is { } cuentaId
+            ? vinculos.Where(v => CuentaLigada(v, cuentaId)).Select(v => v.Id).ToHashSet()
+            : await RequisitosDeExpediente.VinculosQuePidenAsync(consulta, vinculos, documento.TipoCanonico!, ct);
 
         return
         [
@@ -240,5 +246,36 @@ public static class ComparticionDeDocumentos
                 .Select(v => new VinculoCandidato(v.Id, empresas[v.EmpresaId].TenantId, v.EmpresaId, v.TerceroId, v.InvitacionAceptada, v.Estado,
                     piden.Contains(v.Id), v.BovedaDisponible))
         ];
+    }
+
+    /// <summary>La cuenta está designada o propuesta con la empresa del vínculo (una rechazada ya no es de su interés: no se le comparte más).</summary>
+    public static bool CuentaLigada(Vinculo vinculo, Guid cuentaId) =>
+        vinculo.CuentaDesignada?.Cuenta.CuentaId == cuentaId || vinculo.CuentaPropuesta?.Cuenta.CuentaId == cuentaId;
+
+    /// <summary>
+    /// El tercero designó la cuenta con la empresa del vínculo: se le comparte la versión actual de la certificación de <b>esa</b> cuenta (y solo esa), en la misma transacción
+    /// que la propuesta. La sesión es la del tenant del vínculo; el stream de la bóveda se escribe con <c>ForTenant("boveda")</c> sobre la misma unidad de trabajo, con
+    /// concurrencia optimista (el llamador reintenta si pierde la carrera). Devuelve las comparticiones nuevas; nada si ya estaba compartida (idempotente) o la cuenta no tiene
+    /// versión actual. Quien llama publica después el cálculo de vigencias, el análisis de IA y la sincronización de requisitos del vínculo.
+    /// </summary>
+    public static async Task<IReadOnlyList<CompartidoDto>> CompartirCertificacionDeCuentaAsync(IDocumentSession sesionDelTenant, Vinculo vinculo, Guid tenantId, Guid cuentaId,
+        OrigenComparticion origen, DateTimeOffset ahora, CancellationToken ct)
+    {
+        var boveda = sesionDelTenant.ForTenant(TenantsTecnicos.Boveda);
+        var certificacion = await boveda.Query<Documento>().FirstOrDefaultAsync(d => d.CuentaBancariaId == cuentaId, ct);
+        if (certificacion is null)
+            return [];
+
+        var destino = new VinculoCandidato(vinculo.Id, tenantId, vinculo.EmpresaId, vinculo.TerceroId, InvitacionAceptada: true, vinculo.Estado, ExigeElTipo: true, vinculo.BovedaDisponible);
+        if (certificacion.Compartir(destino, origen, ahora) is null)
+            return [];
+
+        var stream = await boveda.Events.FetchForWriting<Documento>(certificacion.Id, ct);
+        var documento = stream.Aggregate!;
+        if (documento.Compartir(destino, origen, ahora) is not { } evento)
+            return [];
+
+        stream.AppendOne(evento);
+        return [evento.ADto(documento)];
     }
 }

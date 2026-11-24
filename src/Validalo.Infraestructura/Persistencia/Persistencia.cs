@@ -83,7 +83,8 @@ public static class ConfiguracionMarten
                 // guarda su tenant como dato). Clave natural única: (tercero, canónico) o (vínculo, tipo del tenant).
                 opts.Schema.For<Documento>().DatabaseSchemaName("boveda").MultiTenanted()
                     .UniqueIndex(UniqueIndexType.Computed, "ux_documento_clave", TenancyScope.PerTenant, x => x.ClaveNatural)
-                    .Index(x => x.TerceroId);
+                    .Index(x => x.TerceroId)
+                    .Index(x => x.CuentaBancariaId); // la certificación de una cuenta (CB-1) se busca por su cuenta
                 // Solicitudes de acceso de un correo que no es contacto conocido del tercero (acceso aislado): un stream por (tercero, correo) en el
                 // tenant técnico «boveda» (snapshot inline), como la ficha y el habeas data. Las lee el tercero entre tenants desde su sesión.
                 opts.Schema.For<SolicitudDeAcceso>().DatabaseSchemaName("boveda").MultiTenanted().Index(x => x.TerceroId);

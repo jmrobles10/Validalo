@@ -216,7 +216,7 @@ public sealed class RequisitosPlataformaIdentidadApiTests(ApiFixture fixture, IT
         await AceptarAsync(sesion, vinculo.Id);
         var cuenta = await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken,
             new RegistrarCuentaBancariaDto("Bancolombia", "Ahorros", "031-123456-78", "Aceros del Norte S.A.S.", "NIT 900123456"), 201);
-        await SubirAsync(sesion, "CERTIFICACION_BANCARIA", Pdf("Certificación Bancolombia"));
+        await SubirCertificacionAsync(sesion, cuenta.Id, Pdf("Certificación Bancolombia"));
         await TerceroAsync<CuentaBancariaPublicaDto>("POST", $"/public/v1/vinculos/{vinculo.Id}/cuenta-designada", sesion.AccessToken, new DesignarCuentaDto(cuenta.Id), 200);
         var url = $"/api/v1/vinculos/{vinculo.Id}/cuenta-designada";
 

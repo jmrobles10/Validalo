@@ -169,7 +169,7 @@ public sealed class RequisitosIntegracionAbiertaApiTests(ApiFixture fixture, ITe
             new RegistrarCuentaBancariaDto("Chase", "Corriente", "123456789", "Aceros del Norte S.A.S.", "NIT 900123456", "USD", "US", BancoSwift: "chasus33"), 201);
         (extranjera.Banco, extranjera.BancoCodigo, extranjera.BancoSwift).ShouldBe(("Chase", null, "CHASUS33"));
 
-        await SubirAsync(sesion, "CERTIFICACION_BANCARIA", Pdf("Certificación Bancolombia"));
+        await SubirCertificacionAsync(sesion, cuenta.Id, Pdf("Certificación Bancolombia"));
         await TerceroAsync<CuentaBancariaPublicaDto>("POST", $"/public/v1/vinculos/{vinculo.Id}/cuenta-designada", sesion.AccessToken, new DesignarCuentaDto(cuenta.Id), 200);
         var urlCuenta = $"/api/v1/vinculos/{vinculo.Id}/cuenta-designada";
         await ApiAsync<CuentaDesignadaDelVinculoDto>("POST", $"{urlCuenta}/aprobar", Delegado(e.Norte, e.Carlos), new { }, 200);

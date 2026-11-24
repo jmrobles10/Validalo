@@ -157,7 +157,7 @@ public sealed class RequisitosFichaPendientesApiTests(ApiFixture fixture, ITestO
             $"[[identificacionTitular={identificacionTitular}]][[estadoCuenta={estado}]]");
 
     [Fact]
-    public async Task La_certificacion_bancaria_respalda_las_cuentas_y_su_cruce_va_enmascarado_y_pide_justificacion_si_discrepa()
+    public async Task La_certificacion_de_cada_cuenta_la_respalda_y_su_cruce_va_enmascarado_y_pide_justificacion_si_discrepa()
     {
         var e = await PrepararAsync();
         await PlanIaAsync(e.Norte, new ActualizarPlanIaEmpresaDto(10, false, ApiKeyOpenAi: LlaveIa()));
@@ -170,12 +170,15 @@ public sealed class RequisitosFichaPendientesApiTests(ApiFixture fixture, ITestO
         var sesion = await SesionAsync(correo);
         await AceptarAsync(sesion, vinculo.Id);
 
-        // El tercero registra su cuenta (el número se escribe como quiera) y sube la certificación que dice lo mismo.
-        await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken,
+        // El tercero registra su cuenta (el número se escribe como quiera), sube la certificación de esa cuenta, que dice lo mismo, y la designa con la empresa: solo entonces la
+        // empresa la recibe (la certificación de una cuenta no se comparte antes) y la IA la lee.
+        var cuenta = await TerceroAsync<CuentaBancariaPublicaDto>("POST", "/public/v1/boveda/cuentas-bancarias", sesion.AccessToken,
             new RegistrarCuentaBancariaDto("Bancolombia", "Ahorros", "031-123456-78", "Aceros del Norte S.A.S.", $"NIT {nit}"), 201);
-        await SubirAsync(sesion, "CERTIFICACION_BANCARIA", CertificacionCon("03112345678", nit));
-
+        await SubirCertificacionAsync(sesion, cuenta.Id, CertificacionCon("03112345678", nit));
         var expedienteId = await AbiertoEnAsync(e.Norte, vinculo.Id);
+        Requisito(await ApiAsync<ExpedienteDto>("GET", $"/api/v1/expedientes/{expedienteId}", Admin(e.Norte), null, 200), "CERTIFICACION_BANCARIA").VersionActual.ShouldBeNull();
+        await TerceroAsync<CuentaBancariaPublicaDto>("POST", $"/public/v1/vinculos/{vinculo.Id}/cuenta-designada", sesion.AccessToken, new DesignarCuentaDto(cuenta.Id), 200);
+
         var conCruce = await EsperarAsync(e.Norte, expedienteId,
             x => Requisito(x, "CERTIFICACION_BANCARIA").SoporteDeSecciones?.Secciones.Any(s => s.Cruce is not null) == true);
         var soporte = Requisito(conCruce, "CERTIFICACION_BANCARIA").SoporteDeSecciones!;
@@ -196,8 +199,8 @@ public sealed class RequisitosFichaPendientesApiTests(ApiFixture fixture, ITestO
         JsonSerializer.Serialize(conCruce).ShouldNotContain("03112345678");
         soporte.DiscrepanciaCritica.ShouldBeFalse();
 
-        // Una certificación nueva con otro número de cuenta: discrepancia crítica ⇒ no se aprueba sin justificación.
-        await SubirAsync(sesion, "CERTIFICACION_BANCARIA", CertificacionCon("99999999999", nit));
+        // Una versión nueva de la certificación de esa cuenta con otro número: discrepancia crítica ⇒ no se aprueba sin justificación.
+        await SubirCertificacionAsync(sesion, cuenta.Id, CertificacionCon("99999999999", nit));
         var discrepa = await EsperarAsync(e.Norte, expedienteId, x => Requisito(x, "CERTIFICACION_BANCARIA").VersionActual?.N == 2 &&
                                                                        Requisito(x, "CERTIFICACION_BANCARIA").SoporteDeSecciones?.Secciones.Any(s => s.Cruce is not null) == true);
         var requisito = Requisito(discrepa, "CERTIFICACION_BANCARIA");

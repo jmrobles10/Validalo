@@ -240,7 +240,13 @@ public sealed class Documento
 
     public Guid? VinculoId { get; set; }
 
-    /// <summary><c>G|{tercero}|{canónico}</c> o <c>V|{vínculo}|{tipo del tenant}</c>; índice único.</summary>
+    /// <summary>
+    /// Certificación bancaria <b>de una cuenta</b> (CB-1): el documento es de esa cuenta del tercero y no el general del tipo. Cada cuenta tiene el suyo, con sus versiones, así
+    /// la certificación de una cuenta nueva no reemplaza la de otra. Nulo en todo lo demás (también en la certificación general sin cuenta que el tercero tenía de antes).
+    /// </summary>
+    public Guid? CuentaBancariaId { get; set; }
+
+    /// <summary><c>G|{tercero}|{canónico}</c>, <c>C|{tercero}|{cuenta}</c> (certificación de una cuenta) o <c>V|{vínculo}|{tipo del tenant}</c>; índice único.</summary>
     public string ClaveNatural { get; set; } = string.Empty;
 
     public int? VersionActual { get; set; }
@@ -256,6 +262,12 @@ public sealed class Documento
     public static string ClaveGlobal(Guid terceroId, string tipoCanonico) => $"G|{terceroId:N}|{tipoCanonico}";
 
     public static string ClavePorVinculo(Guid vinculoId, Guid tipoDocumentoTenantId) => $"V|{vinculoId:N}|{tipoDocumentoTenantId:N}";
+
+    /// <summary>Clave natural de la certificación de una cuenta: una por (tercero, cuenta), distinta de la general <see cref="ClaveGlobal"/> del mismo tipo.</summary>
+    public static string ClaveDeCuenta(Guid terceroId, Guid cuentaId) => $"C|{terceroId:N}|{cuentaId:N}";
+
+    /// <summary>Cómo se nombra la certificación de una cuenta: «Certificación bancaria · Bancolombia ****5678».</summary>
+    public static string NombreDeCertificacion(string nombreDelTipo, string banco, string numeroEnmascarado) => $"{nombreDelTipo} · {banco} {numeroEnmascarado}";
 
     /// <summary>Número que tomará la próxima versión (sin huecos: también cuentan las devueltas y retiradas).</summary>
     public int SiguienteNumero => Versiones.Count == 0 ? 1 : Versiones.Max(v => v.Numero) + 1;
@@ -287,6 +299,45 @@ public sealed class Documento
 
         return new DocumentoCreado(Guid.CreateVersion7(), terceroId, AmbitoDocumento.Global, canonico.Clase, canonico.Codigo, null,
             canonico.Nombre, null, null, null, ahora);
+    }
+
+    /// <summary>
+    /// Certificación bancaria de <b>una cuenta</b> del tercero (CB-1): un documento global propio de la cuenta, con la misma clase y tipo canónico que la certificación general
+    /// pero con su propia clave natural, así que cada cuenta tiene el suyo y subirle una versión nunca toca el de otra cuenta. Solo el canónico <c>CERTIFICACION_BANCARIA</c>
+    /// es de una cuenta (422 <c>documento-no-es-de-cuenta</c>). <paramref name="nombre"/> es cómo se rotula (banco y número enmascarado de la cuenta).
+    /// </summary>
+    public static DocumentoCreado CrearDeCuenta(Guid terceroId, Guid cuentaId, TipoDocumentoCanonico canonico, string nombre, DateTimeOffset ahora)
+    {
+        if (!string.Equals(canonico.Codigo, CatalogoCanonico.CertificacionBancaria, StringComparison.Ordinal))
+            throw ReglaDeNegocioException.Validacion("documento-no-es-de-cuenta", $"{canonico.Nombre} no es un documento de una cuenta bancaria: solo lo es la certificación bancaria.");
+        AsegurarClaseSoportada(canonico.Clase, canonico.Codigo);
+
+        return new DocumentoCreado(Guid.CreateVersion7(), terceroId, AmbitoDocumento.Global, canonico.Clase, canonico.Codigo, null, nombre, null, null, null, ahora,
+            CuentaBancariaId: cuentaId);
+    }
+
+    /// <summary>
+    /// La certificación vigente de <paramref name="cuentaId"/> para poder designarla (CB-1): el documento propio de <b>esa</b> cuenta con una versión actual. Sin documento, con el
+    /// de otra cuenta, con el general sin cuenta o sin versión actual ⇒ 422 <c>certificacion-requerida</c>.
+    /// </summary>
+    public static Documento CertificacionVigenteRequerida(Guid cuentaId, Documento? certificacion) =>
+        certificacion is { VersionActual: not null } propia && propia.CuentaBancariaId == cuentaId
+            ? propia
+            : throw ReglaDeNegocioException.Validacion("certificacion-requerida", "Sube la certificación bancaria de esta cuenta antes de designarla.");
+
+    /// <summary>
+    /// Liga a una cuenta la certificación general que el tercero tenía sin cuenta (migración de CB-1): solo la global de <c>CERTIFICACION_BANCARIA</c> que aún no es de una
+    /// cuenta. Con la misma cuenta ya ligada no repite el evento (nulo, idempotente); con otra cuenta ⇒ 409 <c>certificacion-ya-ligada</c>.
+    /// </summary>
+    public DocumentoLigadoACuenta? LigarACuenta(Guid cuentaId, string nombre, DateTimeOffset ahora)
+    {
+        if (CuentaBancariaId == cuentaId)
+            return null;
+        if (CuentaBancariaId is not null)
+            throw ReglaDeNegocioException.Conflicto("certificacion-ya-ligada", "Esa certificación ya es de otra cuenta.");
+        if (Ambito != AmbitoDocumento.Global || EnCuarentena || !string.Equals(TipoCanonico, CatalogoCanonico.CertificacionBancaria, StringComparison.Ordinal))
+            throw ReglaDeNegocioException.Validacion("documento-no-es-de-cuenta", "Solo la certificación bancaria global se liga a una cuenta.");
+        return new DocumentoLigadoACuenta(cuentaId, nombre, ahora);
     }
 
     /// <summary>Documento privado de un vínculo: solo existe para esa empresa (E5).</summary>
@@ -670,6 +721,7 @@ public sealed class Documento
             case AnalisisDeIaRegistrado e: Apply(e); break;
             case AnalisisDeIaFallido e: Apply(e); break;
             case CuarentenaDeDocumentoResuelta e: Apply(e); break;
+            case DocumentoLigadoACuenta e: Apply(e); break;
             case VersionMarcadaParaRevision e: Apply(e); break;
             case RevisionDeVersionResuelta e: Apply(e); break;
             default: throw new InvalidOperationException($"Evento no aplicable a Documento: {evento.GetType().Name}.");
@@ -691,9 +743,12 @@ public sealed class Documento
         TenantId = e.TenantId,
         EmpresaId = e.EmpresaId,
         VinculoId = e.VinculoId,
-        ClaveNatural = e.Ambito == AmbitoDocumento.Global
-            ? ClaveGlobal(e.TerceroId, e.TipoCanonico!)
-            : ClavePorVinculo(e.VinculoId!.Value, e.TipoDocumentoTenantId!.Value),
+        CuentaBancariaId = e.CuentaBancariaId,
+        ClaveNatural = e.CuentaBancariaId is { } cuentaId
+            ? ClaveDeCuenta(e.TerceroId, cuentaId)
+            : e.Ambito == AmbitoDocumento.Global
+                ? ClaveGlobal(e.TerceroId, e.TipoCanonico!)
+                : ClavePorVinculo(e.VinculoId!.Value, e.TipoDocumentoTenantId!.Value),
         CreadoEn = e.Fecha,
         ActualizadoEn = e.Fecha
     };
@@ -900,6 +955,14 @@ public sealed class Documento
     {
         CuarentenaResueltaEn = e.Fecha;
         PromovidoAGlobalId = e.Promovida ? e.DocumentoGlobalId : null;
+        ActualizadoEn = e.Fecha;
+    }
+
+    public void Apply(DocumentoLigadoACuenta e)
+    {
+        CuentaBancariaId = e.CuentaBancariaId;
+        ClaveNatural = ClaveDeCuenta(TerceroId, e.CuentaBancariaId);
+        NombreTipo = e.NombreTipo;
         ActualizadoEn = e.Fecha;
     }
 
