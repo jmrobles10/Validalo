@@ -21596,6 +21596,110 @@
           }
         }
       },
+      "CertificacionDeCuentaDelVinculoDto": {
+        "required": [
+          "documentoId",
+          "version",
+          "cargadaEn",
+          "verificacion",
+          "sinAnalisis",
+          "discrepanciaCritica",
+          "cruce"
+        ],
+        "type": "object",
+        "properties": {
+          "documentoId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "cargadaEn": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "verificacion": {
+            "type": "string"
+          },
+          "sinAnalisis": {
+            "type": "boolean"
+          },
+          "discrepanciaCritica": {
+            "type": "boolean"
+          },
+          "cruce": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CruceDeSeccionDto"
+              }
+            ]
+          }
+        }
+      },
+      "CertificacionDeCuentaDto": {
+        "required": [
+          "documentoId",
+          "version",
+          "estado",
+          "cargadaEn",
+          "nombreArchivo",
+          "verificacion",
+          "discrepanciaCritica",
+          "campos"
+        ],
+        "type": "object",
+        "properties": {
+          "documentoId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "cargadaEn": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "nombreArchivo": {
+            "type": "string"
+          },
+          "verificacion": {
+            "type": "string"
+          },
+          "discrepanciaCritica": {
+            "type": "boolean"
+          },
+          "campos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CampoCruzadoDto"
+            }
+          },
+          "motivoDevolucion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CertificadoDelInformeDto": {
         "required": [
           "folio",
@@ -25631,6 +25735,20 @@
                 "$ref": "#/components/schemas/ContactoDePagosDto"
               }
             ]
+          },
+          "certificacion": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CertificacionDeCuentaDto"
+              }
+            ]
+          },
+          "faltaCertificacion": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -25814,6 +25932,20 @@
                 "$ref": "#/components/schemas/ContactoDePagosDto"
               }
             ]
+          },
+          "certificacion": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CertificacionDeCuentaDelVinculoDto"
+              }
+            ]
+          },
+          "sinCertificacion": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -33387,6 +33519,13 @@
             ]
           },
           "terceroRelacionadoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "cuentaBancariaId": {
             "type": [
               "null",
               "string"

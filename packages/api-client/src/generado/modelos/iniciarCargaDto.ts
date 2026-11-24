@@ -22,4 +22,6 @@ export interface IniciarCargaDto {
   datos?: IniciarCargaDtoDatos;
   /** @nullable */
   terceroRelacionadoId?: string | null;
+  /** @nullable */
+  cuentaBancariaId?: string | null;
 }

@@ -96,6 +96,8 @@ export * from './cargaDeAdjuntoDto';
 export * from './cargaDePlantillaDto';
 export * from './cargaPrefirmadaDto';
 export * from './categoriaMotivo';
+export * from './certificacionDeCuentaDelVinculoDto';
+export * from './certificacionDeCuentaDto';
 export * from './certificadoDelInformeDto';
 export * from './certificadoDelVinculoDto';
 export * from './certificadoDto';
