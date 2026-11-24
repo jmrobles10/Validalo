@@ -1,8 +1,11 @@
 using System.Text.Json;
+using Marten;
 using Microsoft.Extensions.DependencyInjection;
 using Validalo.Aplicacion.Comun;
+using Validalo.Aplicacion.Interesado;
 using Validalo.Aplicacion.Vinculos;
 using Validalo.Contratos;
+using Wolverine;
 using Xunit.Abstractions;
 
 namespace Validalo.Integracion.Tests;
@@ -230,6 +233,17 @@ public sealed class RequisitosCertificacionPorCuentaApiTests(ApiFixture fixture,
         var igual = (await CuentasAsync(unaSesion)).Single();
         (igual.Certificacion!.DocumentoId, igual.Certificacion.Version).ShouldBe((general.Version.DocumentoId, 2));
         (await CuentasAsync(variasSesion)).ShouldAllBe(c => c.FaltaCertificacion);
+    }
+
+    [Fact]
+    public async Task Pedir_la_migracion_al_bus_la_ejecuta_y_deja_su_marca_para_no_repetirla_al_arrancar()
+    {
+        using (var alcance = Host.Services.CreateScope())
+            await alcance.ServiceProvider.GetRequiredService<IMessageBus>().InvokeAsync(new MigrarCertificacionesPorCuenta());
+
+        await using var consulta = Host.Services.GetRequiredService<IDocumentStore>().QuerySession();
+        (await MigracionDeCertificacionPorCuenta.YaCorrioAsync(consulta, CancellationToken.None)).ShouldBeTrue();
+        (await consulta.LoadAsync<MigracionDeDatosEjecutada>(MigracionDeCertificacionPorCuenta.Nombre))!.Resumen.ShouldContain("certificaciones bancarias sin cuenta revisadas");
     }
 
     private async Task<ResultadoDeMigracionDeCertificaciones> MigrarAsync()
