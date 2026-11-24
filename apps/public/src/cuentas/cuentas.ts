@@ -168,8 +168,15 @@ export function designacionesVisibles(cuenta: CuentaBancariaPublicaDto): (Design
 /** El tipo canónico de la certificación bancaria: cada cuenta tiene la suya (CB-1). */
 export const TIPO_CERTIFICACION = 'CERTIFICACION_BANCARIA';
 
-/** A qué documento va la certificación de una cuenta: el propio de esa cuenta, no el general de la bóveda. */
-export const destinoDeCertificacion = (cuentaId: string): DestinoCarga => ({ tipoCanonico: TIPO_CERTIFICACION, cuentaBancariaId: cuentaId });
+/**
+ * A qué documento va la certificación de una cuenta: el propio de esa cuenta, no el general de la bóveda. Con `vinculoId` (la sesión de un expediente embebido, que solo
+ * sube para su vínculo) la API sabe de qué empresa es la subida; en las demás sesiones no hace falta.
+ */
+export const destinoDeCertificacion = (cuentaId: string, vinculoId?: string | null): DestinoCarga => ({
+  tipoCanonico: TIPO_CERTIFICACION,
+  cuentaBancariaId: cuentaId,
+  ...(vinculoId ? { vinculoId } : {}),
+});
 
 /** Se puede designar con una empresa: activa y con su certificación vigente (la API responde 422 `certificacion-requerida` si no). */
 export const esDesignable = (cuenta: CuentaBancariaPublicaDto) => esActiva(cuenta) && !cuenta.faltaCertificacion;

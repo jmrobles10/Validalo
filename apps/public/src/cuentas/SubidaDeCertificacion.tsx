@@ -3,6 +3,8 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mensajeFallo, mensajeProblema } from '../boveda/mensajesSubida';
 import { useSubida } from '../boveda/useSubida';
+import { MODO_EMBEBIDO } from '../embebido/modo';
+import { useSesionTercero } from '../sesion/sesionTercero';
 import { mensajeDevolucion } from '../boveda/versiones';
 import { destinoDeCertificacion } from './cuentas';
 
@@ -32,12 +34,15 @@ export function SubidaDeCertificacion({
   const { t } = useTranslation();
   const { estado, subir } = useSubida();
   const iniciada = useRef(false);
+  // Un token embebido de un expediente solo sube para el vínculo con el que se emitió: se le dice cuál.
+  const vinculoDelToken = useSesionTercero((s) => (MODO_EMBEBIDO ? (s.sesion?.vinculoOrigen ?? null) : null));
+  const destino = destinoDeCertificacion(cuentaId, vinculoDelToken);
 
   // Se sube una sola vez al montarse; reintentar la repite con el mismo archivo.
   useEffect(() => {
     if (iniciada.current) return;
     iniciada.current = true;
-    subir(archivo, destinoDeCertificacion(cuentaId));
+    subir(archivo, destino);
     // `subir` cambia en cada render y la subida no debe reiniciarse por eso.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -76,7 +81,7 @@ export function SubidaDeCertificacion({
       <Alert severity="error" role="alert">
         {textoFallo ? textoFallo(motivo) : motivo}
         <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-          <Button variant="contained" onClick={() => subir(archivo, destinoDeCertificacion(cuentaId))}>
+          <Button variant="contained" onClick={() => subir(archivo, destino)}>
             {t('cuentas.certificacion.nueva.reintentar')}
           </Button>
           {onDespues && (

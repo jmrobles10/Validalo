@@ -108,6 +108,8 @@ const campo = (campo: string, resultado: string, critico: boolean): CampoCruzado
 describe('la certificación bancaria de cada cuenta (CB-1)', () => {
   it('la certificación se sube al documento propio de la cuenta, no al general de la bóveda', () => {
     expect(destinoDeCertificacion('c9')).toEqual({ tipoCanonico: 'CERTIFICACION_BANCARIA', cuentaBancariaId: 'c9' });
+    // La sesión de un expediente embebido dice de qué vínculo es la subida.
+    expect(destinoDeCertificacion('c9', 'v1')).toEqual({ tipoCanonico: 'CERTIFICACION_BANCARIA', cuentaBancariaId: 'c9', vinculoId: 'v1' });
   });
 
   it('solo se designa una cuenta activa y con su certificación', () => {
