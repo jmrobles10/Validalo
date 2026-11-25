@@ -110,8 +110,10 @@ public sealed record VersionCargada(
     string? CargadaPorCorreo = null);
 
 /// <summary>
-/// Vigencia de la versión actual para un vínculo, con la regla del tipo del tenant de ese vínculo (TD-6). Se recalcula si
-/// cambia la regla o la versión; idempotente (mismo resultado ⇒ sin evento).
+/// Vigencia de la versión actual para un vínculo, con las reglas del tipo del tenant de ese vínculo (TD-6, TD-10). Se recalcula si
+/// cambia la regla, la versión o la aprobación de la empresa; idempotente (mismo resultado ⇒ sin evento). <paramref name="AprobadaEn"/>: cuándo la
+/// empresa aprobó la versión para el vínculo, desde donde corre «revalidar cada N días»; nula en los eventos anteriores a TD-10 y mientras no la apruebe.
+/// <paramref name="RevalidarCadaDias"/>: la regla del tipo con la que se calculó.
 /// </summary>
 public sealed record VigenciaDeVersionCalculada(
     int Numero,
@@ -123,7 +125,9 @@ public sealed record VigenciaDeVersionCalculada(
     BaseVigencia Base,
     IReadOnlyList<int> DiasAviso,
     int DiasGracia,
-    DateTimeOffset Fecha);
+    DateTimeOffset Fecha,
+    DateTimeOffset? AprobadaEn = null,
+    int? RevalidarCadaDias = null);
 
 /// <summary>Pasó <c>vigenteHasta + diasGracia</c> de la versión para ese vínculo (TD-6). No cambia el estado del vínculo (H6).</summary>
 public sealed record VersionVencida(int Numero, Guid VinculoId, DateOnly VigenteHasta, int DiasGracia, DateTimeOffset Fecha);

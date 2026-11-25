@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Validalo.Dominio.Documentos;
 
 namespace Validalo.Dominio.Revision;
 
@@ -8,7 +9,8 @@ namespace Validalo.Dominio.Revision;
 /// Qué resolvió el motor para un documento y un área: <c>Sugerida</c> (Asistido: una sugerencia, ningún veredicto),
 /// <c>AprobadaAutomaticamente</c>, <c>AprobadaConMuestreo</c> (aprobada y además queda para confirmación humana),
 /// <c>Excepcion</c> (una persona decide; va a la bandeja de excepciones) y <c>SinAlcance</c> (el tipo o el área no están
-/// autorizados para la revisión automática: se revisa como siempre, sin ruido en la bandeja).
+/// autorizados para la revisión automática: se revisa como siempre, sin ruido en la bandeja) y <c>Observada</c> (Automático: el documento no cumple la
+/// antigüedad máxima del tipo, TD-10, y el sistema lo observa al tercero sin pasar por una persona).
 /// </summary>
 public enum ResultadoDeRevision
 {
@@ -16,7 +18,8 @@ public enum ResultadoDeRevision
     AprobadaAutomaticamente,
     AprobadaConMuestreo,
     Excepcion,
-    SinAlcance
+    SinAlcance,
+    Observada
 }
 
 /// <summary>Sugerencia del nivel Asistido: <c>Aprobar</c> (sin excepciones) o <c>Revisar</c> (con motivos).</summary>
@@ -28,6 +31,12 @@ public enum SugerenciaDeRevision
 
 /// <summary>Una razón (código estable y texto en español) por la que el sistema no aprueba solo o no sugiere aprobar.</summary>
 public sealed record MotivoDeRevision(string Codigo, string Texto);
+
+/// <summary>
+/// La antigüedad máxima al subir del tipo frente a lo que leyó la IA (TD-10): <see cref="Estado"/>, el detalle para el revisor y lo que se le pide al tercero.
+/// <see cref="Declarada"/>: el tercero declaró una fecha de expedición (aunque la IA no la encontrara).
+/// </summary>
+public sealed record AntiguedadParaRevisar(EstadoDeAntiguedad Estado, string Detalle, string? MensajeAlTercero, bool Declarada);
 
 /// <summary>Lo que dejó el análisis de IA de la versión y que la empresa recibió (nunca el contenido del documento).</summary>
 public sealed record AnalisisParaRevisar(decimal Confianza, bool Legible, int Alertas, string? TipoDetectado, int CamposCriticosCambiados);
@@ -46,7 +55,8 @@ public sealed record EntradaDeRevision(
     AnalisisParaRevisar? Analisis,
     bool CrucePendiente,
     bool DiscrepanciaCritica,
-    bool ConDiscrepancias);
+    bool ConDiscrepancias,
+    AntiguedadParaRevisar? Antiguedad = null);
 
 /// <summary>
 /// Política de la empresa al decidir: nivel, umbral efectivo (el de la empresa, nunca bajo el del plan), muestreo, tipos
@@ -60,10 +70,16 @@ public sealed record PoliticaDeRevision(
     int AprobadasEnElMes,
     int? TopeMensual);
 
+/// <summary>
+/// Lo que resolvió el motor. <see cref="ObservacionAlTercero"/>: con <c>Observada</c>, lo que se le pide al tercero (el siguiente paso accionable).
+/// </summary>
 public sealed record DecisionDeRevision(ResultadoDeRevision Resultado, SugerenciaDeRevision? Sugerencia, IReadOnlyList<MotivoDeRevision> Motivos,
-    decimal? Confianza)
+    decimal? Confianza, string? ObservacionAlTercero = null)
 {
     public bool Aprueba => Resultado is ResultadoDeRevision.AprobadaAutomaticamente or ResultadoDeRevision.AprobadaConMuestreo;
+
+    /// <summary>El sistema observó el documento al tercero (antigüedad máxima incumplida).</summary>
+    public bool Observa => Resultado == ResultadoDeRevision.Observada;
 }
 
 /// <summary>Códigos estables de los motivos de excepción (y sus textos) de la revisión automática.</summary>
@@ -83,6 +99,8 @@ public static class MotivosDeRevision
     public const string DiscrepanciasConLaFicha = "discrepancias-con-la-ficha";
     public const string VersionReenviada = "version-reenviada";
     public const string SinPresupuesto = "sin-presupuesto";
+    public const string AntiguedadExcedida = "antiguedad-excedida";
+    public const string SinFechaDeExpedicion = "sin-fecha-de-expedicion";
 
     public static MotivoDeRevision De(string codigo) => new(codigo, Texto(codigo));
 
@@ -102,6 +120,8 @@ public static class MotivosDeRevision
         DiscrepanciasConLaFicha => "El documento discrepa de la ficha del tercero.",
         VersionReenviada => "Es una versión reenviada por el tercero: la revisa una persona.",
         SinPresupuesto => "Se alcanzó el tope mensual de aprobaciones automáticas.",
+        AntiguedadExcedida => "El documento supera la antigüedad máxima que exige el tipo.",
+        SinFechaDeExpedicion => "No se pudo verificar la fecha de expedición del documento.",
         _ => codigo
     };
 }
@@ -111,12 +131,13 @@ public static class MotivosDeRevision
 /// <list type="bullet">
 /// <item><b>Manual</b> ⇒ sin acción (nulo): el análisis solo informa.</item>
 /// <item><b>Asistido</b> ⇒ nunca emite veredictos: <c>Sugerida</c> con <c>Aprobar</c> (sin motivos) o <c>Revisar</c> (con ellos).</item>
-/// <item><b>Automático</b> ⇒ tipo o área sin autorizar, o un área que exige varias aprobaciones: <c>SinAlcance</c>. Con motivos:
-/// <c>Excepcion</c>. Sin motivos y con el tope mensual alcanzado: <c>Excepcion</c> (<c>sin-presupuesto</c>). Sin motivos y elegida por
+/// <item><b>Automático</b> ⇒ tipo o área sin autorizar, o un área que exige varias aprobaciones: <c>SinAlcance</c>. Si el único motivo es la
+/// antigüedad máxima del tipo excedida (o sin fecha de expedición que nadie declaró): <c>Observada</c>, el sistema observa al tercero con lo que debe hacer.
+/// Con otros motivos: <c>Excepcion</c>. Sin motivos y con el tope mensual alcanzado: <c>Excepcion</c> (<c>sin-presupuesto</c>). Sin motivos y elegida por
 /// muestreo: <c>AprobadaConMuestreo</c>. Si no: <c>AprobadaAutomaticamente</c>.</item>
 /// </list>
 /// Motivos (en este orden): sin análisis de IA o, con él, confianza baja, ilegible, alertas de manipulación, tipo detectado distinto y
-/// campo crítico cambiado; luego cruce pendiente, discrepancia crítica o discrepancias con la ficha (F5) y versión reenviada.
+/// campo crítico cambiado; luego antigüedad excedida o sin fecha de expedición (TD-10), cruce pendiente, discrepancia crítica o discrepancias con la ficha (F5) y versión reenviada.
 /// </summary>
 public static class MotorDeRevision
 {
@@ -134,6 +155,13 @@ public static class MotorDeRevision
             return new DecisionDeRevision(ResultadoDeRevision.Sugerida, motivos.Count == 0 ? SugerenciaDeRevision.Aprobar : SugerenciaDeRevision.Revisar, motivos,
                 confianza);
 
+        // Antigüedad máxima incumplida (TD-10) como único hallazgo: el análisis es fiable y el tercero sabe qué hacer, así que el sistema lo observa sin pasar
+        // por una persona. Con otro hallazgo (confianza baja, ilegible…) la fecha leída puede estar mal: lo decide una persona. Una fecha declarada que la IA
+        // no encontró es «no verificable»: tampoco se observa solo.
+        if (motivos.Count > 0 && motivos.All(m => m.Codigo is MotivosDeRevision.AntiguedadExcedida or MotivosDeRevision.SinFechaDeExpedicion) &&
+            entrada.Antiguedad is { MensajeAlTercero: { } mensaje } antiguedad &&
+            (antiguedad.Estado == EstadoDeAntiguedad.Excedida || (antiguedad.Estado == EstadoDeAntiguedad.SinFecha && !antiguedad.Declarada)))
+            return new DecisionDeRevision(ResultadoDeRevision.Observada, null, motivos, confianza, mensaje);
         if (motivos.Count > 0)
             return new DecisionDeRevision(ResultadoDeRevision.Excepcion, null, motivos, confianza);
         if (politica.TopeMensual is { } tope && politica.AprobadasEnElMes >= tope)
@@ -197,6 +225,12 @@ public static class MotorDeRevision
             if (analisis.CamposCriticosCambiados > 0)
                 motivos.Add(MotivosDeRevision.De(MotivosDeRevision.CampoCriticoCambiado));
         }
+
+        // La antigüedad máxima del tipo (TD-10): excedida o sin una fecha de expedición verificable. Sin lectura aún no se dice nada (ya cuenta como sin análisis).
+        if (entrada.Antiguedad is { Estado: EstadoDeAntiguedad.Excedida } excedida)
+            motivos.Add(new MotivoDeRevision(MotivosDeRevision.AntiguedadExcedida, excedida.Detalle));
+        else if (entrada.Antiguedad is { Estado: EstadoDeAntiguedad.SinFecha } sinFecha)
+            motivos.Add(new MotivoDeRevision(MotivosDeRevision.SinFechaDeExpedicion, sinFecha.Detalle));
 
         if (entrada.CrucePendiente)
             motivos.Add(MotivosDeRevision.De(MotivosDeRevision.CrucePendiente));

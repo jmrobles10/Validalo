@@ -2,7 +2,7 @@ import { expect, test, type Browser } from '@playwright/test';
 import { llamar } from '../soporte/api';
 import { pdf } from '../soporte/archivos';
 import { abrirEmbebido } from '../soporte/embebido';
-import { abrirDesdeBandeja, aprobarArea, regionDeArea } from '../soporte/empresa';
+import { abrirDesdeBandeja, aprobarArea, irASector, regionDeArea } from '../soporte/empresa';
 import { completarInvitacion, tarjeta } from '../soporte/proveedor';
 import { crearEscenario, invitar, nuevaPersonaNatural, nuevoTercero, type Empresa, type Escenario, type Persona } from '../soporte/semilla';
 
@@ -63,8 +63,10 @@ test('A una persona natural no se le pide la Cámara: entrega su cédula y Cumpl
 
   const ruben = await embebido(browser, e, e.ruben, e.norte);
   await abrirDesdeBandeja(ruben, ana.nombre, 'Compras');
-  // Rubén solo ve el panel de su área; el historial cuenta que Cumplimiento aprobó sola, como Sistema y con el porqué.
+  // Rubén solo ve el panel de su área; el historial (su sector de la ficha) cuenta que Cumplimiento aprobó sola, como Sistema y con el porqué.
+  await irASector(ruben, 'Historial');
   await expect(ruben.getByRole('main')).toContainText(/Cumplimiento aprobó\s*Sistema/);
+  await irASector(ruben, 'Aprobaciones');
   await expect(ruben.getByRole('main')).toContainText('Esta área no tiene documentos que revisar en este expediente.');
   await expect(regionDeArea(ruben, 'Compras')).toContainText(CEDULA);
   await expect(ruben.getByRole('main')).not.toContainText(CAMARA);

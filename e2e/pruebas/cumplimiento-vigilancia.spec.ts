@@ -2,8 +2,9 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { pdf } from '../soporte/archivos';
 import { capturar } from '../soporte/capturas';
 import { abrirEmbebido } from '../soporte/embebido';
-import { abrirDesdeBandeja, aprobarArea, irASeccion, rechazar } from '../soporte/empresa';
+import { abrirDesdeBandeja, aprobarArea, irASeccion, irASector, rechazar } from '../soporte/empresa';
 import { aprobarUltimaArea, enRevision, esperarListas, pedirVerificaciones, personaEmbebida, revisarVerificaciones } from '../soporte/cumplimiento';
+import { agregarPersona } from '../soporte/ficha';
 import { abrirEmpresa, completarInvitacion, esperarEstadoDelTercero } from '../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero, SST } from '../soporte/semilla';
 
@@ -85,6 +86,9 @@ test('una coincidencia confirmada no deja aprobar y termina en rechazo; la otra 
   // En Sur nada cambió: sin verificaciones, sin coincidencia y sin rechazo. Sofía revisa y aprueba como siempre.
   const sofia = await abrirEmbebido(await paginaDe(browser), e, e.sofia, e.sur);
   await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Proveedor');
+  // Las verificaciones viven en «Oficial de cumplimiento»: ahí no hay nada, y en el resto de la ficha tampoco aparece rastro de ellas.
+  await irASector(sofia, 'Oficial de cumplimiento');
+  await expect(sofia.getByText('Ningún expediente de este vínculo ha pedido verificaciones')).toBeVisible();
   await expect(sofia.getByRole('region', { name: 'Listas restrictivas' })).toHaveCount(0);
   await expect(sofia.getByText(/OFAC|Listas restrictivas|Fallida|por analizar|Rechazado por/)).toHaveCount(0);
   await aprobarArea(sofia, 'Revisión');
@@ -124,6 +128,7 @@ test('el estudio de cumplimiento vence con el expediente abierto: avisa a Cumpli
 
   // Cumplimiento lo ve vencido en el expediente, con qué hacer, y le llegó el aviso a su campana.
   await abrirDesdeBandeja(olga, nombre, 'Cumplimiento');
+  await irASector(olga, 'Oficial de cumplimiento');
   await expect(olga.getByRole('region', { name: 'Estudio de cumplimiento' })).toContainText('Vencida');
   await expect(olga.getByRole('region', { name: 'Estudio de cumplimiento' })).toContainText('El estudio venció: hay que volver a hacerlo antes de aprobar.');
   await expect(olga.getByRole('button', { name: 'Registrar un estudio nuevo' })).toBeVisible();
@@ -147,7 +152,8 @@ test('el estudio de cumplimiento vence con el expediente abierto: avisa a Cumpli
   await aprobarUltimaArea(olga, 'Cumplimiento', /Estudio de cumplimiento \(vencid[ao]\)/);
   await esperarEstadoDelTercero(page, 'EnRevision');
 
-  // Con un estudio nuevo, vigente, sí se aprueba.
+  // Con un estudio nuevo, vigente, sí se aprueba (el estudio se registra en «Oficial de cumplimiento» y el cierre se ve en «Aprobaciones»).
+  await irASector(olga, 'Oficial de cumplimiento');
   await olga.getByRole('button', { name: 'Registrar un estudio nuevo' }).click();
   const nuevo = olga.getByRole('dialog', { name: /Estudio de cumplimiento/ });
   await nuevo.getByRole('button', { name: '1 · Bajo' }).click();
@@ -155,6 +161,7 @@ test('el estudio de cumplimiento vence con el expediente abierto: avisa a Cumpli
   await olga.getByRole('option', { name: 'Favorable', exact: true }).click();
   await nuevo.getByRole('button', { name: 'Registrar estudio' }).click();
   await expect(nuevo).toBeHidden();
+  await irASector(olga, 'Aprobaciones');
   await expect(olga.getByText(/Todas las áreas aprobaron el .* y el vínculo quedó activo\./)).toBeVisible();
   await esperarEstadoDelTercero(page, 'Aprobado');
 });
@@ -178,6 +185,7 @@ test('el monitoreo periódico de un vínculo activo reconsulta solo y, cuando el
   // En el vínculo, Cumplimiento ve el monitoreo: satisfecho y con su próxima consulta a los 30 días.
   const paginaVinculo = await paginaDe(browser);
   const vinculo = await abrirEmbebido(paginaVinculo, e, e.olga, e.norte, `vinculos/${invitacion.vinculoId}`);
+  await irASector(vinculo, 'Oficial de cumplimiento');
   const monitoreo = vinculo.getByRole('region', { name: 'Monitoreo de listas' });
   await expect(monitoreo).toBeVisible();
   await expect(monitoreo).toContainText('Satisfecha');
@@ -190,6 +198,7 @@ test('el monitoreo periódico de un vínculo activo reconsulta solo y, cuando el
   const resultado = await revisarVerificaciones(e, desdeAhora(31));
   expect(resultado.monitoreos).toBe(1);
   await paginaVinculo.reload();
+  await irASector(vinculo, 'Oficial de cumplimiento');
   await expect(monitoreo).toContainText(enPantalla(31));
   await expect(monitoreo).toContainText('Sistema');
   await expect(monitoreo).toContainText(enPantalla(61));
@@ -200,16 +209,7 @@ test('el monitoreo periódico de un vínculo activo reconsulta solo y, cuando el
   // El tercero suma un socio a su información legal; como su nombre está en OFAC, el monitoreo lo encuentra.
   await page.goto('/ficha/legal');
   await expect(page.getByRole('heading', { level: 1, name: 'Información legal' })).toBeVisible();
-  await page.getByRole('button', { name: 'Agregar persona' }).click();
-  const persona = page.getByRole('dialog', { name: 'Agregar persona' });
-  await persona.getByRole('combobox', { name: 'Rol' }).click();
-  await page.getByRole('option', { name: 'Socio o accionista' }).click();
-  await persona.getByRole('combobox', { name: 'Tipo de identificación' }).click();
-  await page.getByRole('option', { name: 'CC', exact: true }).click();
-  await persona.getByRole('textbox', { name: 'Número de identificación' }).fill('1012345678');
-  await persona.getByRole('textbox', { name: 'Nombres' }).fill('Roberto');
-  await persona.getByRole('textbox', { name: 'Apellidos' }).fill('Coincidencia Prueba');
-  await persona.getByRole('button', { name: 'Listo' }).click();
+  await agregarPersona(page, { rol: 'Socio o accionista', numero: '1012345678', nombres: 'Roberto', apellidos: 'Coincidencia Prueba', porcentaje: '1' });
   await page.getByRole('group', { name: 'Guardar la sección' }).getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect(page.getByRole('listitem', { name: 'Roberto Coincidencia Prueba' })).toBeVisible();
 
@@ -229,6 +229,7 @@ test('el monitoreo periódico de un vínculo activo reconsulta solo y, cuando el
   // «Abrir» lleva al vínculo, donde Olga ve la coincidencia y la confirma: el vínculo sigue activo hasta que un administrador decida.
   await fila.getByRole('link', { name: 'Abrir' }).click();
   await expect(olga.getByRole('heading', { level: 1, name: nombre })).toBeVisible();
+  await irASector(olga, 'Oficial de cumplimiento');
   const novedad = olga.getByRole('region', { name: 'Monitoreo de listas' });
   const coincidencia = novedad.getByRole('listitem', { name: 'Roberto Coincidencia Prueba · OFAC (SDN)' });
   await expect(coincidencia).toContainText('Socio · CC 1012345678');
@@ -241,7 +242,8 @@ test('el monitoreo periódico de un vínculo activo reconsulta solo y, cuando el
   await expect(confirmar).toBeHidden();
   await expect(coincidencia).toContainText('Confirmada');
   await expect(novedad).toContainText('el vínculo sigue activo hasta que un administrador decida si lo bloquea o lo desvincula');
-  await expect(olga.getByText(/^Activo$/).first()).toBeVisible();
+  // El chip «Activo» lleva la fecha como texto oculto: se reconoce por su estado.
+  await expect(olga.locator('[data-estado="Activo"]').first()).toBeVisible();
 
   // Confirmarla era lo último que le tocaba decidir al oficial: la fila sale de su bandeja (HI-5). Lo que sigue es del administrador, y el
   // monitoreo del vínculo sigue mostrando la coincidencia confirmada.

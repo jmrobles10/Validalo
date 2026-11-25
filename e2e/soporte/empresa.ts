@@ -67,6 +67,8 @@ export function regionDeArea(app: FrameLocator, area: string): Locator {
 
 /** «Aprobar área (n documentos)» y confirmar: aprueba en la versión vista todo lo que le queda al área. */
 export async function aprobarArea(app: FrameLocator, area: string): Promise<void> {
+  // La decisión de las áreas vive en el sector «Aprobaciones» (la persona puede venir de otro sector, p. ej. el de cumplimiento).
+  await irASector(app, 'Aprobaciones');
   await regionDeArea(app, area).getByRole('button', { name: /^Aprobar área/ }).click();
   const dialogo = app.getByRole('dialog', { name: new RegExp(`^Aprobar ${escapar(area)}`) });
   await dialogo.getByRole('button', { name: /^Aprobar/ }).last().click();

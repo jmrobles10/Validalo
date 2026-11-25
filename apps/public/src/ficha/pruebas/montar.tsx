@@ -1,6 +1,6 @@
 import { ThemeProvider } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   configurarCliente,
@@ -11,6 +11,7 @@ import {
   type ExpedientePublicoDto,
   type FaltanteSeccionDto,
   type PropuestaDeSeccionDto,
+  type RelacionEntreTercerosDto,
   type SeccionFichaDto,
   type SeccionGuardadaDto,
   type VinculoPublicoDto,
@@ -108,6 +109,8 @@ interface Escenario {
   /** Respuesta de la descarga del PDF de la declaración PEP (`/public/v1/ficha/{sección}/declaracion-pep/pdf`); por omisión, 404. Cada petición se anota en `descargas`. */
   alDescargar?: (peticion: Peticion) => Response;
   descargas?: Peticion[];
+  /** Las personas relacionadas del tercero (GET de sus relaciones): de ahí sale el documento de identidad de las tarjetas de la información legal. */
+  relaciones?: RelacionEntreTercerosDto[];
 }
 
 /** Monta el wizard en `ruta` con una API falsa; devuelve los PUT que recibió. */
@@ -129,6 +132,7 @@ export function montarFicha(ruta: string, escenario: Escenario) {
       if (metodo === 'POST' && url.pathname.endsWith('/evaluacion')) {
         return Promise.resolve(escenario.alEvaluar?.(peticion) ?? json(200, { completa: true, faltantes: [], reglaVersion: 1 }));
       }
+      if (url.pathname === '/public/v1/tercero/relaciones' && escenario.relaciones) return Promise.resolve(json(200, escenario.relaciones));
       if (url.pathname === '/public/v1/ficha') return Promise.resolve(json(200, escenario.estado));
       if (url.pathname === '/public/v1/ficha/propuestas') return Promise.resolve(json(200, escenario.propuestas ?? []));
       if (url.pathname.endsWith('/propuestas')) {
@@ -185,4 +189,21 @@ export function montarFicha(ruta: string, escenario: Escenario) {
 export async function escribir(usuario: ReturnType<typeof userEvent.setup>, campo: HTMLElement, texto: string) {
   await usuario.click(campo);
   await usuario.paste(texto);
+}
+
+/**
+ * Deja listo el diálogo «Agregar persona» en lo que no es identidad: elige el rol y responde las preguntas obligatorias (PEP, vínculo con una PEP y, si no es
+ * Socio, «¿También es socio o accionista?») con «No». Con el rol Socio escribe también el porcentaje. «Listo» sigue deshabilitado hasta que estén también la
+ * identificación y el nombre de la persona.
+ */
+export async function completarPersona(usuario: ReturnType<typeof userEvent.setup>, dialogo: HTMLElement, rol: string, tambienSocio: 'No' | 'Sí' = 'No', porcentaje = '100') {
+  const pregunta = (nombre: string, respuesta: string) => usuario.click(within(within(dialogo).getByRole('radiogroup', { name: nombre })).getByRole('radio', { name: respuesta }));
+  await usuario.click(within(dialogo).getByRole('combobox', { name: 'Rol' }));
+  await usuario.click(screen.getByRole('option', { name: rol }));
+  if (rol !== 'Socio o accionista') {
+    await pregunta('¿También es socio o accionista?', tambienSocio);
+  }
+  if (rol === 'Socio o accionista' || tambienSocio === 'Sí') await escribir(usuario, within(dialogo).getByRole('textbox', { name: 'Porcentaje de participación (%)' }), porcentaje);
+  await pregunta('¿Es persona expuesta políticamente (PEP)?', 'No');
+  await pregunta('¿Tiene vínculo con una persona expuesta políticamente?', 'No');
 }

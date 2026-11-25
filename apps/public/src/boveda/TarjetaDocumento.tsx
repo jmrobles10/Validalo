@@ -4,7 +4,7 @@ import { formatearFecha } from '@validalo/ui';
 import { Archive, Download, EllipsisVertical, FileText, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { estadoDeVigencia, textoVigencia } from '../vigencia/vigencia';
+import { estadoDeVigencia, textoSinVencimiento, textoVigencia } from '../vigencia/vigencia';
 import { ChipDeVersion } from './ChipDeVersion';
 import { COLUMNAS_DOCUMENTO } from './columnas';
 import { DetalleEmpresas } from './DetalleEmpresas';
@@ -54,7 +54,7 @@ export function TarjetaDocumento({ documento, empresaId = null }: { documento: D
   const resumen = resumirEmpresas(comparticionesDeLaEmpresa(documento.porEmpresa, empresaId));
   const idEmpresas = `empresas-${documento.id}`;
   const vigencia = actual?.vigencia;
-  const vence = !vigencia ? null : estadoDeVigencia(vigencia) === 'SinVencimiento' ? t('vigencia.estados.SinVencimiento') : textoVigencia(vigencia, t);
+  const vence = !vigencia ? null : estadoDeVigencia(vigencia) === 'SinVencimiento' ? textoSinVencimiento(vigencia, t) : textoVigencia(vigencia, t);
 
   return (
     <Box

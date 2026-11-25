@@ -1,6 +1,6 @@
 import { ThemeProvider } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { configurarCliente, reiniciarCliente, SCOPES } from '@validalo/api-client';
 import { createValidaloTheme } from '@validalo/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -44,6 +44,8 @@ function montar() {
       </QueryClientProvider>
     </ThemeProvider>,
   );
+  // Lo aprobado va plegado en «Aprobados» mientras haya algo por revisar: el revisor lo abre para ver lo que decidió el Sistema.
+  fireEvent.click(screen.getByRole('button', { name: 'Mostrar' }));
   const tarjeta = (nombre: string) => {
     const li = screen.getByRole('heading', { name: nombre }).closest('li');
     if (!li) throw new Error(`falta la tarjeta de ${nombre}`);

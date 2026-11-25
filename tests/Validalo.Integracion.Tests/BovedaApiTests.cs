@@ -378,7 +378,8 @@ public sealed partial class BovedaApiTests(ApiFixture fixture)
             new CrearTipoDocumentoDto("FORMATO_NORTE", "Formato de vinculación Norte", null,
                 ReglaFrescura: new ReglaFrescuraDto("MaxDiasDesdeExpedicion", 60)), 201);
         creado.Ambito.ShouldBe("PorVinculo");
-        creado.ReglaFrescura.Dias.ShouldBe(60);
+        // La regla heredada se traduce a las dos de ahora: antigüedad máxima de 60 días y revalidar cada 60 (TD-10).
+        (creado.AntiguedadMaximaDias, creado.RevalidarCadaDias, creado.ReglaFrescura.Tipo).ShouldBe((60, 60, "Ninguna"));
 
         // Restringir un canónico global a PorVinculo sí se permite.
         var rut = tipos.Single(t => t.Codigo == "RUT");

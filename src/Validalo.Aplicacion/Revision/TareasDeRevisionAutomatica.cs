@@ -161,8 +161,15 @@ public sealed class TareasDeRevisionAutomatica(IDocumentStore store, EmisorDeCer
 
         return new EntradaDeRevision(version.DocumentoId, version.Numero, requisito.TipoCanonico, requisito.Reenvios,
             config.AreasAutorizadas.Contains(candidata.Area.AreaId), requisito.AprobadoresPara(candidata.Area) > 1, analisis, crucePendiente,
-            soporte?.DiscrepanciaCritica ?? false, soporte?.Secciones.Any(s => s.Cruce is { Discrepancias: > 0 }) ?? false);
+            soporte?.DiscrepanciaCritica ?? false, soporte?.Secciones.Any(s => s.Cruce is { Discrepancias: > 0 }) ?? false, AntiguedadDe(cruces, requisito));
     }
+
+    /// <summary>La antigüedad máxima del tipo (TD-10) frente a lo que leyó la IA y la empresa recibió, para el motor; nula si el tipo no la exige.</summary>
+    private static AntiguedadParaRevisar? AntiguedadDe(CrucesDelExpediente cruces, RequisitoDeExpediente requisito) =>
+        cruces.AntiguedadDe(requisito.Id) is { } antiguedad
+            ? new AntiguedadParaRevisar(antiguedad.Estado, AntiguedadDelDocumento.Detalle(antiguedad), AntiguedadDelDocumento.MensajeAlTercero(antiguedad, requisito.Nombre),
+                antiguedad.FechaDeclarada is not null)
+            : null;
 
     /// <summary>Registra las decisiones con el stream bloqueado y cuenta el uso del mes en la misma transacción.</summary>
     private async Task<int> EscribirAsync(Guid tenantId, Guid expedienteId, NivelDeRevisionAutomatica nivel, IReadOnlyList<PropuestaDeRevision> propuestas,

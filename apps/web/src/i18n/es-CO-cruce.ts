@@ -21,6 +21,29 @@ export const cruce = {
   manual: 'Sin cruce automático: tu empresa no recibió la lectura de {{documentos}}. Revísalo manualmente.',
   sinDocumento: 'Ningún documento de la bóveda respalda esta sección todavía.',
   evidencia: 'Es evidencia para la revisión: el cruce no aprueba ni observa nada por sí mismo.',
+  // El resumen de lo crítico en una frase, con los nombres cortos de los campos (los de la cuenta; otro campo va con su etiqueta en minúscula).
+  criticos: {
+    coincide: 'Coincide: {{campos}}',
+    difiere: 'No coincide: {{campos}}',
+    falta: 'Sin verificar: {{campos}}',
+    tambienDifiere: 'También difiere: {{campos}}',
+    sinDiferencias: 'Sin diferencias',
+    noSeLee: 'No se lee con seguridad: nada se pudo verificar',
+    cortos: {
+      numero: 'número',
+      titular: 'titular',
+      identificacion_titular: 'identificación',
+      titular_es_el_tercero: 'titular = tercero',
+      banco: 'banco',
+      tipo_cuenta: 'tipo de cuenta',
+    },
+  },
+  // La antigüedad del documento frente al máximo de su tipo (TD-10): una línea con el tono de su resultado.
+  antiguedad: {
+    linea_one: 'Antigüedad: {{count}} día, máximo {{maximo}}',
+    linea_other: 'Antigüedad: {{count}} días, máximo {{maximo}}',
+    sinFecha: 'Antigüedad: sin fecha de expedición, máximo {{maximo}} días',
+  },
   soporte: {
     titulo: 'Soporte de la información',
     respalda: 'Respalda: {{secciones}}',
@@ -33,6 +56,9 @@ export const cruce = {
     sinCruce: 'Sin cruce con esta versión.',
     coincide: 'Coincide',
     criticas: 'Difiere en campos críticos',
+    sinVerificar: 'Sin verificar',
+    noSeLee: 'No se lee',
+    lineaDeCuenta: '{{cuenta}} — {{resumen}}',
     difiere_one: 'Difiere en {{count}} campo',
     difiere_other: 'Difiere en {{count}} campos',
   },

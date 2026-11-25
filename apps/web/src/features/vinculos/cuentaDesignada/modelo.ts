@@ -3,6 +3,7 @@ import type { EstadoCuentaDesignada } from '@validalo/ui';
 import type { TFunction } from 'i18next';
 import { cuentas } from '../../../i18n/es-CO-cuentas';
 import { mensajeDeError } from '../../../shared/errores';
+import { resumirCruce, textoDelResumen, tonoDelResumen, type ResumenDeCruce, type TonoDelResumen } from '../../expedientes/resumenDeCruce';
 
 type CodigoCuenta = keyof typeof cuentas.errores;
 const esCodigoCuenta = (codigo: string): codigo is CodigoCuenta => codigo in cuentas.errores;
@@ -39,14 +40,30 @@ export function nombresDe(aprobaciones: readonly AprobacionDeCuentaDto[], t: TFu
 export const yaAprobo = (cuenta: CuentaDesignadaDto, usuarioId: string | null) =>
   usuarioId !== null && cuenta.aprobaciones.some((a) => a.usuarioId.toLowerCase() === usuarioId.toLowerCase());
 
-const VERIFICACIONES = ['SinAnalisis', 'Coincide', 'Discrepa', 'NoVerificable', 'NoSeLee'] as const;
-
-/** Lo que concluyó la lectura de la certificación frente a la cuenta (el resumen de `CertificacionDeCuentaDelVinculoDto.verificacion`). */
-export type VerificacionDeCuenta = (typeof VERIFICACIONES)[number];
-
-export const esVerificacionDeCuenta = (valor: string): valor is VerificacionDeCuenta => VERIFICACIONES.some((v) => v === valor);
-
-/** Las etiquetas de los campos críticos que difieren entre la cuenta y su certificación (número, titular, que el titular sea el tercero, estado de la cuenta). */
+/** Las etiquetas de los campos críticos que difieren entre la cuenta y su certificación (número, titular, su identificación, que el titular sea el tercero). */
 export function camposCriticosQueDifieren(certificacion: Pick<CertificacionDeCuentaDelVinculoDto, 'cruce'>): string[] {
   return (certificacion.cruce?.campos ?? []).filter((c) => c.critico && c.resultado === 'Discrepa').map((c) => c.etiqueta);
 }
+
+/** Lo que dice la certificación de la cuenta, en una línea: no hay lectura que cotejar, o lo que concluyó el cruce con lo declarado (por lo crítico). */
+export type ResumenDeCertificacion = { tipo: 'sinLectura' } | { tipo: 'cruce'; cruce: ResumenDeCruce };
+
+/**
+ * Resume la certificación de la cuenta a partir de su cruce campo por campo (no del `verificacion` de la API, que cuenta como diferencia también lo que no es crítico):
+ * sin lectura de la empresa, nada que resumir; con ella, ver {@link resumirCruce}.
+ */
+export function resumirCertificacion(certificacion: Pick<CertificacionDeCuentaDelVinculoDto, 'verificacion' | 'sinAnalisis' | 'cruce'>): ResumenDeCertificacion {
+  const { cruce } = certificacion;
+  if (certificacion.sinAnalisis || !cruce) return { tipo: 'sinLectura' };
+  return { tipo: 'cruce', cruce: resumirCruce({ campos: cruce.campos, legible: cruce.legible && certificacion.verificacion !== 'NoSeLee' }) };
+}
+
+/** Error si un crítico difiere; advertencia si algo crítico quedó sin verificar, no se lee o no hay lectura; éxito si todo lo crítico coincide. */
+export const tonoDeCertificacion = (resumen: ResumenDeCertificacion): TonoDelResumen => (resumen.tipo === 'sinLectura' ? 'advertencia' : tonoDelResumen(resumen.cruce.resultado));
+
+/** La comparación campo por campo se abre sola solo cuando un campo crítico no coincide: es lo que quien aprueba no puede pasar por alto. */
+export const debeAbrirLaComparacion = (resumen: ResumenDeCertificacion): boolean => resumen.tipo === 'cruce' && resumen.cruce.resultado === 'Discrepa';
+
+/** La frase del resumen: «coincide en número y titular · falta verificar: identificación». */
+export const textoDeCertificacion = (resumen: ResumenDeCertificacion, t: TFunction): string =>
+  resumen.tipo === 'sinLectura' ? t('cuentas.certificacion.sinLectura') : textoDelResumen(resumen.cruce, t);

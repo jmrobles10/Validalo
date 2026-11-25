@@ -38,7 +38,7 @@ function situacionDe(c: Pick<ComparticionPublicaDto, 'situacion' | 'compartido'>
   return SITUACIONES.find((s) => s === c.situacion) ?? (c.compartido ? 'TieneVigente' : 'NoRecibe');
 }
 
-const BASES = ['FechaExpedicion', 'FechaCarga', 'Ratificacion', 'VencimientoPropio'] as const;
+const BASES = ['Aprobacion', 'FechaExpedicion', 'FechaCarga', 'Ratificacion', 'VencimientoPropio'] as const;
 
 /**
  * Qué tiene cada empresa de este documento y qué falta, en una sola frase que no contradice la versión vigente de la cabecera

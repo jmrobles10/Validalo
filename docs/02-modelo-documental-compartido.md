@@ -23,7 +23,7 @@ Un RUT es **un hecho sobre el tercero**; la aprobación de ese RUT es **una opin
 | P3 | **Cada empresa es dueña de su decisión, no del archivo.** | `VersionAceptada(vínculo, tipo)` registra qué versión validó esa empresa, cuándo, con qué vigencia. Si la actual cambia, esa aceptación queda `Desactualizada` hasta que la empresa revalide. Nunca existen dos "verdades aceptadas" en paralelo: la divergencia solo existe como *pendiente de revalidar*. |
 | P4 | **Las decisiones son privadas por empresa.** | Lo que A aprobó, observó o rechazó no lo ve B. Esto aplica también **dentro de un mismo tenant (grupo empresarial)**: cada razón social es una `Empresa` del tenant y sus decisiones están aisladas de las demás empresas del grupo (P-11-2, ADR-0008). El tercero sí ve el estado por empresa. |
 | P5 | **Los hechos sobre el archivo se calculan una vez y se comparten.** | Tipo detectado, legibilidad, antivirus, hash, fechas extraídas, campos clave y comparación con la versión anterior se computan por versión, no por empresa. |
-| P6 | **La vigencia tiene dos capas.** | Capa 1: hecho del documento (fecha propia de vencimiento, fecha de expedición, periodo). Capa 2: exigencia de frescura de cada empresa. La vigencia *para A* es el mínimo de ambas. |
+| P6 | **La vigencia tiene dos capas.** | Capa 1: hecho del documento (su fecha propia de vencimiento). Capa 2: «revalidar cada N días» de cada empresa, que cuenta **desde que esa empresa aprueba la versión** (TD-10). La vigencia *para A* es el mínimo de ambas. La **antigüedad máxima al subir** (días desde la expedición) es otra regla, independiente: no define la vigencia, es una condición de aceptación. |
 | P7 | **El ámbito lo define el tipo canónico.** | `Global` (bóveda del tercero, compartido) o `PorVinculo` (privado de la relación: formato de vinculación de A, póliza a favor de A, autorización de datos de A, contrato). Un tipo propio de un tenant sin equivalente canónico es siempre `PorVinculo`. |
 | P8 | **Compartición automática sin excepciones, pero solo con quien el tercero ya aceptó.** | Una versión global se comparte con todos los vínculos **cuya invitación el tercero aceptó** y que exigen ese tipo (A-8: el tercero no puede excluir a ninguna empresa; B-1/ADR-0009: nada se comparte con una empresa antes de `InvitacionAceptada` + consentimientos). Antes de aceptar, la empresa invitante solo ve "tercero existente; N requisitos podrían quedar cubiertos". La compartición se **congela** hacia adelante por desvinculación o bloqueo del vínculo; lo ya compartido sigue legible por retención. |
 | P9 | **Nada se borra si está referenciado.** | Una versión referenciada por una `VersionAceptada` o un certificado de cualquier empresa es inmutable e imborrable por retención legal. El tercero puede **retirar** (no vuelve a usarse) pero no borrar. Nunca se anonimiza una versión referenciada (rompería el hash del certificado). |
@@ -45,7 +45,7 @@ Un RUT es **un hecho sobre el tercero**; la aprobación de ese RUT es **una opin
 | Revalidación | Expediente de tipo `Actualizacion` que una empresa abre automáticamente cuando la versión actual cambió. |
 | Hecho compartido | Resultado objetivo sobre una versión (tipo, legibilidad, fechas, comparación). Lo calcula la plataforma una vez. |
 | Decisión privada | Veredicto de una empresa sobre una versión en su vínculo. |
-| Regla de frescura | Exigencia de una empresa sobre la antigüedad máxima o el periodo mínimo de un tipo de documento. |
+| Reglas de frescura | Las **dos reglas independientes y opcionales** de un tipo de documento (TD-10): **antigüedad máxima al subir** (el documento debe haberse expedido hace no más de N días) y **revalidar cada N días** (desde que la empresa lo aprueba). El periodo mínimo (`PeriodoMinimo`) se conserva como regla heredada. |
 | Compartición | Autorización de una empresa (vía su vínculo, ya aceptado por el tercero) para ver una versión concreta. |
 | Persona relacionada | Tercero persona natural con relación tipada (`RepresentanteLegal`, `Suplente`, `Socio`, `BeneficiarioFinal`, `MiembroDe`) con otro tercero; tiene bóveda propia. |
 | Configuración efectiva | Parámetros de un requisito ya resueltos por la jerarquía tenant → empresa → regla y congelados en el expediente. |
@@ -98,7 +98,9 @@ flowchart LR
 |---|---|---|
 | `tipoCanonicoId` (nullable) | Enlace al canónico; `null` ⇒ `PorVinculo` | — |
 | `nombre`, `textoAyuda`, `plantillaVersionId` | Lo que ve el tercero | Hereda del canónico |
-| `reglaFrescura` | `Ninguna` · `MaxDiasDesdeExpedicion(n)` · `PeriodoMinimo(regla)` · `MaxDiasDesdeAprobacion(n)` | Según el Anexo A de 03 |
+| `antiguedadMaximaDias` | entero `1…3650` · nulo | Condición de aceptación al subir: días entre la **expedición** (la que lee la IA) y la **carga**; nulo = sin regla. Sugerida por el Anexo A de 03 |
+| `revalidarCadaDias` | entero `1…3650` · nulo | Vence y se vuelve a pedir a los N días de que la empresa **aprueba** la versión para el vínculo (o de que el tercero la ratifica); nulo = no vence por revalidación. En la UI se elige en días o en meses (un mes = 365/12 días) y se guarda en días |
+| `reglaFrescura` (heredada) | `Ninguna` · `PeriodoMinimo(regla)` (`MaxDiasDesdeExpedicion(n)` y `MaxDiasDesdeAprobacion(n)` se traducen a los dos campos: TD-14) | Solo conserva el periodo |
 | `diasAviso[]` | Avisos previos al vencimiento | `[30, 15, 5]` (`[60, 30, 7]` pólizas y EEFF) |
 | `diasGracia` | Días después del vencimiento antes de pasar el vínculo a `Vencido` | **15** (P-7-2); 0 para requisitos `criticoDeCumplimiento` |
 | `politicaDesactualizada` | `BloquearTrasGracia` (vencido `diasRevalidacion`, la marca `ConPendientes` del certificado pasa a **bloqueante**: la consulta responde `bloqueado: true`) · `SoloAviso` | `BloquearTrasGracia` (A-2). Único nombre; no existe `desactualizadaBloquea` |
@@ -134,7 +136,7 @@ Un parámetro tiene **un solo nombre** en los tres niveles. Ejemplo: Acme Constr
 3. Si el formulario exige soporte (p. ej. certificación bancaria para `CUENTA_BANCARIA`, RUT para `INFO_TRIBUTARIA`), la IA, cuando está disponible, cruza los campos clave declarados con los extraídos del soporte; la discrepancia es un hecho compartido (P-3-4).
 4. Los datos maestros del tercero (razón social, dirección, relaciones con personas) son el formulario global `DATOS_MAESTROS`: **el tercero propone**, la plataforma contrasta contra el RUT/Cámara si hay IA, y la versión se publica; sin IA se publica igual y queda pendiente de revalidación manual en cada empresa. Nunca se bloquea al tercero ni una empresa puede "corregir" datos globales (P-1-7). Las empresas solo anotan datos privados del vínculo (código ERP, categorías, etiquetas).
 
-**Cuentas bancarias (P-3-3, CB-1).** El tercero registra **N cuentas globales**, cada una **con su propia certificación bancaria** (decidido por el usuario el 2026-11-24: una certificación por cuenta). La certificación de una cuenta es un **documento propio de esa cuenta** (`CERTIFICACION_BANCARIA` con `CuentaBancariaId`, clave natural `C|{tercero}|{cuenta}`, con sus versiones v1, v2…) y no el documento global único del tipo: la de una cuenta nueva no reemplaza la de otra. Registrar una cuenta exige adjuntar su certificación; designarla exige la de **esa** cuenta (422 `certificacion-requerida`). Se comparte con una empresa **solo cuando el tercero designa esa cuenta con ella** (las demás cuentas no se le muestran) y, con esa compartición, la IA la lee y se cruza con lo declarado de esa cuenta (número exacto, titular, identificación del titular, que el titular sea el tercero y que la cuenta esté activa son críticos): el tercero ve el resultado y la empresa lo ve junto a la cuenta designada, destacado si hay una diferencia crítica (evidencia: nada se bloquea solo). Cada vínculo tiene una **`CuentaDesignada`** (dato privado del vínculo) que **elige el tercero** al vincularse o cuando quiera cambiarla; el cambio de cuenta designada lo aprueban dos usuarios de esa empresa con `cuentas:aprobar` (antifraude) y, aprobado, viaja al ERP de esa empresa. **Un solo cuatro ojos:** esa misma aprobación deja `Aprobado` el requisito `CUENTA_BANCARIA` del expediente; no se revisa dos veces. Si el tipo de vínculo exige cuenta designada (proveedor), el expediente no se cierra sin ella. Cambiar la cuenta designada con A no afecta a B. Una versión nueva de la certificación de una cuenta sigue la regla de versión única **de esa cuenta** (las empresas que la tienen designada o propuesta reciben la nueva y la IA la vuelve a leer; las demás cuentas no se tocan). Las cuentas que ya existían sin certificación propia siguen funcionando pero quedan «sin certificación»: no se pueden designar de nuevo hasta subirla; una sola cuenta activa hereda la certificación general que ya tenía el tercero (migración idempotente) y con varias no se adivina.
+**Cuentas bancarias (P-3-3, CB-1).** El tercero registra **N cuentas globales**, cada una **con su propia certificación bancaria** (decidido por el usuario el 2026-11-24: una certificación por cuenta). La certificación de una cuenta es un **documento propio de esa cuenta** (`CERTIFICACION_BANCARIA` con `CuentaBancariaId`, clave natural `C|{tercero}|{cuenta}`, con sus versiones v1, v2…) y no el documento global único del tipo: la de una cuenta nueva no reemplaza la de otra. Registrar una cuenta exige adjuntar su certificación; designarla exige la de **esa** cuenta (422 `certificacion-requerida`). Se comparte con una empresa **solo cuando el tercero designa esa cuenta con ella** (las demás cuentas no se le muestran) y, con esa compartición, la IA la lee y se cruza con lo declarado de esa cuenta (número exacto, titular, identificación del titular y que el titular sea el tercero son críticos; el estado de la cuenta ya no se valida, CB-12): el tercero ve el resultado y la empresa lo ve junto a la cuenta designada, destacado si hay una diferencia crítica (evidencia: nada se bloquea solo). Cada vínculo tiene una **`CuentaDesignada`** (dato privado del vínculo) que **elige el tercero** al vincularse o cuando quiera cambiarla; el cambio de cuenta designada lo aprueban dos usuarios de esa empresa con `cuentas:aprobar` (antifraude) y, aprobado, viaja al ERP de esa empresa. **Un solo cuatro ojos:** esa misma aprobación deja `Aprobado` el requisito `CUENTA_BANCARIA` del expediente; no se revisa dos veces. Si el tipo de vínculo exige cuenta designada (proveedor), el expediente no se cierra sin ella. Cambiar la cuenta designada con A no afecta a B. Una versión nueva de la certificación de una cuenta sigue la regla de versión única **de esa cuenta** (las empresas que la tienen designada o propuesta reciben la nueva y la IA la vuelve a leer; las demás cuentas no se tocan). Las cuentas que ya existían sin certificación propia siguen funcionando pero quedan «sin certificación»: no se pueden designar de nuevo hasta subirla; una sola cuenta activa hereda la certificación general que ya tenía el tercero (migración idempotente) y con varias no se adivina.
 
 ### 4.5 Personas relacionadas (B-3, ADR-0010)
 
@@ -261,25 +263,29 @@ Reglas:
 
 ### 8.1 Cálculo por versión aceptada
 
+Cada tipo de documento del tenant tiene **dos reglas de frescura, independientes y opcionales** (TD-10):
+
+1. **Antigüedad máxima al subir** (`antiguedadMaximaDias`). El documento debe haberse expedido hace no más de N días **contados hasta la fecha de carga de la versión** (calendario del negocio). La fecha de expedición es la que **lee la IA** del documento (`fechaExpedicion`); la que declara el tercero (`fecha_expedicion` del formulario) se coteja y, si difiere, es evidencia visible, pero **manda la de la IA**. Si la IA no la encuentra no se puede verificar (`NoVerificable`, crítico) aunque el tercero la haya declarado. Un tipo que no se lee (sin esquema de IA) solo tiene lo declarado y se evalúa con eso. **No define la vigencia**: es una condición de aceptación (§9).
+2. **Revalidar cada N días** (`revalidarCadaDias`). Cuenta **desde la aprobación de la empresa** de esa versión para ese vínculo (el requisito queda `Aprobado` en el expediente) o desde la ratificación del tercero, la más reciente. **Antes de aprobarse no hay fecha por revalidación.** Al cumplirse, el documento vence y se pide de nuevo con los avisos y la gracia del tipo.
+
 ```
 capa1 = fecha_vencimiento_doc (si tieneVencimientoIntrinseco)        -- hecho del documento
-capa2 = según reglaFrescura del tenant:
-        MaxDiasDesdeExpedicion(n)  → fecha_expedicion + n
-        MaxDiasDesdeAprobacion(n)  → fecha_aceptacion + n
-        PeriodoMinimo(regla)       → fin del periodo permitido (p. ej. EEFF 2025 válidos hasta 2027-04-30)
-        Ninguna                    → ∞
-vigente_hasta = mín(capa1, capa2);  motivo_vigencia = cuál ganó
+base  = más reciente de { aprobación de la empresa, ratificación del tercero }   -- nula si no hay ninguna
+capa2 = revalidarCadaDias == nulo o base == nula ? ∞ : base + revalidarCadaDias
+        PeriodoMinimo(regla) → sin fecha todavía (heredada)
+vigente_hasta = mín(capa1, capa2);  motivo_vigencia = Aprobacion | Ratificacion | VencimientoPropio | SinVencimiento | PeriodoNoCalculado
 ```
 
-| Caso | A (Cámara máx. 30 días) | B (Cámara máx. 90 días) |
+| Caso | A (antigüedad 30, revalidar 365) | B (antigüedad 90, revalidar 180) |
 |---|---|---|
-| Cámara expedida 2026-10-01 | vigente_hasta 2026-10-31 (frescura A) | vigente_hasta 2026-12-30 (frescura B) |
-| Póliza fin 2026-11-15, regla `Ninguna` | 2026-11-15 (vencimiento propio) | 2026-11-15 |
-| RUT, regla `MaxDiasDesdeExpedicion(365)` (Anexo A de 03) | 365 días desde la generación del PDF; ratificable | según B |
+| Cámara expedida 2026-10-01, cargada 2026-10-05 | Cumple (4 días); aprobada el 2026-10-06 ⇒ vigente_hasta 2027-10-06 (aprobación + 365) | Cumple; aprobada el 2026-10-20 ⇒ vigente_hasta 2027-04-18 (aprobación + 180) |
+| Cámara expedida 2026-06-01, cargada 2026-10-05 (126 días) | **Excede 30**: se observa al tercero (§9) | Excede 90: se observa |
+| Póliza fin 2026-11-15, sin revalidación | 2026-11-15 (vencimiento propio) | 2026-11-15 |
+| RUT, sin antigüedad, revalidar 365 (Anexo A de 03) | 365 días desde que A lo aprueba; ratificable | según B |
 
-Es correcto que A vea vencida la misma versión que B ve vigente: **el hecho es uno; la exigencia es de cada una**.
+Es correcto que A observe la misma versión que B acepta: **el hecho es uno; la exigencia es de cada una**.
 
-**Implementado (TD-6, TD-7, 2026-11-08).** La vigencia se registra por versión **y vínculo** en el stream del documento con la regla del tipo del tenant de ese vínculo; `fecha_expedicion` y `fecha_vencimiento` salen de los campos declarados (claves reservadas) y, sin `fecha_expedicion`, la base es la fecha de carga (también para `MaxDiasDesdeAprobacion` hasta H6); `PeriodoMinimo` aún no da fecha. Los avisos de §8.3 ya salen (un correo por tercero y fecha, con la fecha de cada empresa) y la versión queda `Vencida` para el vínculo al pasar la gracia (`EstadoVersion.Vencida` cuando vence para todos). Los pasos 2–4 de §8.2 (vínculo `PorVencer`/`Vencido`, renovación, certificado) siguen pendientes (H6).
+**Implementado (TD-6, TD-7, TD-10).** La vigencia se registra por versión **y vínculo** en el stream del documento (`VigenciaDeVersionCalculada`, con `aprobadaEn` y `revalidarCadaDias`) con las reglas del tipo del tenant de ese vínculo; `fecha_vencimiento` sale de los campos declarados (clave reservada) y la aprobación se lee de los expedientes del vínculo. La aprobación de un requisito deja, en la misma transacción del expediente, una marca de recálculo que un barrido corto (`Validalo:VigenciasDeDocumentos:SegundosProceso`, 15 s) convierte en el cálculo; el cálculo es idempotente y vuelve a leer la aprobación al correr. La antigüedad máxima se evalúa **al leer** (no se guarda): la empresa ve el hallazgo con la lectura de IA que consumió (IA-3) y el tercero, con la de su propio documento. Los avisos de §8.3 salen (un correo por tercero y fecha) y la versión queda `Vencida` para el vínculo al pasar la gracia. Los pasos 2–4 de §8.2 (vínculo `PorVencer`/`Vencido`, renovación, certificado) rigen como en §8.2.
 
 ### 8.2 Qué pasa al vencer en A
 1. `version_aceptada` de A pasa a `Vencida`; el requisito de A queda `Vencido`.
@@ -300,7 +306,7 @@ La proyección `FrescuraDocumentoTercero` mantiene, por documento global del ter
 | Mecanismo | Cuándo aplica | Efecto |
 |---|---|---|
 | Versión nueva | Siempre | Nueva actual ⇒ revalidación de todas (sección 7); para A es renovación, para B puede ser actualización anticipada |
-| Ratificación | **Condición única (I-14):** `permiteRatificacion` en el canónico **y** en la configuración efectiva, la versión es la actual y no tiene `fecha_vencimiento_doc` pasada | `RequisitoRatificado` en el vínculo de la empresa que lo pidió; **reinicia la frescura** (la fecha base pasa a ser la de la ratificación: `vigente_hasta = fecha_ratificacion + n`); no cambia la versión actual ni alerta a otras; reemite el certificado si cambia la vigencia. **Nunca pasa por un área ni la emite el sistema** (A-7): "si no cambia ni la información ni el documento, con la declaración basta"; si algo cambió, es versión nueva (§7) |
+| Ratificación | **Condición única (I-14):** `permiteRatificacion` en el canónico **y** en la configuración efectiva, la versión es la actual y no tiene `fecha_vencimiento_doc` pasada | `RequisitoRatificado` en el vínculo de la empresa que lo pidió; **reinicia el plazo de revalidación** (la base pasa a ser la de la ratificación, si es posterior a la aprobación: `vigente_hasta = fecha_ratificacion + revalidarCadaDias`; si la renovación se aprueba después, cuenta esa aprobación); no cambia la versión actual ni alerta a otras; reemite el certificado si cambia la vigencia. **Nunca pasa por un área ni la emite el sistema** (A-7): "si no cambia ni la información ni el documento, con la declaración basta"; si algo cambió, es versión nueva (§7) |
 | Renovación periódica (EEFF) | Tipos periódicos | La versión nueva lleva `periodo`; cada empresa evalúa `PeriodoMinimo` |
 
 ## 9. Revisión automática por niveles (servicio contratable)
@@ -320,7 +326,7 @@ Reglas de decisión automática (por empresa, sobre hechos compartidos):
 | `SinCambios`, frescura cumple, sin señales de manipulación | Aprobado |
 | `CambiosDetectados` solo en campos no críticos, identidad coincide, frescura cumple, confianza ≥ 0,95 por campo | Aprobado (con el diff en la evidencia) |
 | Cambio en `camposCriticos` o `camposCuyoCambioExigeHumano`, señales de manipulación, formulario incoherente con su soporte | Humano (`ColaDeExcepciones`) |
-| Frescura incumplida (p. ej. Cámara de 45 días, A exige 30) | **Observado al tercero** con motivo `frescura-incumplida` y el siguiente paso, sin pasar por humano |
+| Antigüedad máxima excedida (p. ej. Cámara de 45 días, A exige 30) o sin fecha de expedición que se pueda verificar y que el tercero no declaró | **Nivel `Automatico`: Observado al tercero** con motivo `frescura-incumplida` y el siguiente paso («Sube el documento «Cámara de comercio» expedido hace menos de 30 días», y si no traía fecha, «… y que muestre su fecha de expedición»), sin pasar por humano. **`Asistido`: sugiere revisar** con el motivo (`antiguedad-excedida` / `sin-fecha-de-expedicion`). En todo nivel es un **hallazgo crítico** visible al revisor (campo «Antigüedad del documento»: `Coincide`/`Discrepa`/`NoVerificable`, crítico) y aprobar el documento a mano exige justificación. Si la IA no encontró la fecha pero el tercero sí la declaró: `NoVerificable` crítico, nunca se aprueba ni se observa solo (lo decide una persona) |
 | Identidad no coincide (NIT distinto) | No llega a la empresa: con IA la versión fue `Devuelta` en la bóveda; sin IA no se detecta y el humano la observa con `noAdmitirEstaVersion` |
 | Confianza 0,80–0,95 | Se degrada a `Asistido` (sugerencia) |
 | Confianza < 0,80, `NoLegible`, error de IA, presupuesto agotado | Humano (fail-closed) |
@@ -387,7 +393,7 @@ erDiagram
 
 | Tabla | Columnas clave | Notas |
 |---|---|---|
-| `tipo_documento_tenant` | `tenant_id`, `id`, `codigo`, `nombre`, `tipo_canonico_id NULL`, `ambito`, `texto_ayuda`, `plantilla_version_id`, `regla_frescura JSONB`, `dias_aviso JSONB`, `dias_gracia`, `politica_desactualizada`, `dias_revalidacion`, `nivel_revision`, `campos_cambio_exige_humano JSONB`, `porcentaje_muestreo`, `permite_ratificacion`, `campos_privados JSONB`, `aprobadores_requeridos` | Único `(tenant_id, codigo)`; **defaults** del grupo (B-4). Sin `tipos_aceptados` (va en la regla) ni `ia_hechos` (B-2) |
+| `tipo_documento_tenant` | `tenant_id`, `id`, `codigo`, `nombre`, `tipo_canonico_id NULL`, `ambito`, `texto_ayuda`, `plantilla_version_id`, `regla_frescura JSONB` (heredada: solo `PeriodoMinimo`), `antiguedad_maxima_dias INT NULL`, `revalidar_cada_dias INT NULL`, `dias_aviso JSONB`, `dias_gracia`, `politica_desactualizada`, `dias_revalidacion`, `nivel_revision`, `campos_cambio_exige_humano JSONB`, `porcentaje_muestreo`, `permite_ratificacion`, `campos_privados JSONB`, `aprobadores_requeridos` | Único `(tenant_id, codigo)`; **defaults** del grupo (B-4). Sin `tipos_aceptados` (va en la regla) ni `ia_hechos` (B-2) |
 | `tipo_documento_empresa` | `tenant_id`, `empresa_id`, `tipo_documento_tenant_id`, mismos campos **opcionales** (solo los que sobreescribe) | Override por razón social (B-4) |
 | `vinculo` | `tenant_id`, `empresa_id`, `id`, `tercero_id`, `tipo_vinculo_id`, `flujo_id`, `estado`, `estado_previo_al_bloqueo NULL`, `invitacion_aceptada_en NULL`, `comparticion_congelada BOOL`, `vigente_hasta`, `certificado_vigente_id`, `revalidacion_pendiente`, `expediente_abierto_id`, `cuenta_designada_id NULL` | Único `(tenant_id, empresa_id, tercero_id, tipo_vinculo_id)` |
 | `requisito` (proyección de `Expediente`) | `tenant_id`, `empresa_id`, `expediente_id`, `id`, `tipo_documento_tenant_id`, `tipos_aceptados JSONB`, `de_persona_relacionada NULL`, `dueno_resuelto_tercero_id`, `obligatorio`, `critico`, `critico_de_cumplimiento`, `configuracion_efectiva JSONB`, `estado`, `version_actual_id NULL` | Una fila por requisito; `ExpedienteDetalle` |
@@ -432,7 +438,7 @@ erDiagram
 1. A invita a T con el flujo "Habilitación de proveedores" (exige RUT). Se crea `Vinculo(A,T)` y `Expediente(Inicial)` con requisito RUT `Pendiente`.
 2. T abre el enlace y sube `rut.pdf` → `VersionCargada` v1 → hechos: RUT, legible, NIT coincide, `fecha_expedicion` 2026-09-10 → **Actual**.
 3. Compartición automática con A (y con B y C si ya tuvieran vínculo que exija RUT).
-4. A (Manual): el área Legal aprueba → `decision_version(A, v1, Aprobada)` → `version_aceptada(A, RUT, v1, vigente_hasta = 2027-09-10 por MaxDiasDesdeExpedicion 365)`. La cédula del representante legal se exigió a la **persona** (bóveda propia) y se aprobó en el mismo expediente.
+4. A (Manual): el área Legal aprueba → `decision_version(A, v1, Aprobada)` → `version_aceptada(A, RUT, v1, vigente_hasta = 2027-09-10 por revalidar cada 365 días desde la aprobación)`. La cédula del representante legal se exigió a la **persona** (bóveda propia) y se aprobó en el mismo expediente.
 5. B invita a T un mes después. Hasta que T acepte, B solo ve "tercero existente; 4 de tus 5 requisitos podrían quedar cubiertos". T acepta la invitación (consentimientos para B) → se comparten las versiones actuales → el requisito RUT de B nace `Cargado` con v1; como todos los obligatorios nacen `Cargado`, el expediente pasa solo a `EnRevision`. B (Automático) → `VeredictoAutomaticoEmitido(Aprobado)` en segundos.
 
 ### E2 — Versión nueva y revalidación divergente
@@ -446,12 +452,12 @@ erDiagram
 2. A observa: "página 2 cortada". B aprueba (su área no necesita la página 2).
 3. T ve "A: observado — página 2 cortada · B: aprobado". Sube v4 completa → **Actual** → A y **B** revalidan (B automático: `SinCambios` ⇒ aprobado).
 
-### E4 — Cámara de comercio con frescuras distintas
-1. T sube Cámara expedida 2026-10-01. A exige 30 días, B 90.
-2. `version_aceptada(A)` vence 2026-10-31; `(B)` 2026-12-30.
-3. 2026-10-16: aviso consolidado a T ("vence para A el 31/10; para B el 30/12").
-4. 2026-11-01: requisito de A `Vencido` (crítico) ⇒ la saga abre `Expediente(Renovacion)` en A; el vínculo A está `PorVencer` desde el 2026-10-01 (aviso 30) y pasa a `Vencido` el 2026-11-16 (gracia **15**); B intacta.
-5. T sube Cámara nueva (expedida 2026-11-03) → **Actual** → en A la versión entra en la `Renovacion` abierta (automático: frescura cumple ⇒ aprobado; al cerrarse sin críticos vencidos el vínculo vuelve a `Activo`, I-15); B revalida también vía `Actualizacion` (aprobado; su `vigente_hasta` se extiende a 2027-02-01).
+### E4 — Cámara de comercio con reglas de frescura distintas
+1. A exige Cámara expedida hace **no más de 30 días** y la revalida **cada 90**; B, no más de 90 y cada 365. T sube una Cámara expedida 2026-10-01 (cargada 2026-10-05): cumple para las dos (4 días).
+2. A la aprueba el 2026-10-06 ⇒ `version_aceptada(A)` vigente hasta 2027-01-04 (aprobación + 90); B la aprueba el 2026-10-20 ⇒ hasta 2027-10-20. Antes de aprobarla no tenían fecha.
+3. 2026-12-05: aviso consolidado a T ("vence para A el 04/01; para B el 20/10/2027"), con el aviso de A a 30 días.
+4. 2027-01-05: requisito de A `Vencido` (crítico) ⇒ la saga abre `Expediente(Renovacion)` en A; el vínculo A está `PorVencer` desde el aviso de 30 días y pasa a `Vencido` tras la gracia (**15**); B intacta.
+5. T sube una Cámara nueva (expedida 2027-01-03, cargada 2027-01-06): cumple ⇒ **Actual** ⇒ en A entra en la `Renovacion` abierta (automático: sin hallazgos ⇒ aprobada; su revalidación cuenta desde esa aprobación y al cerrarse sin críticos vencidos el vínculo vuelve a `Activo`, I-15); B revalida también vía `Actualizacion` (su revalidación cuenta desde la nueva aprobación). Si T hubiera subido una Cámara expedida 2026-10-01 de nuevo, A la habría observado: 97 días contra un máximo de 30.
 
 ### E5 — Documento por vínculo
 1. A exige `FORMATO_VINCULACION_A` (sin canónico ⇒ `PorVinculo`). T lo sube en el expediente de A.

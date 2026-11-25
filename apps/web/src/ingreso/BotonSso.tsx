@@ -19,7 +19,6 @@ export function BotonSso({ nombre, principal, ocupado, cargando, alPulsar }: Bot
     <Button
       type={principal ? 'submit' : 'button'}
       variant={principal ? 'contained' : 'outlined'}
-      size={principal ? 'large' : 'medium'}
       fullWidth
       disabled={ocupado}
       onClick={principal ? undefined : alPulsar}

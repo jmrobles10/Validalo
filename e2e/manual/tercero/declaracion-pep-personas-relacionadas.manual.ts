@@ -20,7 +20,9 @@ async function agregar(page: Page, persona: { rol: string; numero: string; nombr
   await dialogo.getByRole('textbox', { name: 'Número de identificación' }).fill(persona.numero);
   await dialogo.getByRole('textbox', { name: 'Nombres', exact: true }).fill(persona.nombres);
   await dialogo.getByRole('textbox', { name: 'Apellidos', exact: true }).fill(persona.apellidos);
-  if (persona.porcentaje) await dialogo.getByRole('textbox', { name: 'Participación (%)' }).fill(persona.porcentaje);
+  // Quien no es socio responde si también lo es (obligatoria); con «Sí» aparece el porcentaje.
+  if (persona.rol !== 'Socio o accionista') await dialogo.getByRole('radiogroup', { name: '¿También es socio o accionista?' }).getByRole('radio', { name: persona.porcentaje ? 'Sí' : 'No' }).check();
+  if (persona.porcentaje) await dialogo.getByRole('textbox', { name: 'Porcentaje de participación (%)' }).fill(persona.porcentaje);
   await dialogo.getByRole('radiogroup', { name: PREGUNTA_VINCULO }).getByRole('radio', { name: 'No' }).check();
   await dialogo.getByRole('radiogroup', { name: PREGUNTA_PERSONA }).getByRole('radio', { name: pep }).check();
   return dialogo;

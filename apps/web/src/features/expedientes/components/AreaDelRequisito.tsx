@@ -36,7 +36,7 @@ export function AreasDelRequisito({ areas, ...resto }: AreasDelRequisitoProps) {
   return (
     <Box
       component="ul"
-      sx={{ p: 0, m: 0, mt: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 17rem), 1fr))', columnGap: 3, rowGap: 0.75 }}
+      sx={{ p: 0, m: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 17rem), 1fr))', columnGap: 3, rowGap: 0.75 }}
     >
       {requisito.areas.map((areaRequisito) => (
         <AreaDelRequisito key={areaRequisito.areaId} {...resto} areaRequisito={areaRequisito} area={areas.get(areaRequisito.areaId) ?? null} />

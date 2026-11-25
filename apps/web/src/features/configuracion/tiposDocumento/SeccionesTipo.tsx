@@ -1,8 +1,8 @@
-import { Box, Checkbox, FormControlLabel, FormGroup, FormHelperText, FormLabel, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material';
+import { Box, Checkbox, FormControlLabel, FormGroup, FormHelperText, FormLabel, InputAdornment, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material';
 import type { TipoDocumentoCanonicoDto } from '@validalo/api-client';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AMBITOS, etiquetaDelCanonico, FORMATOS, REGLAS_FRESCURA, techoDelCanonico, type BorradorTipo, type FormatoCorto, type ReglaFrescura } from './modelo';
+import { AMBITOS, etiquetaDelCanonico, FORMATOS, frescuraSugerida, techoDelCanonico, UNIDADES_REVALIDACION, type BorradorTipo, type FormatoCorto, type UnidadRevalidacion } from './modelo';
 
 export interface PropsSeccion {
   borrador: BorradorTipo;
@@ -41,7 +41,13 @@ export function SeccionIdentidad({ borrador, cambiar, error, creando, canonicos 
           value={borrador.tipoCanonico}
           onChange={(e) => {
             const canonico = canonicos.find((c) => c.codigo === e.target.value);
-            cambiar({ tipoCanonico: e.target.value, ...(canonico && { ambito: canonico.ambito, nombre: borrador.nombre || canonico.nombre, codigo: borrador.codigo || canonico.codigo }) });
+            // Las reglas de frescura que sugiere el canónico se precargan solo si aún no se escribió ninguna (la empresa las ajusta).
+            const sinFrescura = !borrador.antiguedad && !borrador.revalidar && !borrador.periodo;
+            cambiar({
+              tipoCanonico: e.target.value,
+              ...(canonico && { ambito: canonico.ambito, nombre: borrador.nombre || canonico.nombre, codigo: borrador.codigo || canonico.codigo }),
+              ...(canonico && sinFrescura && frescuraSugerida(canonico)),
+            });
           }}
           helperText={t('tiposDocumento.campos.canonicoAyuda')}
           slotProps={{ select: { displayEmpty: true } }}
@@ -136,33 +142,54 @@ export function SeccionArchivo({ borrador, cambiar, error, canonico, descripcion
   );
 }
 
-export function SeccionVigencia({ borrador, cambiar, error }: PropsSeccion) {
+export function SeccionVigencia({ borrador, cambiar, error, canonico }: PropsSeccion & { canonico?: TipoDocumentoCanonicoDto }) {
   const { t } = useTranslation();
-  const conDias = borrador.frescura === 'MaxDiasDesdeExpedicion' || borrador.frescura === 'MaxDiasDesdeAprobacion';
+  // El periodo mínimo (regla heredada, aún sin fecha) solo se ofrece si el tipo ya lo trae o su canónico lo sugiere.
+  const conPeriodo = borrador.periodo !== '' || canonico?.reglaFrescuraSugerida?.tipo === 'PeriodoMinimo';
   return (
     <Seccion titulo={t('tiposDocumento.secciones.vigencia')} ayuda={t('tiposDocumento.vigencia.ayuda')}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: 'flex-start' }}>
+        <TextField
+          label={t('tiposDocumento.vigencia.antiguedad')}
+          value={borrador.antiguedad}
+          onChange={(e) => cambiar({ antiguedad: e.target.value.replace(/\D/g, '') })}
+          error={Boolean(error('antiguedad'))}
+          helperText={error('antiguedad') ?? t('tiposDocumento.vigencia.antiguedadAyuda')}
+          slotProps={{ htmlInput: { inputMode: 'numeric' }, input: { endAdornment: <InputAdornment position="end">{t('tiposDocumento.vigencia.dias')}</InputAdornment> } }}
+          sx={{ flex: 1 }}
+        />
+      </Stack>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
+        <TextField
+          label={t('tiposDocumento.vigencia.revalidar')}
+          value={borrador.revalidar}
+          onChange={(e) => cambiar({ revalidar: e.target.value.replace(/\D/g, '') })}
+          error={Boolean(error('revalidar'))}
+          helperText={error('revalidar') ?? t('tiposDocumento.vigencia.revalidarAyuda')}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          sx={{ flex: 1 }}
+        />
         <TextField
           select
-          label={t('tiposDocumento.vigencia.regla')}
-          value={borrador.frescura}
-          onChange={(e) => cambiar({ frescura: e.target.value as ReglaFrescura })}
-          helperText={t(`tiposDocumento.vigencia.reglasAyuda.${borrador.frescura}`)}
-          sx={{ flex: 2 }}
+          label={t('tiposDocumento.vigencia.unidad')}
+          value={borrador.unidadRevalidar}
+          onChange={(e) => cambiar({ unidadRevalidar: e.target.value as UnidadRevalidacion })}
+          helperText=" "
+          sx={{ width: 140 }}
         >
-          {REGLAS_FRESCURA.map((r) => (
-            <MenuItem key={r} value={r}>
-              {t(`tiposDocumento.vigencia.reglas.${r}`)}
+          {UNIDADES_REVALIDACION.map((u) => (
+            <MenuItem key={u} value={u}>
+              {t(`tiposDocumento.vigencia.unidades.${u}`)}
             </MenuItem>
           ))}
         </TextField>
-        {conDias && (
-          <TextField required label={t('tiposDocumento.vigencia.dias')} value={borrador.diasFrescura} onChange={(e) => cambiar({ diasFrescura: e.target.value.replace(/\D/g, '') })} error={Boolean(error('diasFrescura'))} helperText={error('diasFrescura') ?? ' '} slotProps={{ htmlInput: { inputMode: 'numeric' } }} sx={{ flex: 1 }} />
-        )}
-        {borrador.frescura === 'PeriodoMinimo' && (
-          <TextField required label={t('tiposDocumento.vigencia.periodo')} value={borrador.periodo} onChange={(e) => cambiar({ periodo: e.target.value })} error={Boolean(error('periodo'))} helperText={error('periodo') ?? t('tiposDocumento.vigencia.periodoAyuda')} sx={{ flex: 1 }} />
-        )}
       </Stack>
+      {conPeriodo && (
+        <TextField label={t('tiposDocumento.vigencia.periodo')} value={borrador.periodo} onChange={(e) => cambiar({ periodo: e.target.value })} helperText={t('tiposDocumento.vigencia.periodoAyuda')} />
+      )}
+      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        {t('tiposDocumento.vigencia.avisosIntro')}
+      </Typography>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
         <TextField label={t('tiposDocumento.vigencia.diasAviso')} value={borrador.diasAviso} onChange={(e) => cambiar({ diasAviso: e.target.value })} error={Boolean(error('diasAviso'))} helperText={error('diasAviso') ?? t('tiposDocumento.vigencia.diasAvisoAyuda')} sx={{ flex: 1 }} />
         <TextField label={t('tiposDocumento.vigencia.diasGracia')} value={borrador.diasGracia} onChange={(e) => cambiar({ diasGracia: e.target.value.replace(/\D/g, '') })} error={Boolean(error('diasGracia'))} helperText={error('diasGracia') ?? t('tiposDocumento.vigencia.diasGraciaAyuda')} slotProps={{ htmlInput: { inputMode: 'numeric' } }} sx={{ flex: 1 }} />

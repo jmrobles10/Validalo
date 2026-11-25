@@ -1,6 +1,9 @@
 import type { UsoIaDiaDto, UsoIaDto } from '@validalo/api-client';
 import { claveDia, LOCALE, ZONA_HORARIA_POR_DEFECTO } from '@validalo/ui';
 
+/** El panel de uso de OpenAI, donde la empresa ve lo que de verdad se le cobra y el saldo y el límite de su llave. */
+export const URL_USO_OPENAI = 'https://platform.openai.com/usage';
+
 /** Meses que ofrece el selector: el actual y los 11 anteriores. */
 export const MESES_SELECTOR = 12;
 /** Desde aquí la barra de las incluidas pasa a ámbar (el backend avisa al 80 % y al 100 %, IA-4). */
@@ -39,10 +42,34 @@ export function etiquetaMes(mes: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-/** El contrato admite los decimales de .NET como número o texto. */
-export function aNumero(valor: number | string): number {
+/** El contrato admite los decimales de .NET como número o texto; un campo opcional que falta vale cero. */
+export function aNumero(valor: number | string | null | undefined): number {
+  if (valor === null || valor === undefined) return 0;
   const numero = typeof valor === 'number' ? valor : Number(valor);
   return Number.isFinite(numero) ? numero : 0;
+}
+
+/**
+ * Costo de IA de todas las validaciones del mes (IA-15): el de los análisis de cada validación, sea cual sea el origen del análisis. Es un solo total (lo pagado con la
+ * llave de la empresa más lo atribuido por las validaciones que recibió ya analizadas); la empresa no ve el desglose, solo la consola de Plataforma.
+ */
+export function costoAtribuido(uso: UsoIaDto): number {
+  return aNumero(uso.costoUsd) + aNumero(uso.costoReutilizadoUsd);
+}
+
+export interface TokensAtribuidos {
+  entrada: number;
+  enCache: number;
+  salida: number;
+}
+
+/** Tokens de todas las validaciones del mes (entrada, entrada en caché y salida), en un solo total cada uno. */
+export function tokensAtribuidos(uso: UsoIaDto): TokensAtribuidos {
+  return {
+    entrada: aNumero(uso.tokensEntrada) + aNumero(uso.tokensEntradaReutilizados),
+    enCache: aNumero(uso.tokensEntradaEnCache) + aNumero(uso.tokensEntradaEnCacheReutilizados),
+    salida: aNumero(uso.tokensSalida) + aNumero(uso.tokensSalidaReutilizados),
+  };
 }
 
 /** Porcentaje usado de las incluidas (sin incluidas, cualquier consumo ya es el 100 %). */
@@ -92,6 +119,56 @@ export function serieDelMes(mes: string, porDia: readonly UsoIaDiaDto[]): DiaDeU
   return Array.from({ length: dias }, (_, i) => {
     const dato = porFecha.get(`${mes}-${String(i + 1).padStart(2, '0')}`);
     return { dia: i + 1, incluidas: dato?.incluidas ?? 0, adicionales: dato?.adicionales ?? 0 };
+  });
+}
+
+/** Total de validaciones de un día. */
+export const totalDelDia = (d: DiaDeUso): number => d.incluidas + d.adicionales;
+
+/** Validaciones del mes y cuántos días tuvieron al menos una: lo que se dice junto al título de la serie. */
+export function resumenDeLaSerie(serie: readonly DiaDeUso[]): { validaciones: number; diasConUso: number } {
+  return { validaciones: serie.reduce((suma, d) => suma + totalDelDia(d), 0), diasConUso: serie.filter((d) => totalDelDia(d) > 0).length };
+}
+
+/** `2026-11` + `5` → «5 nov»: la fecha corta del eje y del tooltip (sin el punto con que algunos meses abrevian). */
+export function fechaCorta(mes: string, dia: number): string {
+  const [anio, numeroMes] = partesMes(mes);
+  const abreviado = new Intl.DateTimeFormat(LOCALE, { month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(anio, numeroMes - 1, 1))).replace('.', '');
+  return `${String(dia)} ${abreviado}`;
+}
+
+/** `2026-11` → «noviembre de 2026» (en minúscula: va dentro del título de la serie). */
+export function mesEnTitulo(mes: string): string {
+  return etiquetaMes(mes).toLocaleLowerCase(LOCALE);
+}
+
+/** Dónde queda cada día del mes respecto de hoy: ya pasó, es hoy o aún no llega. Un mes que no es el actual es entero del pasado (el selector no ofrece meses futuros). */
+export type MomentoDelDia = 'pasado' | 'hoy' | 'futuro';
+
+export function momentosDelMes(mes: string, dias: number, ahora: Date = new Date(), zona = ZONA_HORARIA_POR_DEFECTO): MomentoDelDia[] {
+  const hoy = claveDia(ahora, zona);
+  const delMesActual = hoy.slice(0, 7) === mes;
+  const dia = Number(hoy.slice(8, 10));
+  return Array.from({ length: dias }, (_, i) => (!delMesActual ? 'pasado' : i + 1 < dia ? 'pasado' : i + 1 === dia ? 'hoy' : 'futuro'));
+}
+
+/** Marcas enteras del eje de las validaciones por día: 0 y el máximo, y la mitad si es un entero y hay espacio para que se lea (máximo par de 4 o más). */
+export function marcasDelEje(maximo: number): number[] {
+  const tope = Math.max(1, Math.ceil(maximo));
+  return tope >= 4 && tope % 2 === 0 ? [0, tope / 2, tope] : [0, tope];
+}
+
+/**
+ * Etiquetas de fecha del eje de los días: el 1 y los múltiplos de 5 como fecha corta («1 nov», «5 nov»…). La columna de hoy no lleva fecha (lleva «Hoy», que pone quien dibuja)
+ * y las marcas a menos de dos días de hoy se omiten para que no se encimen. `null` = el día no lleva etiqueta de fecha.
+ */
+export function etiquetasDelEje(mes: string, momentos: readonly MomentoDelDia[]): (string | null)[] {
+  const indiceHoy = momentos.indexOf('hoy');
+  return momentos.map((momento, i) => {
+    const dia = i + 1;
+    if (momento === 'hoy') return null;
+    if (dia !== 1 && dia % 5 !== 0) return null;
+    return indiceHoy >= 0 && Math.abs(i - indiceHoy) < 2 ? null : fechaCorta(mes, dia);
   });
 }
 

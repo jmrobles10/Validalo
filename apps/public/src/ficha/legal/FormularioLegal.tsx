@@ -1,30 +1,38 @@
-import { Alert, Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Button, Stack, Typography } from '@mui/material';
 import type { PerfilDeFichaDto } from '@validalo/api-client';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { CampoTexto, Rejilla, Subtitulo } from '../campos';
 import type { DatosLegales, PersonaRelacionada, PropsFormulario } from '../tipos';
+import { guardarPersona, hayEnLaTarjeta, mensajeDeLaTarjeta, personaParaEditar, quitarPersona, rolesDeLaTarjeta, tarjetasDePersonas, tieneDosFilas, type TarjetaDePersona } from './agrupacion';
+import { ConfirmarQuitarPersona } from './ConfirmarQuitarPersona';
 import { DialogoPersona } from './DialogoPersona';
 import { PersonasFueraDeLaFicha } from './PersonasFueraDeLaFicha';
-import { BotonDescargarDeclaracion } from '../pep/BotonDescargarDeclaracion';
 import { esRol, nombrePersona, PARAMETRO_AGREGAR } from './personas';
+import { TarjetaPersonaLegal } from './TarjetaPersonaLegal';
+
+/** Lo que abre el diálogo: la persona, si ya es socio (`null` = no se ha respondido) y de qué tarjeta viene (`null` = una persona nueva). */
+interface Edicion {
+  tarjeta: TarjetaDePersona | null;
+  persona: PersonaRelacionada;
+  tambienSocio: boolean | null;
+}
 
 /**
- * Información legal (`FICHA_LEGAL`, fase 1 de FM-7): las personas relacionadas como tarjetas (agregar, editar en un
- * diálogo, quitar) y la firma de revisoría fiscal si el revisor actúa por una firma.
+ * Información legal (`FICHA_LEGAL`, fase 1 de FM-7): las personas relacionadas como tarjetas (una por persona aunque tenga dos roles: agregar, editar en un
+ * diálogo, quitar) y la firma de revisoría fiscal si el revisor actúa por una firma. Por debajo, una fila por rol (ver `agrupacion`).
  */
 export function FormularioLegal({ datos, onCambiar, mensaje, hayEnRuta, deshabilitado, perfil }: PropsFormulario<DatosLegales> & { perfil?: PerfilDeFichaDto | null }) {
   const { t } = useTranslation();
   const personas = datos.personas ?? [];
-  // Índice de la persona en edición; `personas.length` = una nueva.
+  const tarjetas = tarjetasDePersonas(personas);
   const [parametros, setParametros] = useSearchParams();
   // «Registrar a la persona» de un documento pedido llega con `?agregar=<rol>`: se abre el diálogo de una persona nueva con ese rol ya elegido.
   const rolPedido = parametros.get(PARAMETRO_AGREGAR);
-  const [editando, setEditando] = useState<number | null>(() => (rolPedido && esRol(rolPedido) ? personas.length : null));
-  // Datos con que abre el diálogo de una persona nueva: el rol pedido o una persona registrada en Personas que falta en la sección.
-  const [nuevaInicial, setNuevaInicial] = useState<PersonaRelacionada>(() => (rolPedido && esRol(rolPedido) ? { rol: rolPedido } : {}));
+  const [editando, setEditando] = useState<Edicion | null>(() => (rolPedido && esRol(rolPedido) ? { tarjeta: null, persona: { rol: rolPedido }, tambienSocio: null } : null));
+  const [quitando, setQuitando] = useState<TarjetaDePersona | null>(null);
   useEffect(() => {
     // El parámetro se consume una vez: al recargar o volver no se reabre el diálogo.
     if (rolPedido === null) return;
@@ -39,44 +47,48 @@ export function FormularioLegal({ datos, onCambiar, mensaje, hayEnRuta, deshabil
   }, [rolPedido, setParametros]);
   const firma = datos.revisor_fiscal_firma ?? {};
 
-  const guardarPersona = (i: number, persona: PersonaRelacionada) => {
-    onCambiar({ personas: i < personas.length ? personas.map((p, j) => (j === i ? persona : p)) : [...personas, persona] });
+  // Una persona nueva: con los datos que ya se sepan (el rol pedido o una persona registrada en Personas que falta en la sección).
+  const agregar = (persona: PersonaRelacionada = {}) => setEditando({ tarjeta: null, persona, tambienSocio: null });
+  const editar = (tarjeta: TarjetaDePersona) => setEditando({ tarjeta, ...personaParaEditar(personas, tarjeta) });
+  const guardar = (edicion: Edicion, persona: PersonaRelacionada, tambienSocio: boolean) => {
+    onCambiar({ personas: guardarPersona(personas, edicion.tarjeta, persona, tambienSocio) });
     setEditando(null);
   };
-  const quitar = (i: number) => {
-    const resto = personas.filter((_, j) => j !== i);
+  const quitar = (tarjeta: TarjetaDePersona) => {
+    const resto = quitarPersona(personas, tarjeta);
     onCambiar({ personas: resto.length > 0 ? resto : null });
+    setQuitando(null);
   };
   const cambiarFirma = (cambio: { nit?: string | null; razon_social?: string | null }) => {
     const nueva = { ...firma, ...cambio };
     onCambiar({ revisor_fiscal_firma: nueva.nit || nueva.razon_social ? nueva : null });
   };
+  const rolesDe = (tarjeta: TarjetaDePersona) => rolesDeLaTarjeta(personas, tarjeta).map((rol) => t(`ficha.legal.roles.${rol}`)).join(' y ');
 
   return (
     <Stack spacing={2}>
       <Subtitulo ayuda={t('ficha.legal.personasAyuda')}>{t('ficha.legal.personas')}</Subtitulo>
       {mensaje('personas') && <Alert severity="error">{mensaje('personas')}</Alert>}
-      {personas.length === 0 ? (
+      {tarjetas.length === 0 ? (
         <Typography sx={{ color: 'text.secondary' }}>{t('ficha.legal.sinPersonas')}</Typography>
       ) : (
         <Stack component="ul" spacing={1.5} aria-label={t('ficha.legal.personas')} sx={{ p: 0, m: 0, listStyle: 'none' }}>
-          {personas.map((persona, i) => (
-            <TarjetaPersona key={`${persona.rol ?? ''}-${persona.numero ?? ''}-${String(i)}`} persona={persona} indice={i} mensaje={mensaje} hayEnRuta={hayEnRuta} onEditar={() => setEditando(i)} onQuitar={() => quitar(i)} deshabilitado={deshabilitado} />
+          {tarjetas.map((tarjeta) => (
+            <TarjetaPersonaLegal
+              key={`${personas[tarjeta.indice]?.rol ?? ''}-${personas[tarjeta.indice]?.numero ?? ''}-${String(tarjeta.indice)}`}
+              personas={personas}
+              tarjeta={tarjeta}
+              mensaje={mensaje}
+              hayEnRuta={hayEnRuta}
+              onEditar={() => editar(tarjeta)}
+              onQuitar={() => (tieneDosFilas(tarjeta) ? setQuitando(tarjeta) : quitar(tarjeta))}
+              deshabilitado={deshabilitado}
+            />
           ))}
         </Stack>
       )}
-      <PersonasFueraDeLaFicha
-        personas={personas}
-        deshabilitado={deshabilitado}
-        onAgregar={(persona) => {
-          setNuevaInicial(persona);
-          setEditando(personas.length);
-        }}
-      />
-      <Button variant="outlined" startIcon={<Plus size={18} aria-hidden />} onClick={() => {
-        setNuevaInicial({});
-        setEditando(personas.length);
-      }} disabled={deshabilitado} sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}>
+      <PersonasFueraDeLaFicha personas={personas} deshabilitado={deshabilitado} onAgregar={agregar} />
+      <Button variant="outlined" startIcon={<Plus size={18} aria-hidden />} onClick={() => agregar()} disabled={deshabilitado} sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}>
         {t('ficha.legal.agregar')}
       </Button>
       <Subtitulo>{t('ficha.legal.firma')}</Subtitulo>
@@ -86,66 +98,25 @@ export function FormularioLegal({ datos, onCambiar, mensaje, hayEnRuta, deshabil
       </Rejilla>
       {editando !== null && (
         <DialogoPersona
-          inicial={personas[editando] ?? nuevaInicial}
-          nueva={editando >= personas.length}
-          mensaje={(campo) => mensaje(`personas[${String(editando)}].${campo}`)}
-          hayEnRuta={hayEnRuta ? (prefijo) => hayEnRuta(`personas[${String(editando)}].${prefijo}`) : undefined}
-          onGuardar={(persona) => guardarPersona(editando, persona)}
+          inicial={editando.persona}
+          tambienSocioInicial={editando.tambienSocio}
+          nueva={editando.tarjeta === null}
+          // Los errores del servidor de cualquiera de las dos filas de la persona (`personas[i].campo`) se ven en su diálogo.
+          mensaje={(campo) => (editando.tarjeta ? mensajeDeLaTarjeta(mensaje, editando.tarjeta, campo) : null)}
+          hayEnRuta={hayEnRuta && editando.tarjeta ? (prefijo) => (editando.tarjeta ? hayEnLaTarjeta(hayEnRuta, editando.tarjeta, prefijo) : false) : undefined}
+          onGuardar={(persona, tambienSocio) => guardar(editando, persona, tambienSocio)}
           onCerrar={() => setEditando(null)}
           perfil={perfil}
         />
       )}
+      {quitando !== null && (
+        <ConfirmarQuitarPersona
+          nombre={nombrePersona(personas[quitando.indice] ?? {}) || t('ficha.legal.sinNombre')}
+          roles={rolesDe(quitando)}
+          onConfirmar={() => quitar(quitando)}
+          onCancelar={() => setQuitando(null)}
+        />
+      )}
     </Stack>
-  );
-}
-
-interface PropsTarjeta {
-  persona: PersonaRelacionada;
-  indice: number;
-  mensaje: (ruta: string) => string | null;
-  hayEnRuta?: (prefijo: string) => boolean;
-  onEditar: () => void;
-  onQuitar: () => void;
-  deshabilitado: boolean;
-}
-
-/** Una persona: nombre, rol, identificación y cuántos datos le faltan según el servidor. */
-function TarjetaPersona({ persona, indice, mensaje, hayEnRuta, onEditar, onQuitar, deshabilitado }: PropsTarjeta) {
-  const { t } = useTranslation();
-  const nombre = nombrePersona(persona) || t('ficha.legal.sinNombre');
-  const ruta = `personas[${String(indice)}]`;
-  const campos = ['rol', 'tipo_identificacion', 'numero', 'dv', 'nombres', 'apellidos', 'cargo', 'porcentaje', 'pep', 'vinculo_pep', 'fecha_expedicion', 'lugar_expedicion', 'fecha_nacimiento', 'nacionalidad', 'residencia', 'correo', 'telefono', 'tipo_representacion'];
-  // La declaración PEP cuenta como un dato por corregir si el servidor señaló algo dentro de ella.
-  const marcados = campos.filter((c) => mensaje(`${ruta}.${c}`)).length + (hayEnRuta?.(`${ruta}.declaracion_pep`) ? 1 : 0);
-  const faltaDeclaracion = persona.pep === true && !persona.declaracion_pep;
-  const errorFila = mensaje(ruta);
-
-  return (
-    <Paper component="li" variant="outlined" aria-label={nombre} sx={{ p: 1.5, border: 0, bgcolor: 'superficie.nivel2' }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
-        <Stack sx={{ minWidth: 0, flex: 1 }} spacing={0.5}>
-          <Typography variant="subtitle2" component="p">{nombre}</Typography>
-          <Typography sx={{ color: 'text.secondary' }}>
-            {[persona.rol && esRol(persona.rol) ? t(`ficha.legal.roles.${persona.rol}`) : null, persona.numero ? `${persona.tipo_identificacion ?? ''} ${persona.numero}`.trim() : null, persona.porcentaje !== null && persona.porcentaje !== undefined ? `${String(persona.porcentaje)} %` : null]
-              .filter(Boolean)
-              .join(' · ')}
-          </Typography>
-          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            {marcados > 0 && <Chip size="small" color="warning" variant="outlined" label={t('ficha.legal.faltan', { count: marcados })} />}
-            {faltaDeclaracion && <Chip size="small" color="warning" variant="outlined" label={t('ficha.pep.tarjeta.falta')} />}
-          </Stack>
-          {persona.pep === true && persona.declaracion_pep?.fecha_firma && <Box><BotonDescargarDeclaracion seccion="FICHA_LEGAL" persona={indice} nombre={nombre} variante="text" /></Box>}
-          {errorFila && <Typography sx={{ color: 'error.main' }}>{errorFila}</Typography>}
-        </Stack>
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<Pencil size={16} aria-hidden />} onClick={onEditar} disabled={deshabilitado} aria-label={t('ficha.legal.editarAccesible', { nombre })} sx={{ flex: { xs: 1, sm: 'none' } }}>
-            {t('ficha.editar')}
-          </Button>
-          <Button variant="text" color="inherit" startIcon={<Trash2 size={16} aria-hidden />} onClick={onQuitar} disabled={deshabilitado} aria-label={t('ficha.legal.quitarAccesible', { nombre })} sx={{ flex: { xs: 1, sm: 'none' } }}>
-            {t('ficha.quitar')}
-          </Button>
-        </Stack>
-      </Stack>
-    </Paper>
   );
 }

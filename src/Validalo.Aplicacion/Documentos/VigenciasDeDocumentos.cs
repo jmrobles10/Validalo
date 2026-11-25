@@ -18,7 +18,7 @@ public sealed record CalcularVigenciasDelDocumento(Guid DocumentoId);
 /// <summary>El vínculo recibió documentos fuera del outbox de la bóveda (al aceptar o al abrir el expediente): calcula los suyos.</summary>
 public sealed record CalcularVigenciasDelVinculo(Guid TerceroId, Guid VinculoId);
 
-/// <summary>Cambió la frescura, los avisos o la gracia del tipo: recalcula los documentos que lo usan.</summary>
+/// <summary>Cambió la antigüedad máxima, la revalidación, los avisos o la gracia del tipo: recalcula los documentos que lo usan.</summary>
 public sealed record RecalcularVigenciasDelTipo(Guid TenantId, Guid TipoDocumentoTenantId);
 
 /// <summary>Programado para el día de aviso: un solo correo por tercero y fecha con todos sus documentos que vencen (docs/02 §8.3).</summary>
@@ -165,15 +165,19 @@ public static class CalcularVigenciasDelDocumentoHandler
         }
 
         var version = documento.VersionRequerida(numero);
+        // «Revalidar cada N días» cuenta desde que la empresa aprobó esta versión para el vínculo (TD-10): se lee de sus expedientes.
+        var aprobadas = await AprobacionesDeDocumentos.AprobadasAsync(consulta, documento.Id, numero, [.. comparticiones.Select(c => c.VinculoId)], ct);
         var destinos = new List<DestinoDeVigencia>();
         foreach (var comparticion in comparticiones)
         {
+            DateTimeOffset? aprobadaEn = aprobadas.TryGetValue(comparticion.VinculoId, out var aprobada) ? aprobada : null;
+            var ratificadaEn = version.VigenciaPara(comparticion.VinculoId)?.RatificadaEn;
             var tipo = tipos.Where(t => t.TenantId == comparticion.TenantId)
-                .OrderBy(t => CalculadoraDeVigencia.Calcular(t.ReglaFrescura, version.CargadaEn, version.Datos).VigenteHasta ?? DateOnly.MaxValue)
+                .OrderBy(t => CalculadoraDeVigencia.Calcular(t.Frescura, version.Datos, aprobadaEn, ratificadaEn).VigenteHasta ?? DateOnly.MaxValue)
                 .ThenBy(t => t.Codigo, StringComparer.Ordinal)
                 .FirstOrDefault();
             if (tipo is not null)
-                destinos.Add(new DestinoDeVigencia(comparticion.TenantId, comparticion.EmpresaId, comparticion.VinculoId, tipo));
+                destinos.Add(new DestinoDeVigencia(comparticion.TenantId, comparticion.EmpresaId, comparticion.VinculoId, tipo, aprobadaEn));
         }
 
         return destinos;

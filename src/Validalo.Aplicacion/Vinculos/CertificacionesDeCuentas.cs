@@ -1,5 +1,7 @@
 using Marten;
 using Validalo.Aplicacion.Comun;
+using Validalo.Aplicacion.Documentos;
+using Validalo.Aplicacion.Interesado;
 using Validalo.Contratos;
 using Validalo.Dominio.Documentos;
 using Validalo.Dominio.Ficha;
@@ -57,11 +59,54 @@ public static class CertificacionesDeCuentas
             ? CruceConDocumento.CruzarCuenta(cuenta, tercero.Nombre, tercero.Identificacion.Numero, certificacion.Id, version.Numero, ia.Campos, ia.Confianza, ia.Legible, version.CargadaEn)
             : null;
 
+    /// <summary>El tipo «Certificación bancaria» de una empresa del tercero y la antigüedad máxima que exige (TD-10).</summary>
+    public sealed record ReglaDeAntiguedad(Guid EmpresaId, string Empresa, TipoDocumentoTenant Tipo);
+
     /// <summary>
-    /// La certificación de una cuenta como la ve su dueño: la versión visible, su resultado frente a lo declarado (con la lectura que exista, sin importar quién la pagó) y, si la
-    /// devolvieron, el motivo. Nula si la cuenta no tiene ninguna certificación.
+    /// Las empresas con las que el tercero tiene un vínculo vivo (invitación aceptada, ni desvinculado ni anulado) cuyo tipo «Certificación bancaria» exige antigüedad máxima. Es la
+    /// misma regla que evalúa el expediente de cada empresa (<see cref="AntiguedadDeVersiones"/>); aquí solo se junta, por empresa, para decírsela al tercero en «Mis cuentas». El tipo
+    /// es el activo y global del canónico en el tenant del vínculo. Se carga una vez por petición y sirve para todas las cuentas.
     /// </summary>
-    public static CertificacionDeCuentaDto? ParaElTercero(CuentaBancaria cuenta, Documento? documento, Tercero? tercero, Func<string, string> desproteger)
+    public static async Task<IReadOnlyList<ReglaDeAntiguedad>> ReglasDeAntiguedadAsync(IQuerySession consulta, SesionDeTercero tercero, IReadOnlyList<VinculoVisto> vistos, CancellationToken ct)
+    {
+        var vivos = vistos.Where(v => v.Empresa is not null && v.Vinculo.InvitacionAceptada && v.Vinculo.Estado is not (EstadoVinculo.Desvinculado or EstadoVinculo.Anulado)).ToList();
+        var tenants = tercero.Vinculos.Where(s => vivos.Any(v => v.Vinculo.Id == s.VinculoId)).Select(s => s.TenantId).Distinct().ToArray();
+        if (tenants.Length == 0)
+            return [];
+
+        var tipos = (await consulta.Query<TipoDocumentoTenant>()
+                .Where(t => t.AnyTenant() && t.TipoCanonico == CodigoCertificacionBancaria && t.Activo && t.TenantId.IsOneOf(tenants))
+                .ToListAsync(ct))
+            .Where(t => t.Ambito == AmbitoDocumento.Global && t.Frescura.AntiguedadMaximaDias is not null)
+            .ToList();
+        return [.. vivos.SelectMany(v => tercero.Vinculos.Where(s => s.VinculoId == v.Vinculo.Id).Select(s => (Visto: v, Tenant: s.TenantId)))
+            .SelectMany(x => tipos.Where(t => t.TenantId == x.Tenant).Select(t => new ReglaDeAntiguedad(x.Visto.Vinculo.EmpresaId, x.Visto.Empresa!.Nombre, t)))
+            .DistinctBy(r => r.EmpresaId)
+            .OrderBy(r => r.Empresa, StringComparer.CurrentCultureIgnoreCase)];
+    }
+
+    /// <summary>Código canónico del tipo de la certificación bancaria.</summary>
+    public const string CodigoCertificacionBancaria = "CERTIFICACION_BANCARIA";
+
+    /// <summary>
+    /// La antigüedad de la versión visible de la certificación frente a la regla de cada empresa (<paramref name="reglas"/>), con la lectura de IA que exista: es el documento del
+    /// tercero. Vacía si la cuenta no tiene versión vigente (una devuelta no se evalúa) o ninguna empresa exige antigüedad.
+    /// </summary>
+    public static IReadOnlyList<AntiguedadDeCertificacionDto> Antiguedad(VersionDocumento? version, IReadOnlyList<ReglaDeAntiguedad> reglas)
+    {
+        if (version is null || version.Estado == EstadoVersion.Devuelta)
+            return [];
+        return [.. reglas.Select(r => (Regla: r, Resultado: AntiguedadDeVersiones.Evaluar(r.Tipo, version, conLecturaDeIa: true)))
+            .Where(x => x.Resultado is not null)
+            .Select(x => new AntiguedadDeCertificacionDto(x.Regla.EmpresaId, x.Regla.Empresa, x.Resultado!.ADto(x.Regla.Tipo.Nombre)))];
+    }
+
+    /// <summary>
+    /// La certificación de una cuenta como la ve su dueño: la versión visible, su resultado frente a lo declarado (con la lectura que exista, sin importar quién la pagó), la
+    /// antigüedad que le exige cada empresa (<paramref name="reglas"/>) y, si la devolvieron, el motivo. Nula si la cuenta no tiene ninguna certificación.
+    /// </summary>
+    public static CertificacionDeCuentaDto? ParaElTercero(CuentaBancaria cuenta, Documento? documento, Tercero? tercero, Func<string, string> desproteger,
+        IReadOnlyList<ReglaDeAntiguedad>? reglas = null)
     {
         var version = VersionVisible(documento);
         if (documento is null || version is null)
@@ -72,7 +117,8 @@ public static class CertificacionesDeCuentas
             cruce = Cruzar(new DatosDeCuentaParaCruce(cuenta.Banco, cuenta.TipoCuenta.ToString(), numero, cuenta.Titular, cuenta.IdentificacionTitular), tercero, documento, version);
 
         return new CertificacionDeCuentaDto(documento.Id, version.Numero, version.Estado.ToString(), version.CargadaEn, version.NombreOriginal,
-            ResumenDeCruceDeCuenta.De(cruce).ToString(), cruce?.DiscrepanciaCritica == true, cruce is null ? [] : [.. cruce.Campos.Select(ADto)], version.DetalleDevolucion ?? version.MotivoDevolucion);
+            ResumenDeCruceDeCuenta.De(cruce).ToString(), cruce?.DiscrepanciaCritica == true, cruce is null ? [] : [.. cruce.Campos.Select(ADto)], version.DetalleDevolucion ?? version.MotivoDevolucion,
+            Antiguedad(version, reglas ?? []));
     }
 
     /// <summary>

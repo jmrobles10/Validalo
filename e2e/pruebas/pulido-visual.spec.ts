@@ -145,15 +145,16 @@ test('el wizard, Mi información y los campos del tercero: avisos agrupados, bot
   await page.screenshot({ path: captura('ciiu-abierto'), clip: await recorte(campo, 280, zona) });
   await page.keyboard.press('Escape');
 
-  // Dirección por partes: mismo radio y borde que las tarjetas, sin la línea superior de MUI.
+  // Dirección por partes: plegable plano (sin marco propio) y sin la línea superior de MUI.
   const acordeon = page.locator('.MuiAccordion-root').first();
   await acordeon.scrollIntoViewIfNeeded();
   await page.screenshot({ path: captura('direccion-por-partes-cerrada'), clip: await recorte(acordeon, 16) });
   await acordeon.getByRole('button').first().click();
   await expect(acordeon.getByRole('combobox').or(acordeon.getByRole('textbox')).first()).toBeVisible();
   await page.screenshot({ path: captura('direccion-por-partes-abierta'), clip: await recorte(acordeon, 16) });
-  const radio = await acordeon.evaluate((n) => getComputedStyle(n).borderTopLeftRadius);
-  expect(radio).toBe('12px');
+  // «Dirección por partes» es un plegable plano dentro del formulario: sin borde, fondo ni radio propios y sin la línea superior que MUI dibuja entre acordeones.
+  const marco = await acordeon.evaluate((n) => ({ borde: getComputedStyle(n).borderTopWidth, radio: getComputedStyle(n).borderTopLeftRadius, linea: getComputedStyle(n, '::before').display }));
+  expect(marco).toEqual({ borde: '0px', radio: '0px', linea: 'none' });
 
   // El celular: los botones no se inflan.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -201,21 +202,24 @@ test('la consola de Plataforma: skeleton mientras carga la lista y Plan de IA a 
   expect(hayScroll).toBe(false);
 });
 
-test('el alta de un grupo y los secretos de la consola también usan todo el ancho', async ({ page }) => {
+test('el alta de un grupo y los secretos de la consola también usan todo el ancho del panel (el marco de la web llega hasta 1600 px)', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   const consola = await abrirConsolaDePlataforma(page);
   await consola.getByRole('link', { name: 'Nuevo grupo' }).click();
   await expect(consola.getByRole('heading', { level: 1, name: 'Nuevo grupo' })).toBeVisible();
   await page.screenshot({ path: captura('consola-nuevo-grupo') });
   // Dos columnas: la del grupo y la empresa a la izquierda, la del administrador y el sistema a la derecha.
+  // Se mide contra el panel de contenido: en pantallas muy anchas el marco de la web se detiene en 1600 px (ANCHO_MAXIMO_MARCO) y el panel con él.
+  const panel = (await consola.locator('main').boundingBox())!;
   const izquierda = (await consola.getByRole('region', { name: 'Grupo empresarial' }).boundingBox())!;
   const derecha = (await consola.getByRole('region', { name: 'Administrador del grupo' }).boundingBox())!;
   expect(derecha.x).toBeGreaterThan(izquierda.x + izquierda.width - 1);
-  expect(izquierda.width).toBeGreaterThan(700);
+  expect(izquierda.width).toBeGreaterThan(panel.width * 0.4);
+  expect(izquierda.width + derecha.width).toBeGreaterThan(panel.width * 0.9);
   await irASeccion(consola, 'Secretos');
   await expect(consola.getByRole('heading', { level: 1, name: 'Secretos en reposo' })).toBeVisible();
   const tabla = (await consola.getByRole('table', { name: 'Secretos en reposo' }).boundingBox())!;
-  expect(tabla.width).toBeGreaterThan(1500);
+  expect(tabla.width).toBeGreaterThan((await consola.locator('main').boundingBox())!.width * 0.9);
   await page.screenshot({ path: captura('consola-secretos') });
 });
 
@@ -253,7 +257,7 @@ test('Información financiera: sin controles nativos, año y fecha de corte en l
   const calendario = page.getByRole('dialog');
   await expect(calendario.getByText(/diciembre 2025/i)).toBeVisible();
   await expect(calendario.getByRole('button', { name: 'Hoy' })).toBeVisible();
-  await expect(page.locator('.MuiPickerPopper-paper')).toHaveCSS('border-top-left-radius', '12px');
+  await expect(page.locator('.MuiPickerPopper-paper')).toHaveCSS('border-top-left-radius', '14px'); // el radio de los marcos del tema (RADIO.md)
   // La captura se toma con la tarjeta ya completamente opaca (termina su animación de entrada).
   await expect(page.locator('.MuiPickerPopper-paper')).toHaveCSS('opacity', '1');
   const zona = (await page.getByRole('form', { name: /Información financiera/ }).boundingBox())!;

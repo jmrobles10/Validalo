@@ -20004,6 +20004,24 @@
             "items": {
               "$ref": "#/components/schemas/CampoFormularioDto"
             }
+          },
+          "antiguedadMaximaDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "revalidarCadaDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -21697,6 +21715,35 @@
               "null",
               "string"
             ]
+          },
+          "antiguedad": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AntiguedadDeCertificacionDto"
+            }
+          }
+        }
+      },
+      "AntiguedadDeCertificacionDto": {
+        "required": [
+          "empresaId",
+          "empresa",
+          "antiguedad"
+        ],
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "empresa": {
+            "type": "string"
+          },
+          "antiguedad": {
+            "$ref": "#/components/schemas/AntiguedadDocumentoDto"
           }
         }
       },
@@ -23277,6 +23324,22 @@
             "items": {
               "$ref": "#/components/schemas/UsoPorModeloIaDto"
             }
+          },
+          "validacionesReutilizadas": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "costoReutilizadoUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -23367,6 +23430,22 @@
             "items": {
               "$ref": "#/components/schemas/ConsumoDeIaEmpresaDto"
             }
+          },
+          "validacionesReutilizadas": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "costoReutilizadoUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -23449,6 +23528,22 @@
             "format": "double"
           },
           "valorAdicional": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "validacionesReutilizadas": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "costoReutilizadoUsd": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
             "type": [
               "number",
@@ -25238,6 +25333,24 @@
             "items": {
               "$ref": "#/components/schemas/CampoFormularioDto"
             }
+          },
+          "antiguedadMaximaDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "revalidarCadaDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -43472,6 +43585,24 @@
               "null",
               "string"
             ]
+          },
+          "antiguedadMaximaSugeridaDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "revalidarCadaSugeridoDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -43538,6 +43669,24 @@
               "null",
               "string"
             ]
+          },
+          "antiguedadMaximaDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "revalidarCadaDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -43720,6 +43869,24 @@
           "cargaSoportada": {
             "type": "boolean",
             "default": true
+          },
+          "antiguedadMaximaDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "revalidarCadaDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -44181,6 +44348,38 @@
               "string"
             ],
             "format": "double"
+          },
+          "reutilizadas": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tokensEntradaReutilizados": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "tokensSalidaReutilizados": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "costoReutilizadoUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -44285,6 +44484,46 @@
             "items": {
               "$ref": "#/components/schemas/UsoIaDiaDto"
             }
+          },
+          "validacionesReutilizadas": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tokensEntradaReutilizados": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "tokensEntradaEnCacheReutilizados": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "tokensSalidaReutilizados": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "costoReutilizadoUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -45305,6 +45544,16 @@
               "null",
               "string"
             ]
+          },
+          "antiguedad": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AntiguedadDocumentoDto"
+              }
+            ]
           }
         }
       },
@@ -45404,6 +45653,22 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "aprobadaEn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "revalidarCadaDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -46198,6 +46463,89 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "AntiguedadDocumentoDto": {
+        "required": [
+          "estado",
+          "maximoDias",
+          "fechaExpedicion",
+          "dias",
+          "fuente",
+          "fechaDeclarada",
+          "difiereDeLaDeclarada",
+          "critico",
+          "detalle",
+          "mensaje",
+          "campo"
+        ],
+        "type": "object",
+        "properties": {
+          "estado": {
+            "type": "string"
+          },
+          "maximoDias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fechaExpedicion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "dias": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fuente": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fechaDeclarada": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "difiereDeLaDeclarada": {
+            "type": "boolean"
+          },
+          "critico": {
+            "type": "boolean"
+          },
+          "detalle": {
+            "type": "string"
+          },
+          "mensaje": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "campo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CampoCruzadoDto"
+              }
+            ]
           }
         }
       }

@@ -1,14 +1,15 @@
-import { Box, Chip, Divider, Link, Stack, Typography } from '@mui/material';
-import type { SeccionFichaDto, SoporteSeccionDto, VinculoEnFichaDto } from '@validalo/api-client';
-import { formatearFecha } from '@validalo/ui';
-import { FileText } from 'lucide-react';
+import { Box, Stack, Typography } from '@mui/material';
+import type { SeccionFichaDto, VinculoEnFichaDto } from '@validalo/api-client';
+import { ChipEstado, formatearFecha } from '@validalo/ui';
+import { TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router';
 import { Tarjeta } from '../../../shared/componentes';
 import { SeccionFicha } from '../SeccionesVinculo';
 import { AceptacionesSeccion } from './AceptacionesSeccion';
 import { DatosDeSeccion } from './DatosDeSeccion';
 import { esObjeto } from './formato';
+import { soloTienePersonas } from './personas';
+import { SoportesDeSeccion } from './SoportesDeSeccion';
 
 interface Props {
   empresaId: string;
@@ -49,15 +50,30 @@ export function InformacionTercero({ empresaId, terceroId, secciones, vinculos }
   );
 }
 
-/** Una sección de la ficha maestra: estado, lo que la empresa aceptó, datos y soportes (también en los sectores de la ficha del vínculo). */
+/**
+ * Una sección de la ficha maestra (también en los sectores de la ficha del vínculo): el encabezado con el título, su completitud como chip y, a la derecha, la versión y
+ * su fecha; la validación de la empresa en una franja con el tono de su estado; lo que falta; los datos en el orden del esquema (las personas, una tarjeta cada una) y los soportes.
+ */
 export function TarjetaSeccion({ empresaId, terceroId, seccion, vinculos }: { empresaId: string; terceroId?: string; seccion: SeccionFichaDto; vinculos: readonly VinculoEnFichaDto[] }) {
   const { t } = useTranslation();
   const nombre = seccion.periodo ? t('fichaMaestra.nombreConPeriodo', { nombre: seccion.nombre, periodo: String(seccion.periodo) }) : seccion.nombre;
   const completitud = seccion.completitud;
   const chip = completitud?.completa ? (
-    <Chip size="small" color="success" variant="outlined" label={t('fichaMaestra.completa')} />
+    <ChipEstado estado="Aprobado" etiqueta={t('fichaMaestra.completa')} />
   ) : (
-    <Chip size="small" color="warning" variant="outlined" label={t('fichaMaestra.faltan', { count: completitud?.faltantes.length ?? 0 })} />
+    <ChipEstado estado="ConPendientes" etiqueta={t('fichaMaestra.faltan', { count: completitud?.faltantes.length ?? 0 })} />
+  );
+
+  const datos = esObjeto(seccion.datos) ? seccion.datos : {};
+  const datosDeLaSeccion = (
+    <DatosDeSeccion
+      datos={datos}
+      empresaId={empresaId}
+      terceroId={terceroId}
+      seccion={seccion.seccion}
+      version={seccion.version}
+      faltantes={completitud?.faltantes.map((f) => f.campo)}
+    />
   );
 
   return (
@@ -70,60 +86,47 @@ export function TarjetaSeccion({ empresaId, terceroId, seccion, vinculos }: { em
           {chip}
         </Stack>
       }
-    >
-      <Stack spacing={1.5} divider={<Divider flexItem />}>
-        {seccion.version !== null && (
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+      acciones={
+        seccion.version !== null ? (
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {t('fichaMaestra.version', { n: String(seccion.version), fecha: seccion.fecha ? formatearFecha(seccion.fecha) : '—' })}
           </Typography>
+        ) : undefined
+      }
+    >
+      <Stack spacing={2}>
+        {seccion.aceptaciones && seccion.aceptaciones.length > 0 && (
+          <AceptacionesSeccion empresaId={empresaId} codigo={seccion.seccion} periodo={seccion.periodo} seccion={seccion.nombre} aceptaciones={seccion.aceptaciones} vinculos={vinculos} />
         )}
-        {seccion.aceptaciones && seccion.aceptaciones.length > 0 && <AceptacionesSeccion empresaId={empresaId} aceptaciones={seccion.aceptaciones} vinculos={vinculos} />}
         {completitud && completitud.faltantes.length > 0 && (
-          <SeccionFicha titulo={t('fichaMaestra.faltantes')}>
-            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+          <Box
+            component="section"
+            aria-label={t('fichaMaestra.faltantes')}
+            sx={{ p: 1.5, border: 1, borderColor: 'estado.advertencia.borde', bgcolor: 'estado.advertencia.fondo', borderRadius: (th) => `${String(th.radio.md)}px` }}
+          >
+            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', mb: 0.5, color: 'estado.advertencia.texto' }}>
+              <TriangleAlert size={16} strokeWidth={1.75} aria-hidden />
+              <Typography variant="subtitle2" component="h4">
+                {t('fichaMaestra.faltantes')}
+              </Typography>
+            </Stack>
+            <Box component="ul" sx={{ m: 0, pl: 3.5 }}>
               {completitud.faltantes.map((f, i) => (
                 <Typography component="li" variant="body2" key={`${f.campo ?? f.regla ?? ''}-${String(i)}`}>
                   {f.mensaje}
                 </Typography>
               ))}
             </Box>
-          </SeccionFicha>
+          </Box>
         )}
-        <SeccionFicha titulo={t('fichaMaestra.datos')}>
-          <DatosDeSeccion datos={esObjeto(seccion.datos) ? seccion.datos : {}} empresaId={empresaId} terceroId={terceroId} seccion={seccion.seccion} version={seccion.version} />
-        </SeccionFicha>
-        <SeccionFicha titulo={t('fichaMaestra.soportes')}>
-          {seccion.soportes.length === 0 ? (
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              {t('fichaMaestra.sinSoportes')}
-            </Typography>
-          ) : (
-            <Stack component="ul" spacing={0.5} sx={{ p: 0, m: 0, listStyle: 'none' }}>
-              {seccion.soportes.map((s) => (
-                <Soporte key={`${s.documentoId}-${String(s.version)}`} empresaId={empresaId} soporte={s} vinculos={vinculos} />
-              ))}
-            </Stack>
-          )}
-        </SeccionFicha>
+        {/* Si lo guardado son solo personas, «Personas relacionadas» ya es el título: «Datos» sobraría. */}
+        {soloTienePersonas(datos) ? (
+          datosDeLaSeccion
+        ) : (
+          <SeccionFicha titulo={t('fichaMaestra.datos')}>{datosDeLaSeccion}</SeccionFicha>
+        )}
+        <SoportesDeSeccion empresaId={empresaId} soportes={seccion.soportes} vinculos={vinculos} />
       </Stack>
     </Tarjeta>
-  );
-}
-
-/** Un soporte: enlace al documento en el vínculo si la empresa lo puede ver; si no, solo que es del tercero. */
-function Soporte({ empresaId, soporte, vinculos }: { empresaId: string; soporte: SoporteSeccionDto; vinculos: readonly VinculoEnFichaDto[] }) {
-  const { t } = useTranslation();
-  const visible = vinculos.flatMap((v) => (v.documentos ?? []).filter((d) => d.documentoId === soporte.documentoId).map((d) => ({ vinculoId: v.vinculo.id, tipo: d.tipo.nombre })))[0];
-  return (
-    <Stack component="li" direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-      <FileText size={16} strokeWidth={1.75} aria-hidden style={{ flex: 'none', opacity: 0.7 }} />
-      {visible ? (
-        <Link component={RouterLink} to={`/e/${empresaId}/vinculos/${visible.vinculoId}`} variant="body2" aria-label={t('fichaMaestra.verEnVinculo', { tipo: visible.tipo })}>
-          {t('fichaMaestra.soporteVisible', { tipo: visible.tipo, n: String(soporte.version) })}
-        </Link>
-      ) : (
-        <Typography variant="body2">{t('fichaMaestra.soporteDelTercero', { n: String(soporte.version) })}</Typography>
-      )}
-    </Stack>
   );
 }

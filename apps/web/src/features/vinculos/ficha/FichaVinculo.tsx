@@ -15,8 +15,9 @@ import { AvisoAccesoDelCorreo } from '../components/AvisoAccesoDelCorreo';
 import { AvisoActualizacionNoAprobada } from '../components/AvisoActualizacionNoAprobada';
 import { AvisoDeVigencia } from '../components/AvisoDeVigencia';
 import { DialogoAccion } from '../components/DialogoAccion';
-import { ANCHO_BARRA_SECTORES, BarraSectores } from './BarraSectores';
+import { BarraSectores } from './BarraSectores';
 import { ContenidoSector } from './ContenidoSector';
+import { REJILLA_DE_LA_FICHA } from './medidasDeLaFicha';
 import { Encabezado } from './PartesVinculo';
 import { esSector, indicadoresPorSector, type Sector } from './sectores';
 import { SelectorSector } from './SelectorSector';
@@ -96,10 +97,7 @@ export function FichaVinculo({ vinculo, expedienteId, sectorPorDefecto, volver }
         <AvisoActualizacionNoAprobada vinculo={vinculo} empresaId={vinculo.empresaId} />
       </Stack>
 
-      <Box
-        ref={rejilla}
-        sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: `${String(ANCHO_BARRA_SECTORES)}px minmax(0,1fr)` }, gap: { xs: 1.5, lg: 3 }, alignItems: 'start' }}
-      >
+      <Box ref={rejilla} sx={REJILLA_DE_LA_FICHA}>
         {conBarraLateral ? <BarraSectores actual={actual} indicadores={indicadores} onElegir={elegir} /> : <SelectorSector actual={actual} indicadores={indicadores} onElegir={elegir} />}
         <Box ref={contenido} component="section" aria-label={t(`vinculos.ficha.sector.${actual}`)} sx={{ minWidth: 0, scrollMarginTop: 'calc(var(--vs-tope, 0px) + var(--vs-alto-encabezado, 96px) + 12px)' }}>
           <ContenidoSector sector={actual} vinculo={vinculo} control={control} cargandoExpediente={Boolean(expedienteId) && puedeExpediente && consultaExpediente.isPending} ficha={ficha.data} />

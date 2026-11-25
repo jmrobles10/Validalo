@@ -1,5 +1,5 @@
 import { Alert, Chip, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
-import type { CruceDeRequisitoDto, CruceDeSeccionDto } from '@validalo/api-client';
+import type { CampoCruzadoDto, CruceDeRequisitoDto, CruceDeSeccionDto } from '@validalo/api-client';
 import { useTranslation } from 'react-i18next';
 import { SeccionFicha } from '../../terceros/SeccionesVinculo';
 import { esResultadoCruce, porcentaje, tonoDeCampo } from '../cruce';
@@ -38,8 +38,8 @@ export function CruceSeccion({ cruce }: { cruce: CruceDeRequisitoDto }) {
   );
 }
 
-/** La tabla del cruce con una versión de documento. */
-export function TablaCruce({ cruce }: { cruce: CruceDeSeccionDto }) {
+/** La tabla del cruce con una versión de documento; `camposExtra` son filas que el documento trae aparte del cruce (la antigüedad frente al máximo de su tipo). */
+export function TablaCruce({ cruce, camposExtra = [] }: { cruce: CruceDeSeccionDto; camposExtra?: readonly CampoCruzadoDto[] }) {
   const { t } = useTranslation();
   const titulo = t('cruce.tituloCon', { documento: cruce.nombreDocumento, n: String(cruce.versionDocumento) });
   const vacio = t('cruce.vacio');
@@ -55,7 +55,7 @@ export function TablaCruce({ cruce }: { cruce: CruceDeSeccionDto }) {
         </Typography>
       </Stack>
       {!cruce.legible && <Alert severity="warning">{t('cruce.ilegible')}</Alert>}
-      <TableContainer sx={{ border: 1, borderColor: 'divider', borderRadius: (th) => `${String(th.radio.sm)}px`, overflowX: 'auto' }}>
+      <TableContainer sx={{ border: 1, borderColor: 'divider', borderRadius: (th) => `${String(th.radio.sm)}px`, overflowX: 'auto', bgcolor: 'background.paper' }}>
         <Table size="small" aria-label={titulo}>
           <TableHead>
             <TableRow>
@@ -66,7 +66,7 @@ export function TablaCruce({ cruce }: { cruce: CruceDeSeccionDto }) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {cruce.campos.map((campo, i) => {
+            {[...cruce.campos, ...camposExtra].map((campo, i) => {
               const color = tonoDeCampo(campo);
               const resultado = esResultadoCruce(campo.resultado) ? t(`cruce.resultados.${campo.resultado}`) : campo.resultado;
               return (

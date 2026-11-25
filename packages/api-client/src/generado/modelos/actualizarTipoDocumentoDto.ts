@@ -33,4 +33,8 @@ export interface ActualizarTipoDocumentoDto {
   modo?: string | null;
   /** @nullable */
   campos?: CampoFormularioDto[] | null;
+  /** @nullable */
+  antiguedadMaximaDias?: number | null;
+  /** @nullable */
+  revalidarCadaDias?: number | null;
 }

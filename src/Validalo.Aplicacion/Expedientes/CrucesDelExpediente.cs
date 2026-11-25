@@ -1,5 +1,6 @@
 using Marten;
 using Validalo.Aplicacion.Comun;
+using Validalo.Aplicacion.Documentos;
 using Validalo.Aplicacion.Ficha;
 using Validalo.Aplicacion.Vinculos;
 using Validalo.Contratos;
@@ -29,6 +30,7 @@ public sealed class CrucesDelExpediente
     private readonly Dictionary<Guid, CruceDeRequisitoDto> _secciones = [];
     private readonly Dictionary<Guid, SoporteDeSeccionesDto> _documentos = [];
     private readonly HashSet<Guid> _sinSoporteCritico = [];
+    private readonly Dictionary<Guid, ResultadoDeAntiguedad> _antiguedades = [];
 
     public static readonly CrucesDelExpediente Vacio = new();
 
@@ -37,12 +39,19 @@ public sealed class CrucesDelExpediente
     public SoporteDeSeccionesDto? DeDocumento(Guid requisitoId) => _documentos.GetValueOrDefault(requisitoId);
 
     /// <summary>
+    /// La antigüedad máxima al subir (TD-10) del documento que cubre el requisito, evaluada con la lectura de IA que la empresa consumió; nula si el tipo
+    /// no la exige. Un hallazgo crítico (<see cref="ResultadoDeAntiguedad.EsCritico"/>) cuenta como discrepancia crítica: no se aprueba sin justificación.
+    /// </summary>
+    public ResultadoDeAntiguedad? AntiguedadDe(Guid requisitoId) => _antiguedades.GetValueOrDefault(requisitoId);
+
+    /// <summary>
     /// Requisitos que no se aprueban sin justificación (FM-13, FD-4): con una discrepancia crítica en el cruce que la empresa ve (de sección,
     /// de documento o de las cuentas contra su certificación) o de una sección cuyo cambio crítico no trae un documento nuevo (FM-15).
     /// </summary>
     public IReadOnlySet<Guid> ConDiscrepanciaCritica =>
         _secciones.Where(s => s.Value.DiscrepanciaCritica).Select(s => s.Key)
-            .Concat(_documentos.Where(d => d.Value.DiscrepanciaCritica).Select(d => d.Key)).Concat(_sinSoporteCritico).ToHashSet();
+            .Concat(_documentos.Where(d => d.Value.DiscrepanciaCritica).Select(d => d.Key)).Concat(_sinSoporteCritico)
+            .Concat(_antiguedades.Where(a => a.Value.EsCritico).Select(a => a.Key)).ToHashSet();
 
     /// <param name="sesionDelTenant">Sesión del tenant de la empresa (validaciones consumidas, flujo, tercero).</param>
     /// <param name="boveda">Consulta del tenant técnico <c>boveda</c> (secciones y documentos del tercero).</param>
@@ -51,11 +60,20 @@ public sealed class CrucesDelExpediente
     {
         if (!expediente.ConRequisitos)
             return Vacio;
+        // La antigüedad máxima al subir (TD-10) no depende de que el documento respalde la ficha: se evalúa en todo requisito de documento cuyo tipo la exija.
+        var antiguedades = await AntiguedadesAsync(sesionDelTenant, boveda, expediente, empresaId, ct);
         // El documento de una persona relacionada (ADR-0010) no respalda las secciones del tercero: es de otra bóveda.
         var porDocumento = expediente.Requisitos.Where(r => !r.NoAplica && !r.EsSeccion && !r.EsDePersona && MapaDeRespaldo.RespaldaAlguna(r.TipoCanonico)).ToList();
         var porSeccion = expediente.Requisitos.Where(r => !r.NoAplica && r.EsSeccion && r.Seccion is not null).ToList();
         if (porDocumento.Count == 0 && porSeccion.Count == 0)
-            return Vacio;
+        {
+            if (antiguedades.Count == 0)
+                return Vacio;
+            var soloAntiguedad = new CrucesDelExpediente();
+            foreach (var (id, antiguedad) in antiguedades)
+                soloAntiguedad._antiguedades[id] = antiguedad;
+            return soloAntiguedad;
+        }
 
         var terceroId = expediente.TerceroId;
         var tercero = await sesionDelTenant.LoadAsync<Tercero>(terceroId, ct);
@@ -86,6 +104,8 @@ public sealed class CrucesDelExpediente
 
         var apagados = porDocumento.Where(r => !UsaComoSoporte(r)).Select(r => r.TipoCanonico!).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var resultado = new CrucesDelExpediente();
+        foreach (var (id, antiguedad) in antiguedades)
+            resultado._antiguedades[id] = antiguedad;
         var nombres = documentos.ToDictionary(d => d.Id, d => d.NombreTipo);
 
         foreach (var requisito in porSeccion)
@@ -152,6 +172,41 @@ public sealed class CrucesDelExpediente
             // Sin lectura: la de la versión que cubre el requisito o, en las cuentas, que ninguna de sus certificaciones tenga cruce para la empresa.
             var sinAnalisis = esDeCuentas ? filas.All(f => f.Cruce is null) : !visible;
             resultado._documentos[requisito.Id] = new SoporteDeSeccionesDto(sinAnalisis, filas.Any(f => f.Cruce?.DiscrepanciaCritica == true), filas);
+        }
+
+        return resultado;
+    }
+
+    /// <summary>
+    /// La antigüedad máxima al subir (TD-10) de cada documento que cubre un requisito cuyo tipo la exige, con la lectura de IA que la empresa consumió (IA-3):
+    /// sin ella no se sabe qué leyó la IA y queda <c>SinLectura</c>. Los requisitos sin versión, eximidos o de un tipo sin esa regla no aparecen.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<Guid, ResultadoDeAntiguedad>> AntiguedadesAsync(IQuerySession sesionDelTenant, IQuerySession boveda,
+        Expediente expediente, Guid empresaId, CancellationToken ct)
+    {
+        var documentales = expediente.Requisitos.Where(r => !r.NoAplica && !r.EsSeccion && !r.Eximido && r.VersionActual is not null).ToList();
+        if (documentales.Count == 0)
+            return new Dictionary<Guid, ResultadoDeAntiguedad>();
+
+        var tipoIds = documentales.Select(r => r.TipoDocumentoTenantId).Distinct().ToArray();
+        var tipos = (await sesionDelTenant.Query<TipoDocumentoTenant>().Where(t => t.Id.IsOneOf(tipoIds)).ToListAsync(ct))
+            .Where(t => t.Frescura.ExigeAntiguedad).ToDictionary(t => t.Id);
+        if (tipos.Count == 0)
+            return new Dictionary<Guid, ResultadoDeAntiguedad>();
+
+        var relevantes = documentales.Where(r => tipos.ContainsKey(r.TipoDocumentoTenantId)).ToList();
+        var documentoIds = relevantes.Select(r => r.VersionActual!.DocumentoId).Distinct().ToArray();
+        var documentos = (await boveda.LoadManyAsync<Documento>(ct, documentoIds)).ToDictionary(d => d.Id);
+        var consumidas = await AntiguedadDeVersiones.ConsumidasAsync(sesionDelTenant, empresaId, documentoIds, ct);
+
+        var resultado = new Dictionary<Guid, ResultadoDeAntiguedad>();
+        foreach (var requisito in relevantes)
+        {
+            var v = requisito.VersionActual!;
+            if (!documentos.TryGetValue(v.DocumentoId, out var documento) || documento.Buscar(v.Numero) is not { } version)
+                continue;
+            if (AntiguedadDeVersiones.Evaluar(tipos[requisito.TipoDocumentoTenantId], version, consumidas.Contains((v.DocumentoId, v.Numero))) is { } antiguedad)
+                resultado[requisito.Id] = antiguedad;
         }
 
         return resultado;

@@ -4,7 +4,7 @@ import { ChipEstado, formatearFecha, type Estado } from '@validalo/ui';
 import { FileUp, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { camposQueNoCoinciden, camposSinVerificar, esActiva, verificacionDe, type VerificacionDeCertificacion } from './cuentas';
+import { avisosDeAntiguedad, camposQueNoCoinciden, camposSinVerificar, esActiva, verificacionDe, type VerificacionDeCertificacion } from './cuentas';
 import { DialogoCertificacion } from './DialogoCertificacion';
 
 /** El estado del chip y el tono de cada resultado de la lectura. */
@@ -66,12 +66,16 @@ function Resultado({ certificacion }: { certificacion: CertificacionDeCuentaDto 
   return <ChipEstado estado={ESTADO_DEL_CHIP[verificacion]} etiqueta={t(`cuentas.certificacion.chip.${verificacion}`)} />;
 }
 
-/** Versión y fecha, lo que dice la lectura y el siguiente paso cuando algo no coincide, no se lee o se devolvió. */
+/**
+ * Versión y fecha y, en un solo aviso, lo que impide dar la certificación por buena: primero la antigüedad que exige cada empresa y después lo que la lectura no
+ * pudo verificar, no coincide, no se lee o se devolvió (con el siguiente paso).
+ */
 function Detalle({ certificacion }: { certificacion: CertificacionDeCuentaDto }) {
   const { t } = useTranslation();
   const verificacion = verificacionDe(certificacion);
   const sinCoincidir = camposQueNoCoinciden(certificacion);
   const sinVerificar = camposSinVerificar(certificacion);
+  const antiguedades = avisosDeAntiguedad(certificacion);
   const vacio = t('cuentas.certificacion.sinDato');
   const diferencias = sinCoincidir.map((c) => t('cuentas.certificacion.diferencia', { etiqueta: c.etiqueta, declarado: c.declarado ?? vacio, extraido: c.extraido ?? vacio }));
   const texto =
@@ -82,7 +86,7 @@ function Detalle({ certificacion }: { certificacion: CertificacionDeCuentaDto })
         : verificacion === 'NoVerificable'
           ? t('cuentas.certificacion.verificacion.NoVerificable', { campos: sinVerificar.map((c) => c.etiqueta).join(', ') })
           : t(`cuentas.certificacion.verificacion.${verificacion}`);
-  const hayProblema = verificacion === 'Discrepa' || verificacion === 'NoVerificable' || verificacion === 'NoSeLee' || verificacion === 'Devuelta';
+  const hayProblemaDeLectura = verificacion === 'Discrepa' || verificacion === 'NoVerificable' || verificacion === 'NoSeLee' || verificacion === 'Devuelta';
 
   return (
     <Stack spacing={0.5} sx={{ mt: 0.25 }}>
@@ -91,25 +95,35 @@ function Detalle({ certificacion }: { certificacion: CertificacionDeCuentaDto })
           {t('cuentas.certificacion.version', { n: String(certificacion.version), fecha: formatearFecha(certificacion.cargadaEn) })}
         </Typography>
       )}
-      {hayProblema ? (
+      {(hayProblemaDeLectura || antiguedades.length > 0) && (
         <Alert severity={certificacion.discrepanciaCritica || verificacion === 'Devuelta' ? 'error' : 'warning'}>
-          <Typography variant="body2" component="p">
-            {texto}
-          </Typography>
-          {diferencias.length > 0 && (
-            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-              {diferencias.map((d) => (
-                <Typography key={d} variant="body2" component="li">
-                  {d}
-                </Typography>
-              ))}
-            </Box>
+          {antiguedades.map((a) => (
+            <Typography key={a.empresa} variant="body2" component="p" data-antiguedad={a.estado} sx={{ '&:not(:first-of-type)': { mt: 0.5 } }}>
+              {a.nombrar ? t('cuentas.certificacion.antiguedadDeEmpresa', { empresa: a.empresa, texto: a.texto }) : a.texto}
+            </Typography>
+          ))}
+          {hayProblemaDeLectura && (
+            <>
+              <Typography variant="body2" component="p" sx={{ mt: antiguedades.length > 0 ? 0.5 : 0 }}>
+                {texto}
+              </Typography>
+              {diferencias.length > 0 && (
+                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                  {diferencias.map((d) => (
+                    <Typography key={d} variant="body2" component="li">
+                      {d}
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+              <Typography variant="body2" component="p" sx={{ mt: 0.5 }}>
+                {t(`cuentas.certificacion.siguientePaso.${verificacion === 'Discrepa' || verificacion === 'NoVerificable' || verificacion === 'NoSeLee' ? verificacion : 'Devuelta'}`)}
+              </Typography>
+            </>
           )}
-          <Typography variant="body2" component="p" sx={{ mt: 0.5 }}>
-            {t(`cuentas.certificacion.siguientePaso.${verificacion === 'Discrepa' || verificacion === 'NoVerificable' || verificacion === 'NoSeLee' ? verificacion : 'Devuelta'}`)}
-          </Typography>
         </Alert>
-      ) : (
+      )}
+      {!hayProblemaDeLectura && (
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
           {texto}
         </Typography>

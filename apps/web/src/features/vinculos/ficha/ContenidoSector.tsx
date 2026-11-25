@@ -40,6 +40,9 @@ interface Props {
   ficha: FichaTerceroDto | undefined;
 }
 
+/** Los sectores que traen «Lo que declaró el tercero» (los de las secciones de la ficha): ahí los datos de una sección se ven completos y el requisito no los repite. */
+const sectorConDeclarado = (sector: SectorDeRequisito): boolean => sector !== 'cuenta' && sector !== 'documentos' && sector !== 'autorizacion';
+
 /** Lo que muestra cada sector de la ficha del vínculo. Reutiliza las tarjetas de siempre; solo cambia dónde va cada una. */
 export function ContenidoSector({ sector, vinculo, control, cargandoExpediente, ficha }: Props) {
   const { t } = useTranslation();
@@ -60,6 +63,8 @@ export function ContenidoSector({ sector, vinculo, control, cargandoExpediente, 
         filtro={(r) => sectorDeRequisito(r) === de}
         titulo={t('vinculos.ficha.loQuePide')}
         avisoDeCarga={false}
+        cuentasEnSuTarjeta={de === 'cuenta' && permisos.puede(SCOPES.vinculosLeer)}
+        datosAparte={sectorConDeclarado(de) && permisos.puede(SCOPES.tercerosLeer)}
       />
     ) : null;
   const declarado = (de: SectorDeRequisito) => <SeccionesDeclaradas sector={de} empresaId={empresaId} ficha={ficha} />;
@@ -86,12 +91,12 @@ export function ContenidoSector({ sector, vinculo, control, cargandoExpediente, 
           {declarado(sector)}
         </Stack>
       );
+    // Sin «Lo que declaró el tercero»: las cuentas no son una sección de la ficha (no hay nada que mostrar ahí) y la cuenta que declaró es la de su tarjeta.
     case 'cuenta':
       return (
         <Stack spacing={2}>
           {pedido('cuenta')}
           <TarjetaCuentaDesignada vinculo={vinculo} />
-          {declarado('cuenta')}
         </Stack>
       );
     case 'contactos':

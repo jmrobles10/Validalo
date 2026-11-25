@@ -161,7 +161,7 @@ El catálogo canónico declara, por tipo de documento, **qué campos de qué sec
 | RUT | `FICHA_GENERAL`: identificación + DV, razón social / nombres, tipo de persona, dirección, ciudad, CIIU principal y secundarias, correo, teléfono. `FICHA_TRIBUTARIA`: responsabilidades (casilla 53). `FICHA_LEGAL`: representantes inscritos en el RUT |
 | Cámara de comercio | `FICHA_LEGAL`: representantes legales y suplentes, revisor fiscal, socios y junta cuando aparecen, estado de la matrícula. `FICHA_GENERAL`: razón social, NIT, domicilio |
 | Estados financieros | `FICHA_FINANCIERA` del periodo: las cifras |
-| Certificación bancaria | Las **cuentas bancarias** del tercero (banco, tipo, número, titular y que esté activa), CB-1: no es una sección de la ficha sino su propia sección de cuentas (`CUENTAS_BANCARIAS`, FD-5) |
+| Certificación bancaria | Las **cuentas bancarias** del tercero (banco, tipo, número y titular; el estado de la cuenta no se valida, CB-12), CB-1: no es una sección de la ficha sino su propia sección de cuentas (`CUENTAS_BANCARIAS`, FD-5) |
 | Cédula | La identificación de la persona natural (`FICHA_GENERAL`) o del representante (la persona de `FICHA_LEGAL`, FD-6) |
 
 ### 5.2 Requerido como documento **y** usado como soporte (FM-13)
@@ -202,7 +202,7 @@ Cuando hay hechos de IA del documento de respaldo (ADR-0012), la plataforma comp
 | General | número + DV, razón social / nombres, tipo de persona, CIIU, dirección y ciudad | RUT; Cámara | Identificación exacta; nombre con normalización (mayúsculas, tildes, «S.A.S.»); ciudad por código DANE |
 | Tributaria | responsabilidades | RUT casilla 53 | Igualdad de conjuntos |
 | Legal | representantes (nombre, identificación), estado de la matrícula | Cámara; RUT | Cada representante declarado aparece en el documento y viceversa |
-| Bancaria | banco, tipo, número, titular e identificación del titular | Certificación bancaria | Número exacto; titular = el tercero |
+| Bancaria | banco, tipo, número, titular e identificación del titular | Certificación bancaria | Número exacto; titular = el tercero. **El estado de la cuenta no se cruza** (CB-12, decisión del usuario del 2026-11-25) |
 | Financiera | las cifras del periodo | Estados financieros del periodo | Diferencia ≤ 0,5 % |
 
 - **Resultado por campo:** `Coincide`, `Discrepa` (con ambos valores) o `NoVerificable` (sin análisis, campo ausente o documento ilegible). El resultado se guarda en la versión de la sección, como hecho compartido por todas las empresas.

@@ -75,7 +75,7 @@ export function DrawerTipoDocumento({ tipoDocumento, claveIdempotencia, onCerrar
           {borrador.modo !== 'Formulario' && (
             <SeccionArchivo borrador={borrador} cambiar={cambiar} error={error} canonico={canonico} descripcion={tipoDocumento?.reglasEfectivas?.descripcion ?? null} />
           )}
-          <SeccionVigencia borrador={borrador} cambiar={cambiar} error={error} />
+          <SeccionVigencia borrador={borrador} cambiar={cambiar} error={error} canonico={canonico} />
           {tipoDocumento && borrador.modo !== 'Formulario' && <SeccionPlantilla tipoId={tipoDocumento.id} />}
         </Box>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'flex-end', px: 2.5, py: 1.5, borderTop: 1, borderColor: 'divider' }}>

@@ -36,7 +36,33 @@ public sealed class TipoDocumentoTenant
 
     public string? TextoAyuda { get; set; }
 
+    /// <summary>
+    /// Regla heredada (una sola por tipo). Desde TD-10 solo conserva <c>PeriodoMinimo</c>; <c>MaxDiasDesdeExpedicion</c> y <c>MaxDiasDesdeAprobacion</c> se
+    /// tradujeron a <see cref="AntiguedadMaximaDias"/> y <see cref="RevalidarCadaDias"/> (ver <see cref="ReglasDeVigencia.DeHeredada"/>). Un tipo guardado antes
+    /// que aún la traiga se lee traducido (<see cref="Frescura"/>) hasta que la migración o una edición lo reescriba.
+    /// </summary>
     public ReglaFrescura ReglaFrescura { get; set; } = ReglaFrescura.Ninguna;
+
+    /// <summary>
+    /// Antigüedad máxima al subir (TD-10): días entre la expedición del documento y su carga. Condición de aceptación: no define la vigencia. Nula = sin
+    /// regla. Independiente de <see cref="RevalidarCadaDias"/>.
+    /// </summary>
+    public int? AntiguedadMaximaDias { get; set; }
+
+    /// <summary>
+    /// Revalidar cada N días (TD-10): desde que la empresa aprueba la versión para el vínculo (o desde que el tercero la ratifica) el documento vence
+    /// pasados N días y se vuelve a pedir, con los avisos y la gracia del tipo. Nula = no vence por revalidación. Es distinto de
+    /// <see cref="DiasRevalidacion"/>, el plazo para resolver una revalidación abierta.
+    /// </summary>
+    public int? RevalidarCadaDias { get; set; }
+
+    /// <summary>Las reglas de frescura efectivas del tipo (<see cref="ReglasDeVigencia.Efectivas"/>): las dos nuevas o la traducción de la heredada.</summary>
+    [JsonIgnore]
+    public ReglasDeVigencia Frescura => ReglasDeVigencia.Efectivas(ReglaFrescura, AntiguedadMaximaDias, RevalidarCadaDias);
+
+    /// <summary>El tipo aún guarda una regla heredada <c>MaxDias*</c> sin traducir: lo reescribe la migración (TD-10).</summary>
+    [JsonIgnore]
+    public bool TraeReglaHeredada => ReglaFrescura.Tipo is TipoReglaFrescura.MaxDiasDesdeExpedicion or TipoReglaFrescura.MaxDiasDesdeAprobacion;
 
     public List<int> DiasAviso { get; set; } = [30, 15, 5];
 
@@ -89,8 +115,14 @@ public sealed class TipoDocumentoTenant
     [JsonIgnore]
     public PlantillaDeTipo? Plantilla => PlantillaVigente is { } n ? Plantillas.FirstOrDefault(p => p.Version == n) : null;
 
+    /// <summary>
+    /// Crea el tipo. Las reglas de frescura: <paramref name="antiguedadMaximaDias"/> y <paramref name="revalidarCadaDias"/> (nulos o 0 = sin regla) o, por
+    /// compatibilidad, la regla heredada <paramref name="frescura"/> (se traduce, <see cref="ReglasDeVigencia.DeHeredada"/>). Sin ninguna de las tres, las
+    /// que sugiere el canónico.
+    /// </summary>
     public static TipoDocumentoTenant Crear(Guid tenantId, string codigo, string? nombre, string? tipoCanonico, AmbitoDocumento? ambito,
-        ReglaFrescura? frescura, IEnumerable<int>? diasAviso, int? diasGracia, int? diasRevalidacion, string? textoAyuda, DateTimeOffset ahora)
+        ReglaFrescura? frescura, IEnumerable<int>? diasAviso, int? diasGracia, int? diasRevalidacion, string? textoAyuda, DateTimeOffset ahora,
+        int? antiguedadMaximaDias = null, int? revalidarCadaDias = null)
     {
         var codigoNormalizado = (codigo ?? string.Empty).Trim().ToUpperInvariant();
         if (!Regex.IsMatch(codigoNormalizado, "^[A-Z][A-Z0-9_]{1,59}$"))
@@ -113,18 +145,62 @@ public sealed class TipoDocumentoTenant
             CreadoEn = ahora
         };
 
-        tipo.Configurar(string.IsNullOrWhiteSpace(nombre) ? canonico?.Nombre ?? string.Empty : nombre, ambito, frescura ?? canonico?.ReglaFrescuraSugerida, diasAviso, diasGracia,
+        // Sin ninguna regla pedida, las que sugiere el canónico (docs/02 §4.3).
+        var sugerida = frescura is null && antiguedadMaximaDias is null && revalidarCadaDias is null ? canonico?.FrescuraSugerida : null;
+        var reglas = ResolverReglas(sugerida ?? ReglasDeVigencia.Ninguna, frescura, antiguedadMaximaDias, revalidarCadaDias);
+        tipo.Configurar(string.IsNullOrWhiteSpace(nombre) ? canonico?.Nombre ?? string.Empty : nombre, ambito, reglas, diasAviso, diasGracia,
             diasRevalidacion, textoAyuda, activo: true);
         return tipo;
     }
 
-    /// <summary>Código y canónico son inmutables; lo demás se reemplaza (los valores nulos conservan el actual).</summary>
+    /// <summary>
+    /// Código y canónico son inmutables; lo demás se reemplaza (los valores nulos conservan el actual). Las reglas de frescura:
+    /// <paramref name="antiguedadMaximaDias"/> y <paramref name="revalidarCadaDias"/> (nulo conserva, 0 quita la regla) o, por compatibilidad, la regla heredada
+    /// <paramref name="frescura"/>, que reemplaza las dos (se traduce).
+    /// </summary>
     public void Actualizar(string? nombre, AmbitoDocumento? ambito, ReglaFrescura? frescura, IEnumerable<int>? diasAviso, int? diasGracia,
-        int? diasRevalidacion, string? textoAyuda, bool? activo)
+        int? diasRevalidacion, string? textoAyuda, bool? activo, int? antiguedadMaximaDias = null, int? revalidarCadaDias = null)
     {
         ValidarCaptura(Modo, Campos, ResolverAmbito(TipoCanonico, ambito ?? Ambito));
-        Configurar(nombre ?? Nombre, ambito ?? Ambito, frescura ?? ReglaFrescura, diasAviso ?? DiasAviso, diasGracia ?? DiasGracia,
-            diasRevalidacion ?? DiasRevalidacion, textoAyuda ?? TextoAyuda, activo ?? Activo);
+        Configurar(nombre ?? Nombre, ambito ?? Ambito, ResolverReglas(Frescura, frescura, antiguedadMaximaDias, revalidarCadaDias), diasAviso ?? DiasAviso,
+            diasGracia ?? DiasGracia, diasRevalidacion ?? DiasRevalidacion, textoAyuda ?? TextoAyuda, activo ?? Activo);
+    }
+
+    /// <summary>
+    /// Las reglas de frescura que quedan tras un cambio. Parte de <paramref name="actual"/>; la regla heredada <paramref name="heredada"/> (si llega) la
+    /// reemplaza traducida; luego <paramref name="antiguedadMaximaDias"/> y <paramref name="revalidarCadaDias"/> cambian cada una por su cuenta (0 la quita).
+    /// 422 <c>frescura-invalida</c> (regla heredada mal formada), <c>antiguedad-invalida</c> y <c>revalidacion-invalida</c> (fuera de 1 a 3650 días).
+    /// </summary>
+    private static ReglasDeVigencia ResolverReglas(ReglasDeVigencia actual, ReglaFrescura? heredada, int? antiguedadMaximaDias, int? revalidarCadaDias)
+    {
+        if (heredada is not null)
+        {
+            if (heredada.Tipo is TipoReglaFrescura.MaxDiasDesdeExpedicion or TipoReglaFrescura.MaxDiasDesdeAprobacion && heredada.Dias is not > 0)
+                throw ReglaDeNegocioException.Validacion("frescura-invalida", $"La regla {heredada.Tipo} necesita un número de días positivo.");
+            if (heredada.Tipo == TipoReglaFrescura.PeriodoMinimo && string.IsNullOrWhiteSpace(heredada.Regla))
+                throw ReglaDeNegocioException.Validacion("frescura-invalida", "La regla PeriodoMinimo necesita la descripción del periodo.");
+            if (!Enum.IsDefined(heredada.Tipo))
+                throw ReglaDeNegocioException.Validacion("frescura-invalida", "La regla de frescura no es válida.");
+            actual = ReglasDeVigencia.DeHeredada(heredada);
+        }
+
+        var antiguedad = antiguedadMaximaDias is { } a ? (a == 0 ? null : ReglasDeVigencia.Validar(a, "antiguedad-invalida", "La antigüedad máxima")) : actual.AntiguedadMaximaDias;
+        var revalidar = revalidarCadaDias is { } r ? (r == 0 ? null : ReglasDeVigencia.Validar(r, "revalidacion-invalida", "El plazo de revalidación")) : actual.RevalidarCadaDias;
+        return new ReglasDeVigencia(antiguedad, revalidar, actual.Periodo);
+    }
+
+    /// <summary>
+    /// Reescribe la regla heredada <c>MaxDias*</c> como las dos reglas nuevas (migración de TD-10, idempotente). <c>false</c> si el tipo ya no la traía.
+    /// </summary>
+    public bool MigrarReglaHeredada()
+    {
+        if (!TraeReglaHeredada)
+            return false;
+        var reglas = Frescura;
+        AntiguedadMaximaDias = reglas.AntiguedadMaximaDias;
+        RevalidarCadaDias = reglas.RevalidarCadaDias;
+        ReglaFrescura = reglas.Periodo is { } periodo ? ReglaFrescura.Periodo(periodo) : ReglaFrescura.Ninguna;
+        return true;
     }
 
     /// <summary>
@@ -268,17 +344,11 @@ public sealed class TipoDocumentoTenant
         return ambito;
     }
 
-    private void Configurar(string nombre, AmbitoDocumento? ambito, ReglaFrescura? frescura, IEnumerable<int>? diasAviso, int? diasGracia,
+    private void Configurar(string nombre, AmbitoDocumento? ambito, ReglasDeVigencia reglas, IEnumerable<int>? diasAviso, int? diasGracia,
         int? diasRevalidacion, string? textoAyuda, bool activo)
     {
         if (string.IsNullOrWhiteSpace(nombre))
             throw ReglaDeNegocioException.Validacion("nombre-requerido", "El nombre del tipo de documento es obligatorio.");
-
-        var regla = frescura ?? ReglaFrescura.Ninguna;
-        if (regla.Tipo is TipoReglaFrescura.MaxDiasDesdeExpedicion or TipoReglaFrescura.MaxDiasDesdeAprobacion && regla.Dias is not > 0)
-            throw ReglaDeNegocioException.Validacion("frescura-invalida", $"La regla {regla.Tipo} necesita un número de días positivo.");
-        if (regla.Tipo == TipoReglaFrescura.PeriodoMinimo && string.IsNullOrWhiteSpace(regla.Regla))
-            throw ReglaDeNegocioException.Validacion("frescura-invalida", "La regla PeriodoMinimo necesita la descripción del periodo.");
 
         var avisos = (diasAviso ?? [30, 15, 5]).Distinct().OrderDescending().ToList();
         if (avisos.Any(d => d <= 0) || diasGracia is < 0 || diasRevalidacion is <= 0)
@@ -286,7 +356,10 @@ public sealed class TipoDocumentoTenant
 
         Ambito = ResolverAmbito(TipoCanonico, ambito);
         Nombre = nombre.Trim();
-        ReglaFrescura = regla;
+        // La regla heredada solo conserva el periodo; las dos reglas de TD-10 van en sus campos.
+        ReglaFrescura = reglas.Periodo is { } periodo ? ReglaFrescura.Periodo(periodo) : ReglaFrescura.Ninguna;
+        AntiguedadMaximaDias = reglas.AntiguedadMaximaDias;
+        RevalidarCadaDias = reglas.RevalidarCadaDias;
         DiasAviso = avisos;
         DiasGracia = diasGracia ?? 15;
         DiasRevalidacion = diasRevalidacion ?? 15;

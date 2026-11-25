@@ -264,6 +264,8 @@ public static class ProcesoDeValidacion
         sesion.Events.StartStream<Expediente>(expedienteId, eventos);
         Evaluaciones.ProcesoDeEvaluaciones.Asignar(sesion, evaluaciones, vinculo, tercero, expedienteId, ahora);
         var estado = Expediente.Reproducir(null, eventos);
+        // Lo que ya nace aprobado (aprobación previa de la empresa, áreas automáticas) cuenta desde ahora para «revalidar cada N días» (TD-10).
+        AprobacionesDeDocumentos.MarcarRecalculos(sesion, estado.DocumentosConAprobacionCambiada(null), ahora);
         await DespuesDeEscribirAsync(sesion, estado, eventos, vinculoStream, null, certificados, ahora, ct);
         return estado;
     }
@@ -344,6 +346,8 @@ public static class ProcesoDeValidacion
         CorreoAlTercero? correo, EmisorDeCertificados certificados, DateTimeOffset ahora, CancellationToken ct, IEventStream<Vinculo>? vinculoStream = null)
     {
         var estado = Expediente.Reproducir(stream.Aggregate, eventos);
+        // Un documento que la empresa aprueba (o deja de aprobar) pide recalcular su vigencia, que cuenta desde esa aprobación (TD-10); se calcula antes de anexar.
+        AprobacionesDeDocumentos.MarcarRecalculos(sesion, estado.DocumentosConAprobacionCambiada(stream.Aggregate), ahora);
         stream.AppendMany(eventos);
         await DespuesDeEscribirAsync(sesion, estado, eventos, vinculoStream, correo, certificados, ahora, ct);
         return estado;
@@ -397,6 +401,7 @@ public static class ProcesoDeValidacion
         }
 
         var estado = Expediente.Reproducir(expediente, eventos);
+        AprobacionesDeDocumentos.MarcarRecalculos(sesion, estado.DocumentosConAprobacionCambiada(expediente), ahora);
         stream.AppendMany(eventos);
         await DespuesDeEscribirAsync(sesion, estado, eventos, vinculoStream, correo, certificados, ahora, ct);
         return estado;

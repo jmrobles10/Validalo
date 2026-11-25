@@ -2,7 +2,7 @@ import { ThemeProvider } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { configurarCliente, reiniciarCliente, type CertificacionDeCuentaDto, type CuentaBancariaPublicaDto, type VinculoPublicoDto } from '@validalo/api-client';
+import { configurarCliente, reiniciarCliente, type AntiguedadDeCertificacionDto, type CertificacionDeCuentaDto, type CuentaBancariaPublicaDto, type VinculoPublicoDto } from '@validalo/api-client';
 import { createValidaloTheme } from '@validalo/ui';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -365,6 +365,77 @@ describe('mis cuentas bancarias', () => {
     const devuelta = screen.getByRole('article', { name: 'Occidente' });
     expect(devuelta).toHaveTextContent('Devolvimos tu certificación: El PDF trae contenido activo.');
     expect(devuelta).toHaveTextContent('Sube de nuevo la certificación de esta cuenta.');
+  });
+
+  describe('la antigüedad que exige cada empresa', () => {
+    const MENSAJE = 'Sube el documento «Certificación bancaria» expedido hace menos de 30 días.';
+    const campoSinVerificar = { campo: 'identificacion_titular', etiqueta: 'Identificación del titular', declarado: null, extraido: null, resultado: 'NoVerificable', critico: true, detalle: null } as const;
+    const antiguedad = (empresa: string, cambios: Partial<AntiguedadDeCertificacionDto['antiguedad']> = {}): AntiguedadDeCertificacionDto => ({
+      empresaId: `id-${empresa}`,
+      empresa,
+      antiguedad: {
+        estado: 'Excedida',
+        maximoDias: 30,
+        fechaExpedicion: '2024-07-17',
+        dias: 861,
+        fuente: 'Ia',
+        fechaDeclarada: null,
+        difiereDeLaDeclarada: false,
+        critico: true,
+        detalle: 'Expedida el 17/07/2024: 861 días; el máximo es 30.',
+        mensaje: MENSAJE,
+        campo: null,
+        ...cambios,
+      },
+    });
+
+    it('la certificación vieja dice primero la antigüedad y después lo que no se pudo verificar, en un solo aviso', async () => {
+      montar([cuenta('c1', { banco: 'Davivienda', numeroEnmascarado: '****9012', certificacion: certificacion({ verificacion: 'NoVerificable', campos: [campoSinVerificar], antiguedad: [antiguedad('Sinco OK')] }) })]);
+
+      const tarjeta = await screen.findByRole('article', { name: 'Davivienda' });
+      const aviso = within(tarjeta).getByRole('alert');
+      // Un solo bloque, con la antigüedad primero (la causa principal) y luego lo que la lectura no pudo verificar.
+      expect(within(tarjeta).getAllByRole('alert')).toHaveLength(1);
+      const texto = aviso.textContent;
+      expect(texto).toContain('Expedida el 17/07/2024: 861 días; el máximo es 30. ' + MENSAJE);
+      expect(texto).toContain('No pudimos verificar en tu certificación: Identificación del titular.');
+      expect(texto.indexOf('Expedida el 17/07/2024')).toBeLessThan(texto.indexOf('No pudimos verificar'));
+      // Una sola empresa con regla: el aviso es el mismo del expediente, sin nombrarla.
+      expect(texto).not.toContain('Sinco OK');
+      expect(aviso.querySelector('[data-antiguedad="Excedida"]')).not.toBeNull();
+    });
+
+    it('con varias empresas nombra a las que no cumplen, en el orden que llega, y no a la que cumple', async () => {
+      const cumple = antiguedad('Constructora Sur', { estado: 'Cumple', maximoDias: 365, dias: 176, critico: false, detalle: 'Expedida el 01/06/2026: 176 días; el máximo es 365.', mensaje: null });
+      montar([cuenta('c1', { certificacion: certificacion({ antiguedad: [antiguedad('Sinco OK'), cumple, antiguedad('Constructora Este', { maximoDias: 60, mensaje: 'Sube el documento «Certificación bancaria» expedido hace menos de 60 días.' })] }) })]);
+
+      const aviso = within(await screen.findByRole('article', { name: 'Bancolombia' })).getByRole('alert');
+      const texto = aviso.textContent;
+      expect(texto).toContain('Sinco OK · Expedida el 17/07/2024: 861 días; el máximo es 30. ' + MENSAJE);
+      expect(texto).toContain('Constructora Este · Expedida el 17/07/2024');
+      expect(texto).toContain('expedido hace menos de 60 días.');
+      expect(texto).not.toContain('Constructora Sur');
+      expect(texto.indexOf('Sinco OK')).toBeLessThan(texto.indexOf('Constructora Este'));
+    });
+
+    it('si solo falla la antigüedad el aviso la dice y debajo sigue lo que leyó la IA; sin nada que pedir no hay aviso', async () => {
+      montar([
+        cuenta('c1', { certificacion: certificacion({ verificacion: 'Coincide', antiguedad: [antiguedad('Sinco OK')] }) }),
+        cuenta('c2', {
+          banco: 'Davivienda',
+          numeroEnmascarado: '****9012',
+          certificacion: certificacion({ documentoId: 'doc-2', antiguedad: [antiguedad('Sinco OK', { estado: 'Cumple', critico: false, mensaje: null }), antiguedad('Constructora Sur', { estado: 'SinLectura', critico: false, mensaje: null })] }),
+        }),
+      ]);
+
+      const vieja = await screen.findByRole('article', { name: 'Bancolombia' });
+      expect(within(vieja).getByRole('alert')).toHaveTextContent(MENSAJE);
+      expect(vieja).toHaveTextContent('Lo que dice tu certificación coincide con la cuenta que registraste.');
+
+      const reciente = screen.getByRole('article', { name: 'Davivienda' });
+      expect(within(reciente).queryByRole('alert')).not.toBeInTheDocument();
+      expect(reciente).toHaveTextContent('Lo que dice tu certificación coincide con la cuenta que registraste.');
+    });
   });
 
   it('reemplazar la certificación sube una versión nueva al documento de esa cuenta', async () => {

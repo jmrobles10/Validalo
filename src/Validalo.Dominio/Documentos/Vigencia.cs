@@ -8,10 +8,13 @@ public enum BaseVigencia
     /// <summary>Regla <c>Ninguna</c> y sin fecha de vencimiento declarada: no vence.</summary>
     SinVencimiento,
 
-    /// <summary>Fecha de expedición declarada (<c>fecha_expedicion</c>) + días de la regla.</summary>
+    /// <summary>
+    /// Antes de TD-10: fecha de expedición declarada (<c>fecha_expedicion</c>) + días de la regla. Ya no se calcula (la antigüedad máxima no define la
+    /// vigencia); queda para leer las vigencias que se registraron con la regla anterior.
+    /// </summary>
     FechaExpedicion,
 
-    /// <summary>Sin fecha de expedición declarada: fecha de carga + días de la regla.</summary>
+    /// <summary>Antes de TD-10: sin fecha de expedición declarada, fecha de carga + días de la regla. Ya no se calcula.</summary>
     FechaCarga,
 
     /// <summary>Ganó la fecha de vencimiento propia del documento (<c>fecha_vencimiento</c>).</summary>
@@ -21,7 +24,10 @@ public enum BaseVigencia
     PeriodoNoCalculado,
 
     /// <summary>El tercero ratificó que el documento no cambió: los días de la regla corren desde la ratificación (I-14).</summary>
-    Ratificacion
+    Ratificacion,
+
+    /// <summary>Revalidar cada N días (TD-10): los días corren desde que la empresa aprobó la versión para el vínculo.</summary>
+    Aprobacion
 }
 
 /// <summary>
@@ -65,23 +71,32 @@ public sealed class VigenciaDeVersion
 
     public DateTimeOffset? VencidaEn { get; set; }
 
-    /// <summary>Última ratificación del tercero para este vínculo (RN-2): desde ella corre la frescura.</summary>
+    /// <summary>Última ratificación del tercero para este vínculo (RN-2): desde ella corre la revalidación.</summary>
     public DateTimeOffset? RatificadaEn { get; set; }
+
+    /// <summary>
+    /// Cuándo la empresa aprobó esta versión para el vínculo (TD-10): desde ahí corre «revalidar cada N días». Nula mientras no esté aprobada: antes
+    /// de aprobarse no hay vigencia por revalidación.
+    /// </summary>
+    public DateTimeOffset? AprobadaEn { get; set; }
+
+    /// <summary>La regla «revalidar cada N días» del tipo con la que se calculó esta vigencia (TD-10); nula si el tipo no revalida o es una vigencia anterior.</summary>
+    public int? RevalidarCadaDias { get; set; }
 
     [JsonIgnore]
     public DateOnly? FinDeGracia => CalculadoraDeVigencia.FinDeGracia(VigenteHasta, DiasGracia);
 }
 
 /// <summary>
-/// Cálculo de vigencias en dos capas (docs/02 §8.1, TD-6), en fechas del calendario del negocio (<see cref="ZonaDeNegocio"/>):
+/// Cálculo de vigencias en dos capas (docs/02 §8.1, TD-6, TD-10), en fechas del calendario del negocio (<see cref="ZonaDeNegocio"/>):
 /// <list type="bullet">
-/// <item>capa 1: <c>fecha_vencimiento</c> declarada (si el tipo la pide y el tercero la llenó);</item>
-/// <item>capa 2: la regla de frescura del tipo — <c>MaxDiasDesdeExpedicion(n)</c> desde <c>fecha_expedicion</c> declarada o, si
-/// no hay, desde la carga; <c>MaxDiasDesdeAprobacion(n)</c> desde la carga (la aceptación por empresa llega con H6);
-/// <c>PeriodoMinimo</c> aún sin fecha; <c>Ninguna</c> no vence.</item>
+/// <item>capa 1: <c>fecha_vencimiento</c> declarada (si el tipo la pide y el tercero la llenó): el vencimiento propio del documento;</item>
+/// <item>capa 2: <b>revalidar cada N días</b> desde que la empresa aprobó la versión para ese vínculo (o desde que el tercero la ratificó, la
+/// más reciente de las dos fechas). Antes de aprobarse no hay fecha por revalidación. <c>PeriodoMinimo</c> aún sin fecha.</item>
 /// </list>
 /// <c>vigenteHasta = mín(capa1, capa2)</c> e inclusivo; la versión vence (<see cref="VersionVencida"/>) el día siguiente a
-/// <c>vigenteHasta + diasGracia</c>.
+/// <c>vigenteHasta + diasGracia</c>. La <b>antigüedad máxima</b> no define la vigencia: es una condición de aceptación al subir
+/// (<see cref="AntiguedadDelDocumento"/>).
 /// </summary>
 public static class CalculadoraDeVigencia
 {
@@ -99,35 +114,39 @@ public static class CalculadoraDeVigencia
         !string.IsNullOrWhiteSpace(id) && TimeZoneInfo.TryFindSystemTimeZoneById(id, out var zona) ? zona : TimeZoneInfo.Utc;
 
     /// <summary>
-    /// Con <paramref name="ratificadaEn"/>, los días de la regla corren desde la ratificación (base <c>Ratificacion</c>,
-    /// I-14) en vez de la expedición o la carga; la <c>fecha_vencimiento</c> declarada sigue acotando.
+    /// La vigencia de una versión para un vínculo. <paramref name="aprobadaEn"/>: cuándo la empresa la aprobó para el vínculo (nulo si aún no);
+    /// <paramref name="ratificadaEn"/>: la última ratificación del tercero (I-14). La revalidación cuenta desde la más reciente de las dos; sin ninguna
+    /// no hay fecha por revalidación y solo rige el vencimiento propio, si lo declaró.
     /// </summary>
-    public static CalculoDeVigencia Calcular(ReglaFrescura regla, DateTimeOffset cargadaEn, IReadOnlyList<DatoDeclarado>? datos,
+    public static CalculoDeVigencia Calcular(ReglasDeVigencia reglas, IReadOnlyList<DatoDeclarado>? datos, DateTimeOffset? aprobadaEn = null,
         DateTimeOffset? ratificadaEn = null)
     {
         var vencimientoPropio = EsquemaDeFormulario.Fecha(datos, EsquemaDeFormulario.FechaVencimiento);
-        var expedicion = EsquemaDeFormulario.Fecha(datos, EsquemaDeFormulario.FechaExpedicion);
-        if (ratificadaEn is { } ratificada && regla.Dias is { } diasRegla &&
-            regla.Tipo is TipoReglaFrescura.MaxDiasDesdeExpedicion or TipoReglaFrescura.MaxDiasDesdeAprobacion)
+
+        DateOnly? porRevalidacion = null;
+        var baseRevalidacion = BaseVigencia.Aprobacion;
+        if (reglas.RevalidarCadaDias is > 0 and var dias)
         {
-            var desdeRatificacion = Fecha(ratificada).AddDays(diasRegla);
-            return vencimientoPropio is { } tope && tope <= desdeRatificacion
-                ? new CalculoDeVigencia(tope, BaseVigencia.VencimientoPropio)
-                : new CalculoDeVigencia(desdeRatificacion, BaseVigencia.Ratificacion);
+            // Desde la aprobación o la ratificación, la que sea más reciente (I-14: ratificar reinicia el plazo).
+            var (desde, origen) = (aprobadaEn, ratificadaEn) switch
+            {
+                ({ } aprobada, { } ratificada) => ratificada > aprobada ? (ratificada, BaseVigencia.Ratificacion) : (aprobada, BaseVigencia.Aprobacion),
+                ({ } aprobada, null) => (aprobada, BaseVigencia.Aprobacion),
+                (null, { } ratificada) => (ratificada, BaseVigencia.Ratificacion),
+                _ => ((DateTimeOffset?)null, BaseVigencia.Aprobacion)
+            };
+            if (desde is { } fecha)
+            {
+                porRevalidacion = Fecha(fecha).AddDays(dias);
+                baseRevalidacion = origen;
+            }
         }
 
-        (DateOnly? Fecha, BaseVigencia Base) capa2 = regla.Tipo switch
-        {
-            TipoReglaFrescura.MaxDiasDesdeExpedicion when regla.Dias is { } dias =>
-                expedicion is { } desde ? (desde.AddDays(dias), BaseVigencia.FechaExpedicion) : (Fecha(cargadaEn).AddDays(dias), BaseVigencia.FechaCarga),
-            TipoReglaFrescura.MaxDiasDesdeAprobacion when regla.Dias is { } dias => (Fecha(cargadaEn).AddDays(dias), BaseVigencia.FechaCarga),
-            TipoReglaFrescura.PeriodoMinimo => (null, BaseVigencia.PeriodoNoCalculado),
-            _ => (null, BaseVigencia.SinVencimiento)
-        };
-
-        if (vencimientoPropio is { } propio && (capa2.Fecha is null || propio <= capa2.Fecha))
+        if (vencimientoPropio is { } propio && (porRevalidacion is null || propio <= porRevalidacion))
             return new CalculoDeVigencia(propio, BaseVigencia.VencimientoPropio);
-        return new CalculoDeVigencia(capa2.Fecha, capa2.Base);
+        if (porRevalidacion is not null)
+            return new CalculoDeVigencia(porRevalidacion, baseRevalidacion);
+        return new CalculoDeVigencia(null, reglas.Periodo is not null && !reglas.Revalida ? BaseVigencia.PeriodoNoCalculado : BaseVigencia.SinVencimiento);
     }
 
     public static DateOnly? FinDeGracia(DateOnly? vigenteHasta, int diasGracia) => vigenteHasta?.AddDays(Math.Max(0, diasGracia));

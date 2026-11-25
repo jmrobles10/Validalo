@@ -208,6 +208,7 @@ public static class VencimientosEndpoints
         nameof(BaseVigencia.FechaCarga) => "Fecha de carga",
         nameof(BaseVigencia.VencimientoPropio) => "Vencimiento del documento",
         nameof(BaseVigencia.Ratificacion) => "Ratificación del tercero",
+        nameof(BaseVigencia.Aprobacion) => "Aprobación de la empresa",
         _ => baseVigencia
     };
 

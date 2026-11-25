@@ -17,4 +17,7 @@ export interface ConsumoDeIaTotalesDto {
   costoUsd: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$ */
   valorAdicional: number | string;
+  validacionesReutilizadas?: number;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$ */
+  costoReutilizadoUsd?: number | string;
 }

@@ -2,7 +2,9 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using Marten;
 using Microsoft.Extensions.DependencyInjection;
+using Validalo.Aplicacion.Comun;
 using Validalo.Aplicacion.Ia;
+using Validalo.Aplicacion.Interesado;
 using Validalo.Contratos;
 using Validalo.Dominio.Documentos;
 using Validalo.Dominio.Ia;
@@ -122,10 +124,163 @@ public sealed class RequisitosIaApiTests(ApiFixture fixture, ITestOutputHelper s
         (usoSur.IncluidasConsumidas, usoSur.AnalisisPagados, usoSur.TokensEntrada, usoSur.CostoUsd).ShouldBe((1, 0, 0L, 0m));
         usoSur.Plan.LlaveConfigurada.ShouldBeFalse();
 
-        // Repetir el mensaje no vuelve a llamar ni a cobrar (idempotente).
+        // IA-15: Norte pagó la llamada con su llave (lo suyo es real, nada reutilizado); a Sur, que reutilizó el análisis, se le atribuye el costo y los tokens de ese
+        // análisis aparte de lo real, y su día también.
+        (usoNorte.ValidacionesReutilizadas, usoNorte.TokensEntradaReutilizados, usoNorte.CostoReutilizadoUsd).ShouldBe((0, 0L, 0m));
+        (usoSur.ValidacionesReutilizadas, usoSur.TokensEntradaReutilizados, usoSur.TokensEntradaEnCacheReutilizados, usoSur.TokensSalidaReutilizados, usoSur.CostoReutilizadoUsd)
+            .ShouldBe((1, 1000L, 200L, 300L, CostoLuna));
+        var diaSur = usoSur.PorDia.ShouldHaveSingleItem();
+        (diaSur.Reutilizadas, diaSur.TokensEntradaReutilizados, diaSur.TokensSalidaReutilizados, diaSur.CostoReutilizadoUsd, diaSur.CostoUsd).ShouldBe((1, 1000L, 300L, CostoLuna, 0m));
+
+        // La consola de Plataforma sigue mostrando el costo REAL, sin doble conteo: lo reutilizado de Sur es informativo y no se suma al costo real del total.
+        var consumo = await ApiAsync<ConsumoDeIaDto>("GET", $"/api/v1/plataforma/ia/consumo?periodo={usoNorte.Mes}&grupoId={norte.Datos.TenantId}", Plataforma(), null, 200);
+        consumo.Totales.CostoUsd.ShouldBe(CostoLuna);
+        (consumo.Totales.ValidacionesReutilizadas, consumo.Totales.CostoReutilizadoUsd).ShouldBe((1, CostoLuna));
+        var filas = consumo.Grupos.Single().Empresas.ToDictionary(e => e.EmpresaId);
+        (filas[norte.Datos.Id].CostoUsd, filas[norte.Datos.Id].ValidacionesReutilizadas, filas[norte.Datos.Id].CostoReutilizadoUsd).ShouldBe((CostoLuna, 0, 0m));
+        (filas[sur.Datos.Id].CostoUsd, filas[sur.Datos.Id].ValidacionesReutilizadas, filas[sur.Datos.Id].CostoReutilizadoUsd).ShouldBe((0m, 1, CostoLuna));
+
+        // Repetir el mensaje no vuelve a llamar ni a cobrar (idempotente), ni a atribuir dos veces el costo.
         await AsentarIaAsync(rut.Version.DocumentoId, 1);
         Fixture.Analizador.LlamadasCon(llave).Count.ShouldBe(1);
-        (await UsoIaAsync(sur)).IncluidasConsumidas.ShouldBe(1);
+        var repetido = await UsoIaAsync(sur);
+        (repetido.IncluidasConsumidas, repetido.ValidacionesReutilizadas, repetido.CostoReutilizadoUsd).ShouldBe((1, 1, CostoLuna));
+    }
+
+    [Fact]
+    public async Task Lo_reutilizado_atribuye_el_costo_completo_del_analisis_con_el_escalamiento_solo_a_quien_lo_recibe_y_queda_en_su_validacion()
+    {
+        var norte = await EmpresaNuevaAsync("Norte S.A.S.", "NORTE");
+        var sur = await OtraEmpresaDelTenantAsync(norte, "Sur S.A.S.", "SUR", "899999068");
+        var sinCupo = await OtraEmpresaDelTenantAsync(norte, "Oriente S.A.S.", "ORIENTE", "860001022");
+        await PlanIaAsync(norte, new ActualizarPlanIaEmpresaDto(10, false, ApiKeyOpenAi: LlaveIa("baja"))); // cada análisis escala a un segundo modelo
+        await PlanIaAsync(sur, new ActualizarPlanIaEmpresaDto(10, false));
+        await PlanIaAsync(sinCupo, new ActualizarPlanIaEmpresaDto(0, false)); // sin incluidas ni adicional: IA-4, no recibe el análisis
+        var (vinculos, sesion) = await TerceroConEmpresasAsync(norte, sur, sinCupo);
+
+        // Una empresa tras otra: cada una recibe el análisis ya hecho por la anterior (Norte paga la llamada; Sur lo reutiliza; Oriente no tiene cupo).
+        var rut = await SubirAsync(sesion, "RUT", Pdf("RUT"));
+        await AceptarAsync(sesion, vinculos[0].Id);
+        await EsperarVersionAsync(norte, vinculos[0].Id, "RUT", 1, v => v.Hechos!.ConIa);
+        await AceptarAsync(sesion, vinculos[1].Id);
+        await EsperarVersionAsync(sur, vinculos[1].Id, "RUT", 1, v => v.Hechos!.ConIa);
+        await AceptarAsync(sesion, vinculos[2].Id);
+        await AsentarIaAsync(rut.Version.DocumentoId, 1);
+
+        // Terra: (800 × 1 + 200 × 0,05 + 300 × 5) / 1M; el costo del análisis suma la llamada y su escalamiento.
+        var costo = CostoLuna + 0.00231m;
+        var usoNorte = await UsoIaAsync(norte);
+        (usoNorte.CostoUsd, usoNorte.TokensEntrada, usoNorte.ValidacionesReutilizadas, usoNorte.CostoReutilizadoUsd).ShouldBe((costo, 2000L, 0, 0m));
+        var usoSur = await UsoIaAsync(sur);
+        (usoSur.IncluidasConsumidas, usoSur.CostoUsd, usoSur.TokensEntrada).ShouldBe((1, 0m, 0L)); // nada pagado con su llave
+        (usoSur.ValidacionesReutilizadas, usoSur.TokensEntradaReutilizados, usoSur.TokensEntradaEnCacheReutilizados, usoSur.TokensSalidaReutilizados, usoSur.CostoReutilizadoUsd)
+            .ShouldBe((1, 2000L, 400L, 600L, costo));
+
+        // Sin cupo no recibe el análisis ni se le atribuye nada (IA-4).
+        var usoSinCupo = await UsoIaAsync(sinCupo);
+        (usoSinCupo.IncluidasConsumidas, usoSinCupo.ValidacionesReutilizadas, usoSinCupo.TokensEntradaReutilizados, usoSinCupo.CostoReutilizadoUsd).ShouldBe((0, 0, 0L, 0m));
+        (await EsperarVersionAsync(sinCupo, vinculos[2].Id, "RUT", 1, _ => true)).Hechos!.ConIa.ShouldBeFalse();
+
+        // La validación guarda lo suyo: la de Norte pagó la llamada (nada atribuido) y la de Sur es reutilizada con el costo del análisis.
+        var tenant = norte.Datos.TenantId.ToString("N");
+        var deNorte = (await CargarAsync<ValidacionIaConsumida>(ValidacionIaConsumida.Clave(norte.Datos.Id, rut.Version.DocumentoId, 1), tenant))!;
+        (deNorte.PagoLaLlamada, deNorte.CostoAtribuido, deNorte.CostoAtribuidoUsd).ShouldBe((true, false, 0m));
+        var deSur = (await CargarAsync<ValidacionIaConsumida>(ValidacionIaConsumida.Clave(sur.Datos.Id, rut.Version.DocumentoId, 1), tenant))!;
+        (deSur.PagoLaLlamada, deSur.CostoAtribuido, deSur.Atribuido).ShouldBe((false, true, new CostoDeAnalisis(2000, 400, 600, costo)));
+        (await CargarAsync<ValidacionIaConsumida>(ValidacionIaConsumida.Clave(sinCupo.Datos.Id, rut.Version.DocumentoId, 1), tenant)).ShouldBeNull();
+
+        // La consola cuenta el real una sola vez (el de Norte) y el reutilizado queda aparte, como dato informativo.
+        var consumo = await ApiAsync<ConsumoDeIaDto>("GET", $"/api/v1/plataforma/ia/consumo?periodo={usoNorte.Mes}&grupoId={norte.Datos.TenantId}", Plataforma(), null, 200);
+        var grupo = consumo.Grupos.ShouldHaveSingleItem();
+        (grupo.CostoUsd, grupo.ValidacionesReutilizadas, grupo.CostoReutilizadoUsd).ShouldBe((costo, 1, costo));
+        (consumo.Totales.CostoUsd, consumo.Totales.CostoReutilizadoUsd).ShouldBe((costo, costo));
+    }
+
+    [Fact]
+    public async Task El_recalculo_del_historico_atribuye_el_costo_a_las_reutilizadas_sin_atribuir_y_repetirlo_no_cambia_nada()
+    {
+        var norte = await EmpresaNuevaAsync("Norte S.A.S.", "NORTE");
+        var sur = await OtraEmpresaDelTenantAsync(norte, "Sur S.A.S.", "SUR", "899999068");
+        await PlanIaAsync(norte, new ActualizarPlanIaEmpresaDto(10, false, ApiKeyOpenAi: LlaveIa()));
+        await PlanIaAsync(sur, new ActualizarPlanIaEmpresaDto(10, false));
+        var (vinculos, sesion) = await TerceroConEmpresasAsync(norte, sur);
+        var rut = await SubirAsync(sesion, "RUT", Pdf("RUT"));
+        await AceptarAsync(sesion, vinculos[0].Id);
+        await EsperarVersionAsync(norte, vinculos[0].Id, "RUT", 1, v => v.Hechos!.ConIa); // Norte paga la llamada antes de que Sur reciba el análisis
+        await AceptarAsync(sesion, vinculos[1].Id);
+        await EsperarVersionAsync(sur, vinculos[1].Id, "RUT", 1, v => v.Hechos!.ConIa);
+        await AsentarIaAsync(rut.Version.DocumentoId, 1);
+        var antes = await UsoIaAsync(sur);
+        antes.CostoReutilizadoUsd.ShouldBe(CostoLuna);
+
+        // Un histórico de antes de IA-15: la validación reutilizada sin costo atribuido y el uso sin lo reutilizado (lo real y el cupo ya estaban). Otra reutilizada cuyo
+        // análisis no existe (nunca se registró) queda contada con costo cero.
+        var tenant = norte.Datos.TenantId.ToString("N");
+        var idSur = ValidacionIaConsumida.Clave(sur.Datos.Id, rut.Version.DocumentoId, 1);
+        await using (var sesionTenant = Host.Services.GetRequiredService<IDocumentStore>().LightweightSession(tenant))
+        {
+            var validacion = (await sesionTenant.LoadAsync<ValidacionIaConsumida>(idSur))!;
+            validacion.CostoAtribuido = false;
+            validacion.TokensEntradaAtribuidos = validacion.TokensEntradaEnCacheAtribuidos = validacion.TokensSalidaAtribuidos = 0;
+            validacion.CostoAtribuidoUsd = 0m;
+            sesionTenant.Store(validacion);
+            sesionTenant.Insert(new ValidacionIaConsumida
+            {
+                Id = ValidacionIaConsumida.Clave(sur.Datos.Id, Guid.NewGuid(), 1),
+                EmpresaId = sur.Datos.Id,
+                DocumentoId = Guid.NewGuid(),
+                Numero = 1,
+                Mes = antes.Mes,
+                Tipo = TipoValidacionIa.Incluida,
+                PagoLaLlamada = false,
+                Fecha = validacion.Fecha
+            });
+            var uso = (await sesionTenant.LoadAsync<UsoMensualIa>(UsoMensualIa.Clave(sur.Datos.Id, antes.Mes)))!;
+            uso.ReconstruirReutilizado([]);
+            sesionTenant.Store(uso);
+            await sesionTenant.SaveChangesAsync();
+        }
+
+        (await UsoIaAsync(sur)).CostoReutilizadoUsd.ShouldBe(0m);
+
+        var primera = await RecalcularReutilizadoAsync();
+
+        primera.ConError.ShouldBe(0);
+        primera.SinAnalisis.ShouldBeGreaterThanOrEqualTo(1);
+        primera.UsosActualizados.ShouldBeGreaterThanOrEqualTo(1);
+        var despues = await UsoIaAsync(sur);
+        // La validación recuperó el costo del análisis original, la huérfana cuenta con costo cero y lo real no se movió.
+        (despues.ValidacionesReutilizadas, despues.TokensEntradaReutilizados, despues.TokensEntradaEnCacheReutilizados, despues.TokensSalidaReutilizados, despues.CostoReutilizadoUsd)
+            .ShouldBe((2, 1000L, 200L, 300L, CostoLuna));
+        (despues.IncluidasConsumidas, despues.AnalisisPagados, despues.CostoUsd).ShouldBe((antes.IncluidasConsumidas, 0, 0m));
+        var deSur = (await CargarAsync<ValidacionIaConsumida>(idSur, tenant))!;
+        (deSur.CostoAtribuido, deSur.Atribuido).ShouldBe((true, new CostoDeAnalisis(1000, 200, 300, CostoLuna)));
+        // Lo de Norte (la que pagó) no se toca.
+        (await UsoIaAsync(norte)).ShouldSatisfyAllConditions(u => u.CostoUsd.ShouldBe(CostoLuna), u => u.ValidacionesReutilizadas.ShouldBe(0));
+
+        // Repetirlo no cambia nada: lo atribuido ya no se vuelve a buscar y los acumulados quedan igual.
+        var segunda = await RecalcularReutilizadoAsync();
+        (segunda.ConError, segunda.Atribuidas, segunda.UsosActualizados).ShouldBe((0, 0, 0));
+        var repetido = await UsoIaAsync(sur);
+        (repetido.ValidacionesReutilizadas, repetido.CostoReutilizadoUsd).ShouldBe((2, CostoLuna));
+    }
+
+    [Fact]
+    public async Task Pedir_el_recalculo_al_bus_lo_ejecuta_y_deja_su_marca_para_no_repetirlo_al_arrancar()
+    {
+        using (var alcance = Host.Services.CreateScope())
+            await alcance.ServiceProvider.GetRequiredService<IMessageBus>().InvokeAsync(new RecalcularReutilizadoDeIa());
+
+        await using var consulta = Host.Services.GetRequiredService<IDocumentStore>().QuerySession();
+        (await RecalculoDeReutilizadoDeIa.YaCorrioAsync(consulta, CancellationToken.None)).ShouldBeTrue();
+        (await consulta.LoadAsync<MigracionDeDatosEjecutada>(RecalculoDeReutilizadoDeIa.Nombre))!.Resumen.ShouldContain("validaciones reutilizadas revisadas");
+    }
+
+    private async Task<ResultadoDeRecalculoDeReutilizado> RecalcularReutilizadoAsync()
+    {
+        using var alcance = Host.Services.CreateScope();
+        return await RecalculoDeReutilizadoDeIa.EjecutarAsync(alcance.ServiceProvider.GetRequiredService<ISesiones>(), Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance,
+            CancellationToken.None);
     }
 
     [Fact]
@@ -157,6 +312,8 @@ public sealed class RequisitosIaApiTests(ApiFixture fixture, ITestOutputHelper s
             version.Hechos.Comparacion.ShouldBe("SinAnterior");
             var uso = await UsoIaAsync(empresa);
             (uso.IncluidasConsumidas, uso.AdicionalesConsumidas, uso.AnalisisPagados).ShouldBe((0, 0, 0));
+            // IA-4: sin cupo no recibe el análisis y por eso tampoco se le atribuye costo, aunque otra empresa ya lo haya pagado.
+            (uso.ValidacionesReutilizadas, uso.TokensEntradaReutilizados, uso.CostoReutilizadoUsd).ShouldBe((0, 0L, 0m));
         }
 
         (await UsoIaAsync(oriente)).Plan.Configurado.ShouldBeFalse();

@@ -285,7 +285,9 @@ public class TipoDocumentoTenantTests
         tipo.Codigo.ShouldBe("RUT");
         tipo.Nombre.ShouldBe("Registro Único Tributario");
         tipo.Ambito.ShouldBe(AmbitoDocumento.Global);
-        tipo.ReglaFrescura.ShouldBe(ReglaFrescura.DiasDesdeExpedicion(365));
+        // Las reglas que sugiere el canónico (TD-10): el RUT no pide antigüedad máxima y se revalida cada 365 días desde que la empresa lo aprueba.
+        tipo.Frescura.ShouldBe(ReglasDeVigencia.SoloRevalidacion(365));
+        tipo.ReglaFrescura.ShouldBe(ReglaFrescura.Ninguna);
         tipo.DiasGracia.ShouldBe(15);
     }
 

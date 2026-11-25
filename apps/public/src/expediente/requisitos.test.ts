@@ -11,6 +11,7 @@ import {
   SONDEO_DE_RESPALDO_MS,
   SONDEO_RAPIDO_MS,
   solicitudDeRequisito,
+  tonoDeRequisito,
 } from './requisitos';
 
 const requisito = (id: string, estado: RequisitoPublicoDto['estado'], cambios: Partial<RequisitoPublicoDto> = {}): RequisitoPublicoDto => ({
@@ -49,6 +50,17 @@ describe('documentos que pide la empresa', () => {
     expect(grupos['te-toca'].map((r) => r.id)).toEqual(['poliza', 'camara']);
     expect(grupos['en-revision'].map((r) => r.id)).toEqual(['renta']);
     expect(grupos.listo.map((r) => r.id)).toEqual(['rut', 'ef']);
+  });
+
+  it('el tono de cada requisito distingue de un vistazo qué falta: ámbar lo que le toca, «en curso» lo que revisa la empresa, verde lo aprobado', () => {
+    expect(tonoDeRequisito({ estado: 'Observado', obligatorio: true })).toBe('advertencia');
+    expect(tonoDeRequisito({ estado: 'Pendiente', obligatorio: true })).toBe('advertencia');
+    // Un opcional sin subir no es lo que falta: queda neutro.
+    expect(tonoDeRequisito({ estado: 'Pendiente', obligatorio: false })).toBe('neutro');
+    expect(tonoDeRequisito({ estado: 'Cargado', obligatorio: true })).toBe('encurso');
+    expect(tonoDeRequisito({ estado: 'EnRevision', obligatorio: true })).toBe('encurso');
+    expect(tonoDeRequisito({ estado: 'Aprobado', obligatorio: true })).toBe('exito');
+    expect(tonoDeRequisito({ estado: 'Eximido', obligatorio: true })).toBe('neutro');
   });
 
   it('ofrece subir lo que falta, corregir lo observado y reemplazar lo cargado; nada si está cerrado', () => {

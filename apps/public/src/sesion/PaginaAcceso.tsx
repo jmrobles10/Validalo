@@ -80,7 +80,7 @@ export function PaginaAcceso({ motivo = 'sin-sesion' }: { motivo?: Exclude<Estad
           disabled={solicitud.isPending}
           fullWidth
         />
-        <Button type="submit" variant="contained" size="large" fullWidth disabled={solicitud.isPending}>
+        <Button type="submit" variant="contained" fullWidth disabled={solicitud.isPending}>
           {t('acceso.enviar')}
         </Button>
       </Stack>

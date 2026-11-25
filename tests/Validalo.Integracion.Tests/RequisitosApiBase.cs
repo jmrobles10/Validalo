@@ -80,6 +80,10 @@ public abstract partial class RequisitosApiBase(ApiFixture fixture, ITestOutputH
         await AprobarAreasAsync(e, inicial);
         (await ApiAsync<ExpedienteDto>("GET", $"/api/v1/expedientes/{inicial}", Admin(e.Norte), null, 200)).Estado.ShouldBe("Aprobado");
         var certificado = (await ApiAsync<CertificadoDelVinculoDto>("GET", $"/api/v1/vinculos/{vinculo.Id}/certificado", Admin(e.Norte), null, 200)).Actual!;
+        // «Revalidar cada N días» cuenta desde la aprobación y la bóveda registra esa vigencia por un barrido corto, después de aprobar (TD-10): se espera a que quede
+        // registrada para que lo que se lea enseguida (vencimientos, informes) no dependa de esa espera.
+        foreach (var requisito in (await ApiAsync<ExpedienteDto>("GET", $"/api/v1/expedientes/{inicial}", Admin(e.Norte), null, 200)).Requisitos!)
+            await EsperarVigenciaAsync(requisito.VersionActual!.DocumentoId, vinculo.Id, requisito.TipoDocumento.Codigo);
         return new Aprobado(e, vinculo, sesion, inicial, certificado.Emision);
     }
 
@@ -125,6 +129,26 @@ public abstract partial class RequisitosApiBase(ApiFixture fixture, ITestOutputH
     }
 
     /// <summary>
+    /// La vigencia por revalidación llega después de la aprobación de la empresa (TD-10): la pide un barrido corto y la registra la bóveda. Espera (hasta 20 s)
+    /// a que la versión del documento tenga fecha de vencimiento para el vínculo.
+    /// </summary>
+    protected async Task<VigenciaDeVersion> EsperarVigenciaAsync(Guid documentoId, Guid vinculoId, string nombre, int version = 1, Func<VigenciaDeVersion, bool>? condicion = null)
+    {
+        var limite = DateTime.UtcNow.AddSeconds(20);
+        while (true)
+        {
+            VigenciaDeVersion? vigencia;
+            await using (var boveda = Host.Services.GetRequiredService<IDocumentStore>().QuerySession(TenantsTecnicos.Boveda))
+                vigencia = (await boveda.LoadAsync<Documento>(documentoId))!.Buscar(version)!.VigenciaPara(vinculoId);
+            if (vigencia?.VigenteHasta is not null && (condicion?.Invoke(vigencia) ?? true))
+                return vigencia;
+            if (DateTime.UtcNow > limite)
+                throw new TimeoutException($"{nombre} no tiene vigencia para el vínculo {vinculoId}.");
+            await Task.Delay(200);
+        }
+    }
+
+    /// <summary>
     /// Adelanta el reloj al día siguiente del fin de la gracia del documento para el vínculo y dispara su vencimiento (el
     /// mensaje programado, aquí invocado). Devuelve la vigencia que tenía y la renovación que abrió Norte.
     /// </summary>
@@ -132,18 +156,7 @@ public abstract partial class RequisitosApiBase(ApiFixture fixture, ITestOutputH
     {
         var expediente = await ApiAsync<ExpedienteDto>("GET", $"/api/v1/expedientes/{a.Expediente}", Admin(a.E.Norte), null, 200);
         var documentoId = expediente.Requisitos!.Single(r => r.TipoDocumento.Codigo == codigo).VersionActual!.DocumentoId;
-        VigenciaDeVersion? vigencia = null;
-        var limite = DateTime.UtcNow.AddSeconds(20);
-        while (vigencia?.VigenteHasta is null)
-        {
-            await using (var boveda = Host.Services.GetRequiredService<IDocumentStore>().QuerySession(TenantsTecnicos.Boveda))
-                vigencia = (await boveda.LoadAsync<Documento>(documentoId))!.Buscar(1)!.VigenciaPara(a.Vinculo.Id);
-            if (vigencia?.VigenteHasta is not null)
-                break;
-            if (DateTime.UtcNow > limite)
-                throw new TimeoutException($"{codigo} no tiene vigencia para Norte.");
-            await Task.Delay(200);
-        }
+        var vigencia = await EsperarVigenciaAsync(documentoId, a.Vinculo.Id, codigo);
 
         var hoy = CalculadoraDeVigencia.Fecha(DateTimeOffset.UtcNow);
         Fixture.Reloj.Desfase = TimeSpan.FromDays(vigencia.FinDeGracia!.Value.AddDays(1).DayNumber - hoy.DayNumber);
@@ -656,6 +669,12 @@ public abstract partial class RequisitosApiBase(ApiFixture fixture, ITestOutputH
         TerceroAsync<SolicitudHabeasDto>("POST", "/public/v1/solicitudes-habeas", sesion.AccessToken, new CrearSolicitudHabeasDto(tipo, alcance, empresa, detalle), 201);
 
     protected DateOnly Hoy() => CalculadoraDeVigencia.Fecha(Fixture.Reloj.GetUtcNow());
+
+    /// <summary>
+    /// Una Cámara de comercio expedida hoy: el tipo de Norte exige que tenga menos de 30 días (TD-10, lo que sugiere el catálogo) y la IA falsa lee la fecha de la
+    /// marca; sin ella, en una prueba con IA, el documento no trae una fecha verificable (hallazgo crítico): no se aprueba solo ni sin justificación.
+    /// </summary>
+    protected byte[] CamaraReciente() => Pdf($"Cámara [[fechaExpedicion={Hoy():yyyy-MM-dd}]]");
 
     protected static ResumenSeccionImportadaDto Seccion(CorridaImportacionDto c, string seccion) => c.Resumen.Secciones.Single(s => s.Seccion == seccion);
 

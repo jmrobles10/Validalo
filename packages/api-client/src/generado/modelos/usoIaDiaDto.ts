@@ -14,4 +14,9 @@ export interface UsoIaDiaDto {
   tokensSalida: number;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$ */
   costoUsd: number | string;
+  reutilizadas?: number;
+  tokensEntradaReutilizados?: number;
+  tokensSalidaReutilizados?: number;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$ */
+  costoReutilizadoUsd?: number | string;
 }

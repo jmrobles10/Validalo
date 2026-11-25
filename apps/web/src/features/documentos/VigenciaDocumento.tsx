@@ -2,7 +2,7 @@ import { Alert, Box, Stack, Tooltip, Typography } from '@mui/material';
 import type { VigenciaDto } from '@validalo/api-client';
 import { ChipEstado, visualmenteOculto } from '@validalo/ui';
 import { useTranslation } from 'react-i18next';
-import { CHIP_VIGENCIA, estadoVigencia, etiquetaVigencia, explicacionVigencia, severidadAviso, textoAvisoVigencia, textoVencimiento } from './vigencia';
+import { CHIP_VIGENCIA, estaPorAprobar, estadoVigencia, etiquetaVigencia, explicacionVigencia, severidadAviso, textoAvisoVigencia, textoVencimiento } from './vigencia';
 
 /**
  * Chip compacto de la vigencia («Por vencer · 30/11/2026»): ícono y tono del estado canónico, y en el tooltip de dónde
@@ -50,8 +50,8 @@ export function VigenciaDocumento({ vigencia }: { vigencia: VigenciaDto }) {
   }
   return (
     <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-      <ChipEstado estado={CHIP_VIGENCIA[estado]} etiqueta={t(`expedientes.vigencia.estados.${estado}`)} />
-      {estado !== 'SinVencimiento' && <Typography>{textoVencimiento(vigencia, t)}</Typography>}
+      <ChipEstado estado={CHIP_VIGENCIA[estado]} etiqueta={estaPorAprobar(vigencia) ? t('expedientes.vigencia.porAprobar') : t(`expedientes.vigencia.estados.${estado}`)} />
+      {(estado !== 'SinVencimiento' || estaPorAprobar(vigencia)) && <Typography>{textoVencimiento(vigencia, t)}</Typography>}
       {explicacion && (
         <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }}>
           {explicacion}

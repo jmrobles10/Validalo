@@ -6,6 +6,7 @@ import {
   abrirSeccion,
   agregarPersona,
   guardarSeccionCompleta,
+  hacerSocioTambien,
   llenarEspecialidades,
   llenarFinanciera,
   llenarGeneralJuridica,
@@ -14,7 +15,6 @@ import {
   llenarTributaria,
   publicarFlujoDeFicha,
   REPRESENTANTE,
-  SOCIO,
   soloPara,
 } from '../soporte/ficha';
 import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, tarjeta } from '../soporte/proveedor';
@@ -83,15 +83,20 @@ async function seccionesDelResumen(page: Page): Promise<string[]> {
   return filas.evaluateAll((nodos) => nodos.map((n) => n.getAttribute('aria-label') ?? ''));
 }
 
-/** El área de la empresa abre el expediente del tercero y ve solo los requisitos de su tipo (cada uno es un encabezado de nivel 4). */
+/**
+ * El área de la empresa abre el expediente del tercero y ve solo los requisitos de su tipo. El expediente se lee por sectores (riel lateral); «Aprobaciones» abre en
+ * «Lo que te toca decidir», donde cada requisito que revisa el área es una fila de su región, con el nombre y la versión («Registro Único Tributario · v1»).
+ */
 async function afirmarLoQueVeLaEmpresa(browser: Browser, e: Escenario, nombre: string, pedidos: Requisito[], noPedidos: Requisito[]): Promise<void> {
   const sofia = await abrirEmbebido(await (await browser.newContext()).newPage(), e, e.sofia, e.sur);
+  const area = sofia.getByRole('region', { name: 'Revisión', exact: true });
+  const fila = (requisito: Requisito) => area.getByRole('listitem').filter({ hasText: requisito });
   await expect(async () => {
     await abrirDesdeBandeja(sofia, nombre, 'Revisión', 'Cliente');
-    await expect(sofia.getByRole('heading', { level: 4, name: RUT })).toBeVisible({ timeout: 1500 });
+    await expect(fila(RUT)).toBeVisible({ timeout: 1500 });
   }).toPass({ timeout: 45_000 });
-  for (const requisito of pedidos) await expect(sofia.getByRole('heading', { level: 4, ...nombreDe(requisito) }).first()).toBeVisible();
-  for (const requisito of noPedidos) await expect(sofia.getByRole('heading', { level: 4, ...nombreDe(requisito) })).toHaveCount(0);
+  for (const requisito of pedidos) await expect(fila(requisito)).toHaveCount(1);
+  for (const requisito of noPedidos) await expect(fila(requisito)).toHaveCount(0);
 }
 
 // Flujos largos de punta a punta: con la máquina cargada el tope de 120 s por omisión queda justo.
@@ -183,7 +188,8 @@ test('persona jurídica: se le pide la Cámara de comercio y las seis secciones,
   await expect(barra.getByRole('button', { name: 'Guardar y continuar' })).toBeDisabled();
   await barra.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect(page.getByRole('alert', { name: 'Para completar esta sección falta 1 dato' })).toContainText('Registra al menos un socio o accionista.');
-  await agregarPersona(page, SOCIO);
+  // El representante legal ES el accionista: una sola persona con sus dos roles completa la sección (no hace falta registrar a otra).
+  await hacerSocioTambien(page, REPRESENTANTE, '100');
   await guardarSeccionCompleta(page, 'Guardaste Información legal: está completa.');
   await llenarFinanciera(page);
   await llenarSst(page);

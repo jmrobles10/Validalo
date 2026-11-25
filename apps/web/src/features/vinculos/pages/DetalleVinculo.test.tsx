@@ -52,11 +52,16 @@ function evento(version: number, tipo: string, datos: Record<string, unknown>, a
   return { version, tipo, fecha: `2026-11-1${String(version)}T15:00:00Z`, actorTipo, actorId: 'vigencia-vinculo', sistema: null, datos };
 }
 
+/** Con `true`, la petición del vínculo no responde nunca (carga inicial) y con `'expediente'`, solo la del expediente (la ficha ya cargó). */
+let enCarga: boolean | 'expediente' = false;
+
 function montar(base: VinculoDto, historial: EventoHistorialDto[] = [], scopes: ReadonlySet<string> = new Set([SCOPES.vinculosLeer])) {
   permisos.scopes = new Set(scopes);
   configurarCliente({
     fetch: vi.fn((entrada: RequestInfo | URL) => {
       const url = typeof entrada === 'string' ? entrada : entrada instanceof URL ? entrada.href : entrada.url;
+      if (enCarga === true && url.startsWith('/api/v1/vinculos/v1') && !url.includes('/historial')) return new Promise<Response>(() => undefined);
+      if (enCarga === 'expediente' && url.startsWith('/api/v1/expedientes/')) return new Promise<Response>(() => undefined);
       if (url.startsWith('/api/v1/vinculos/v1/historial')) return Promise.resolve(json(historial));
       if (url.startsWith('/api/v1/vinculos/v1')) return Promise.resolve(json(base));
       if (url.startsWith('/api/v1/terceros/')) {
@@ -81,6 +86,7 @@ function montar(base: VinculoDto, historial: EventoHistorialDto[] = [], scopes: 
 afterEach(() => {
   reiniciarCliente();
   permisos.scopes = new Set();
+  enCarga = false;
 });
 
 describe('Detalle del vínculo: el estado a la vista', () => {
@@ -161,5 +167,51 @@ describe('Detalle del vínculo: el historial y las acciones', () => {
 
     await screen.findByRole('heading', { level: 1, name: /Aceros del Norte S.A.S./ });
     expect(screen.queryByRole('button', { name: 'Más acciones' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Detalle del vínculo: el sector «Cuenta bancaria»', () => {
+  it('no muestra «Lo que declaró el tercero» vacío: las cuentas no son una sección de la ficha y la que declaró va en su tarjeta; los otros sectores sí', async () => {
+    const usuario = userEvent.setup();
+    montar(vinculo({ estado: 'Activo' }));
+    const elegir = async (sector: string) => {
+      await usuario.click(within(await screen.findByRole('navigation', { name: 'Sectores de la ficha' })).getByRole('button'));
+      await usuario.click(await screen.findByRole('menuitem', { name: new RegExp(`^${sector}`) }));
+    };
+
+    // Un sector con secciones de la ficha sí avisa que el tercero no ha llenado nada.
+    await elegir('Información tributaria');
+    expect(await screen.findByText('El tercero no ha llenado nada de este sector')).toBeInTheDocument();
+
+    // El de la cuenta no: ahí no hay secciones de la ficha que mostrar.
+    await elegir('Cuenta bancaria');
+    expect(await screen.findByRole('region', { name: 'Cuenta bancaria' })).toBeInTheDocument();
+    expect(screen.queryByText('El tercero no ha llenado nada de este sector')).not.toBeInTheDocument();
+    expect(screen.queryByText('Lo que declaró el tercero')).not.toBeInTheDocument();
+  });
+});
+
+describe('Detalle del vínculo: el esqueleto de carga', () => {
+  it('mientras carga el vínculo muestra la estructura de la ficha: el encabezado y el riel de sectores, con el contenido del sector pedido', async () => {
+    enCarga = true;
+    montar(vinculo({ estado: 'Activo' }));
+
+    expect(await screen.findByRole('status', { name: 'Cargando Información general' })).toBeInTheDocument();
+    expect(document.querySelector('[data-encabezado-fijo]')).not.toBeNull();
+    expect(screen.queryByRole('heading', { level: 1, name: /Aceros del Norte/ })).not.toBeInTheDocument();
+    // La ficha real todavía no existe: ni su barra de sectores ni su contenido.
+    expect(screen.queryByRole('navigation', { name: 'Sectores de la ficha' })).not.toBeInTheDocument();
+  });
+
+  it('cuando el vínculo ya cargó, lo que aún carga es solo el contenido: el encabezado y la navegación son los reales, sin esqueleto de página', async () => {
+    enCarga = 'expediente';
+    montar(vinculo({ estado: 'Activo', expedienteAbiertoId: 'e1' }), [], new Set([SCOPES.vinculosLeer, SCOPES.expedientesLeer]));
+
+    // El encabezado de verdad (con el nombre del tercero) y la navegación por sectores de verdad…
+    expect(await screen.findByRole('heading', { level: 1, name: /Aceros del Norte S.A.S./ })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Sectores de la ficha' })).toBeInTheDocument();
+    // …y ningún esqueleto de página: ni riel de silueta ni región de carga de la ficha entera.
+    expect(document.querySelector('[data-esqueleto]')).toBeNull();
+    expect(screen.queryByRole('status', { name: /Cargando los sectores/ })).not.toBeInTheDocument();
   });
 });

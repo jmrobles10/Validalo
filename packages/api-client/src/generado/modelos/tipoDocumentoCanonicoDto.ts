@@ -36,4 +36,8 @@ export interface TipoDocumentoCanonicoDto {
   paises?: string[] | null;
   /** @nullable */
   equivalenteA?: string | null;
+  /** @nullable */
+  antiguedadMaximaSugeridaDias?: number | null;
+  /** @nullable */
+  revalidarCadaSugeridoDias?: number | null;
 }

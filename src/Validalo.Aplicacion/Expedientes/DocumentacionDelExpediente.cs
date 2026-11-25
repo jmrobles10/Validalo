@@ -57,7 +57,8 @@ public sealed record DocumentacionDelExpediente(
             ? new TipoDocumentoRequisitoDto(r.TipoDocumentoTenantId, r.Codigo, r.Nombre, r.TipoCanonico, r.Ambito.ToString(), tipo.Modo.ToString(),
                 [.. tipo.Campos.Select(c => c.ADto())],
                 tipo.PideArchivo ? tipo.ReglasEfectivas(Reglas.TamanoMaximoBytes, Reglas.MaximoPaginas).ADto() : null,
-                tipo.Plantilla is not null, Ayudas?.GetValueOrDefault(r.TipoDocumentoTenantId) ?? tipo.TextoAyuda)
+                tipo.Plantilla is not null, Ayudas?.GetValueOrDefault(r.TipoDocumentoTenantId) ?? tipo.TextoAyuda, tipo.Frescura.AntiguedadMaximaDias,
+                tipo.Frescura.RevalidarCadaDias)
             : new TipoDocumentoRequisitoDto(r.TipoDocumentoTenantId, r.Codigo, r.Nombre, r.TipoCanonico, r.Ambito.ToString());
 
     /// <summary>
@@ -76,10 +77,30 @@ public sealed record DocumentacionDelExpediente(
         if (!Documentos.TryGetValue(v.DocumentoId, out var documento) || documento.Buscar(v.Numero) is not { } version)
             return new VersionRequisitoDto(v.DocumentoId, v.Numero, v.Sha256, v.CargadaEn);
 
-        var vigencia = version.VigenciaPara(vinculoId)?.ADto(Hoy)
-                       ?? (Tipos.TryGetValue(r.TipoDocumentoTenantId, out var tipo) ? tipo.Vigencia(version, Hoy) : null);
+        var registrada = version.VigenciaPara(vinculoId);
+        Tipos.TryGetValue(r.TipoDocumentoTenantId, out var tipo);
+        // «Revalidar cada N días» cuenta desde que la empresa aprueba (TD-10) y la bóveda registra esa vigencia por un barrido corto, después de la aprobación. Mientras la registrada
+        // no cuente la aprobación de este requisito, se calcula ya con ella: es la misma fecha que registrará, y así el expediente, el portal y el certificado (que se emite al
+        // aprobar, en la misma transacción) no dependen de esa espera.
+        var vigencia = tipo is not null && tipo.Frescura.RevalidarCadaDias is not null && r.AprobadoEn is { } aprobadaEn && registrada?.VencidaEn is null &&
+                       (registrada?.AprobadaEn is null || registrada.AprobadaEn < aprobadaEn)
+            ? tipo.Vigencia(version, Hoy, aprobadaEn, registrada?.RatificadaEn)
+            : registrada?.ADto(Hoy) ?? tipo?.Vigencia(version, Hoy);
         return new VersionRequisitoDto(v.DocumentoId, v.Numero, v.Sha256, v.CargadaEn, version.Datos?.Select(d => d.ADto()).ToList(), vigencia,
-            version.Estado.ToString(), version.Clase.ToString());
+            version.Estado.ToString(), version.Clase.ToString(), Antiguedad(r, version));
+    }
+
+    /// <summary>
+    /// La antigüedad máxima al subir (TD-10) de la versión que cubre el requisito, frente a la regla de su tipo. La empresa la ve con la lectura de IA que
+    /// consumió (la calculan sus <see cref="Cruces"/>, que también la cuentan como hallazgo crítico); el tercero, con la lectura de su propio documento.
+    /// </summary>
+    private AntiguedadDocumentoDto? Antiguedad(RequisitoDeExpediente r, VersionDocumento version)
+    {
+        if (Cruces is not null)
+            return Cruces.AntiguedadDe(r.Id)?.ADto(r.Nombre);
+        return Tipos.TryGetValue(r.TipoDocumentoTenantId, out var tipo) && !r.Eximido
+            ? AntiguedadDeVersiones.Evaluar(tipo, version, conLecturaDeIa: true)?.ADto(r.Nombre)
+            : null;
     }
 
     /// <summary>

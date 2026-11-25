@@ -363,7 +363,7 @@ El nivel es parte de la **configuración efectiva** con jerarquía **tenant → 
 
 Reglas del motor en `Automatico` (evaluadas en orden; la primera que aplica decide):
 1. `coincideTipoEsperado=false`, `legible=false` o identidad que no coincide → ya no llegó aquí: la bóveda devolvió la versión al tercero (03 §4.3); si la identidad es **ambigua** (confianza < umbral) → **humano**.
-2. Frescura: `fechaExpedicion + ReglaFrescura < hoy` o `fechaVencimientoDoc < hoy` → `Observado` automático al tercero con el siguiente paso (sin pasar por humano).
+2. Frescura (TD-10): `cargadaEn − fechaExpedicion (la que leyó la IA) > AntiguedadMaximaDias`, o sin una fecha de expedición verificable que el tercero no declaró → `Observado` automático al tercero con el siguiente paso (sin pasar por humano; nivel `Automatico`). `fechaVencimientoDoc < hoy` es el vencimiento propio del documento (§8.1 de 02), no la antigüedad.
 3. `comparacion = Identica | SinCambios` y confianza de los campos clave ≥ 0,95 → `Aprobado` automático (nunca se registra como ratificación: la ratificación es siempre una declaración del tercero, A-7).
 4. `CambiosDetectados` solo en campos no críticos y confianza ≥ 0,95 → `Aprobado` automático con nota de cambios.
 5. Cambio en `CamposCriticos` del canónico o en `camposCuyoCambioExigeHumano` de la empresa (representante legal, razón social, cuenta bancaria, NIT) o `SenalesManipulacion` → **humano** (`ColaDeExcepciones`).

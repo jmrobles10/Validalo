@@ -101,6 +101,16 @@ describe('SelectorEmpresa', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it('con `completo` ocupa todo el ancho y el alto táctil (el bloque del cajón del celular), y sin él es un control de barra', () => {
+    conTema(<SelectorEmpresa empresas={empresas} actual="e1" onCambiar={vi.fn()} completo />);
+    expect(screen.getByRole('button', { name: /Empresa: Norte/ })).toHaveStyle({ width: '100%', height: '44px', display: 'flex' });
+  });
+
+  it('sin `completo` el control es compacto (36 px) y no ocupa todo el ancho', () => {
+    conTema(<SelectorEmpresa empresas={empresas} actual="e1" onCambiar={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /Empresa: Norte/ })).toHaveStyle({ height: '36px', display: 'inline-flex', maxWidth: '300px' });
+  });
+
   it('cambia de empresa y no avisa si se elige la misma', async () => {
     const onCambiar = vi.fn();
     const usuario = userEvent.setup();

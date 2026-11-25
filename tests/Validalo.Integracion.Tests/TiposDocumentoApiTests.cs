@@ -183,8 +183,11 @@ public sealed partial class TiposDocumentoApiTests(ApiFixture fixture)
         var version = expediente.Requisitos!.Single().VersionActual!;
         version.DatosDeclarados!.Single(d => d.Clave == "origen").Valor.ShouldBe("Nacional");
         version.Clase.ShouldBe("Formulario");
-        version.Vigencia!.VigenteHasta.ShouldBe(hoy.AddDays(10));
-        version.Vigencia.Base.ShouldBe("FechaExpedicion");
+        // Sin la aprobación de la empresa no hay fecha de vencimiento: «revalidar cada 30 días» cuenta desde que la apruebe (TD-10).
+        version.Vigencia!.VigenteHasta.ShouldBeNull();
+        (version.Vigencia.Base, version.Vigencia.RevalidarCadaDias).ShouldBe(("SinVencimiento", 30));
+        // Expedida hace 20 días contra una antigüedad máxima de 30: cumple (un tipo sin lectura de IA toma la fecha declarada).
+        (version.Antiguedad!.Estado, version.Antiguedad.Dias, version.Antiguedad.Critico).ShouldBe(("Cumple", 20, false));
         var vista = (await ApiAsync<List<DocumentoVistaEmpresaDto>>("GET", $"/api/v1/vinculos/{e.Vinculo.Id}/documentos", Admin(e.Empresa), null, 200))
             .ShouldHaveSingleItem();
         vista.VersionesCompartidas.ShouldHaveSingleItem().DatosDeclarados!.Count.ShouldBe(3);
@@ -206,11 +209,15 @@ public sealed partial class TiposDocumentoApiTests(ApiFixture fixture)
         var enviado = await TerceroAsync<ConfirmacionCargaDto>("POST", "/public/v1/boveda/formularios", e.Sesion.AccessToken,
             Formulario(e, ("fecha_expedicion", hoy.AddDays(-20).ToString("yyyy-MM-dd")), ("origen", "Extranjero")), 200);
         var documentoId = enviado.Version.DocumentoId;
-        var hasta = hoy.AddDays(10); // expedición + 30 días
+        var hasta = hoy.AddDays(30); // aprobación + 30 días
         var fechaAviso = hasta.AddDays(-5);
 
+        // Hasta que la empresa no apruebe, la bóveda no registra fecha de vencimiento ni programa avisos.
+        (await EsperarEventoAsync<VigenciaDeVersionCalculada>(documentoId)).VigenteHasta.ShouldBeNull();
+        await AprobarAsync(e);
+
         // La bóveda registra la vigencia del vínculo (por mensaje) y programa el aviso (uno por tercero y fecha) y el vencimiento.
-        var calculada = await EsperarEventoAsync<VigenciaDeVersionCalculada>(documentoId);
+        var calculada = await EsperarEventoAsync<VigenciaDeVersionCalculada>(documentoId, c => c.VigenteHasta is not null);
         calculada.VigenteHasta.ShouldBe(hasta);
         calculada.VinculoId.ShouldBe(e.Vinculo.Id);
         calculada.DiasGracia.ShouldBe(2);
@@ -240,7 +247,7 @@ public sealed partial class TiposDocumentoApiTests(ApiFixture fixture)
             fixture.Correos.Para(e.Correo).ShouldNotContain(m => m.Asunto.Contains("vencer"));
 
             // El día del aviso: un correo con el documento y su fecha para la empresa; repetido, no sale otro.
-            fixture.Reloj.Desfase = TimeSpan.FromDays(5);
+            fixture.Reloj.Desfase = TimeSpan.FromDays(25);
             await ProcesarAsync(aviso);
             await using (var consulta = Host.Services.GetRequiredService<IDocumentStore>().QuerySession(TenantsTecnicos.Boveda))
             {
@@ -258,10 +265,10 @@ public sealed partial class TiposDocumentoApiTests(ApiFixture fixture)
             porVencer.Requisitos!.Single().VersionActual!.Vigencia!.Estado.ShouldBe("PorVencer");
 
             // En la gracia aún no vence; pasada la gracia, la versión queda Vencida (evento en el stream del documento).
-            fixture.Reloj.Desfase = TimeSpan.FromDays(12);
+            fixture.Reloj.Desfase = TimeSpan.FromDays(32);
             await ProcesarAsync(vencer);
             (await EventosAsync(documentoId)).OfType<VersionVencida>().ShouldBeEmpty();
-            fixture.Reloj.Desfase = TimeSpan.FromDays(13);
+            fixture.Reloj.Desfase = TimeSpan.FromDays(33);
             await ProcesarAsync(vencer);
             var vencida = (await EventosAsync(documentoId)).OfType<VersionVencida>().ShouldHaveSingleItem();
             vencida.VinculoId.ShouldBe(e.Vinculo.Id);
@@ -272,8 +279,8 @@ public sealed partial class TiposDocumentoApiTests(ApiFixture fixture)
             vista.Estado.ShouldBe("Vencida");
             vista.Vigencia!.Estado.ShouldBe("Vencida");
             vista.Vigencia.VencidaEn.ShouldNotBeNull();
-            // El vínculo no cambia de estado todavía (H6).
-            (await ApiAsync<VinculoDto>("GET", $"/api/v1/vinculos/{e.Vinculo.Id}", Admin(e.Empresa), null, 200)).Estado.ShouldNotBe("Vencido");
+            // La empresa aprobó el documento (de ahí cuenta la revalidación): al vencer, el documento obligatorio deja al vínculo en Vencido (RN-1).
+            (await ApiAsync<VinculoDto>("GET", $"/api/v1/vinculos/{e.Vinculo.Id}", Admin(e.Empresa), null, 200)).Estado.ShouldBe("Vencido");
         }
         finally
         {
@@ -287,15 +294,15 @@ public sealed partial class TiposDocumentoApiTests(ApiFixture fixture)
         ExpedienteDto Expediente, string Correo);
 
     /// <summary>
-    /// Una empresa con el tipo propio «Declaración de origen» (solo formulario: fecha de expedición, origen y monto; vence 30
-    /// días después de expedida, aviso a 5 días, 2 de gracia) pedido por su flujo, y un tercero que ya aceptó (expediente abierto).
+    /// Una empresa con el tipo propio «Declaración de origen» (solo formulario: fecha de expedición, origen y monto; antigüedad máxima de 30 días al
+    /// subirla y revalidación cada 30 días desde que la empresa la aprueba, aviso a 5 días, 2 de gracia) pedido por su flujo, y un tercero que ya aceptó.
     /// </summary>
     private async Task<EscenarioFormulario> EscenarioFormularioAsync()
     {
         var empresa = await EmpresaNuevaAsync("Comercial " + Guid.NewGuid().ToString("N")[..6], "F" + Random.Shared.Next(10, 99));
         var tipo = await ApiAsync<TipoDocumentoTenantDto>("POST", "/api/v1/tipos-documento", Admin(empresa),
             new CrearTipoDocumentoDto("DECLARACION_ORIGEN", "Declaración de origen", null,
-                ReglaFrescura: new ReglaFrescuraDto("MaxDiasDesdeExpedicion", 30), DiasAviso: [5], DiasGracia: 2, Modo: "Formulario",
+                AntiguedadMaximaDias: 30, RevalidarCadaDias: 30, DiasAviso: [5], DiasGracia: 2, Modo: "Formulario",
                 Campos:
                 [
                     new CampoFormularioDto("fecha_expedicion", "Fecha de expedición", "Fecha", true),
@@ -438,12 +445,12 @@ public sealed partial class TiposDocumentoApiTests(ApiFixture fixture)
         }
     }
 
-    private async Task<T> EsperarEventoAsync<T>(Guid documentoId)
+    private async Task<T> EsperarEventoAsync<T>(Guid documentoId, Func<T, bool>? condicion = null)
     {
         var limite = DateTime.UtcNow.AddSeconds(20);
         while (true)
         {
-            if ((await EventosAsync(documentoId)).OfType<T>().FirstOrDefault() is { } evento)
+            if ((await EventosAsync(documentoId)).OfType<T>().FirstOrDefault(x => condicion?.Invoke(x) ?? true) is { } evento)
                 return evento;
             if (DateTime.UtcNow > limite)
                 throw new TimeoutException($"El documento {documentoId} no registró {typeof(T).Name}.");

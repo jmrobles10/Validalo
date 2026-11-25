@@ -4,7 +4,7 @@ import { reiniciarCliente, type PerfilDeFichaDto } from '@validalo/api-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { datosParaEnviar } from './useEditorSeccion';
 import { esSociedad } from './legal/personas';
-import { escribir, estadoFicha, guardada, json, montarFicha, seccion } from './pruebas/montar';
+import { completarPersona, escribir, estadoFicha, guardada, json, montarFicha, seccion } from './pruebas/montar';
 
 afterEach(() => reiniciarCliente());
 
@@ -173,6 +173,7 @@ describe('Mi información de un tercero de República Dominicana: Información l
     expect(within(dialogo).queryByRole('textbox', { name: 'Apellidos' })).not.toBeInTheDocument();
     expect(within(dialogo).queryByRole('textbox', { name: 'Dígito de verificación (DV)' })).not.toBeInTheDocument();
     await escribir(usuario, within(dialogo).getByRole('textbox', { name: 'Razón social' }), 'Inversiones del Caribe S.R.L.');
+    await completarPersona(usuario, dialogo, 'Contador');
     await usuario.click(within(dialogo).getByRole('button', { name: 'Listo' }));
     await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
@@ -197,6 +198,7 @@ describe('Mi información de un tercero de República Dominicana: Información l
     await escribir(usuario, within(dialogo).getByRole('textbox', { name: 'Número de identificación' }), '155612345-2-2019');
     await escribir(usuario, within(dialogo).getByRole('textbox', { name: 'Dígito de verificación (DV)' }), '56');
     await escribir(usuario, within(dialogo).getByRole('textbox', { name: 'Razón social' }), 'Inversiones Istmo S.A.');
+    await completarPersona(usuario, dialogo, 'Contador');
     await usuario.click(within(dialogo).getByRole('button', { name: 'Listo' }));
     await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 

@@ -21,6 +21,27 @@ public static class MapeosDocumentos
                 : throw ReglaDeNegocioException.Validacion("frescura-invalida",
                     $"'{r.Tipo}' no es una regla de frescura ({string.Join(", ", Enum.GetNames<TipoReglaFrescura>())}).");
 
+    /// <summary>
+    /// La vista heredada de las reglas (<c>reglaFrescura</c>): solo el periodo (<c>PeriodoMinimo</c>) o <c>Ninguna</c>; la antigüedad máxima y la
+    /// revalidación (TD-10) viajan en sus propios campos.
+    /// </summary>
+    public static ReglaFrescuraDto AReglaHeredadaDto(this ReglasDeVigencia reglas) =>
+        reglas.Periodo is { } periodo ? ReglaFrescura.Periodo(periodo).ADto() : ReglaFrescura.Ninguna.ADto();
+
+    /// <summary>La antigüedad del documento como la ve quien consulta; con <paramref name="nombreDelTipo"/> arma el mensaje que se le pide al tercero.</summary>
+    public static AntiguedadDocumentoDto ADto(this ResultadoDeAntiguedad r, string nombreDelTipo) =>
+        new(r.Estado.ToString(), r.MaximoDias, r.FechaDeExpedicion, r.Dias, r.Fuente?.ToString(), r.FechaDeclarada, r.DifiereDeLaDeclarada, r.EsCritico,
+            AntiguedadDelDocumento.Detalle(r), AntiguedadDelDocumento.MensajeAlTercero(r, nombreDelTipo),
+            r.Estado == EstadoDeAntiguedad.SinLectura
+                ? null
+                : new CampoCruzadoDto(CampoAntiguedad, EtiquetaAntiguedad, r.FechaDeclarada is { } d ? AntiguedadDelDocumento.Dia(d) : null,
+                    r.FechaDeExpedicion is { } e ? AntiguedadDelDocumento.Dia(e) : null, r.Resultado, true, AntiguedadDelDocumento.Detalle(r)));
+
+    /// <summary>Clave y etiqueta de la fila de cotejo de la antigüedad (revisor).</summary>
+    public const string CampoAntiguedad = "antiguedad_documento";
+
+    public const string EtiquetaAntiguedad = "Antigüedad del documento";
+
     public static AmbitoDocumento? AAmbito(string? ambito) =>
         string.IsNullOrWhiteSpace(ambito)
             ? null
@@ -69,15 +90,15 @@ public static class MapeosDocumentos
         new(t.Codigo, t.Version, t.Nombre, t.Ambito.ToString(), t.Clase.ToString(), t.AplicaA.ToString(), t.TieneVencimientoIntrinseco,
             t.TieneFechaExpedicion, t.EsPeriodico, t.Periodicidad, t.PermiteRatificacion, t.DePersonaRelacionada, t.CamposClave,
             t.CamposCriticos, t.Sensibilidad.ToString(), t.ReglaFrescuraSugerida?.ADto(), t.RetencionAniosSugerida, t.CargaSoportada,
-            t.Formatos, t.TamanoMaximoMb, t.PaginasMaximas, t.Paises, t.EquivalenteA);
+            t.Formatos, t.TamanoMaximoMb, t.PaginasMaximas, t.Paises, t.EquivalenteA, t.FrescuraSugerida?.AntiguedadMaximaDias, t.FrescuraSugerida?.RevalidarCadaDias);
 
     /// <summary>Con <paramref name="reglas"/> incluye las reglas de archivo efectivas (con los límites globales).</summary>
     public static TipoDocumentoTenantDto ADto(this TipoDocumentoTenant t, ReglasDeCarga? reglas = null) =>
         new(t.Id, t.Codigo, t.Nombre, t.TipoCanonico, t.VersionCanonico, t.Ambito.ToString(), t.Clase.ToString(), t.TextoAyuda,
-            t.ReglaFrescura.ADto(), t.DiasAviso, t.DiasGracia, t.DiasRevalidacion, t.Activo, t.CreadoEn, t.FormatosPermitidos, t.TamanoMaximoMb,
+            t.Frescura.AReglaHeredadaDto(), t.DiasAviso, t.DiasGracia, t.DiasRevalidacion, t.Activo, t.CreadoEn, t.FormatosPermitidos, t.TamanoMaximoMb,
             t.PaginasMaximas, t.Modo.ToString(), [.. t.Campos.Select(ADto)],
             reglas is null ? null : t.ReglasEfectivas(reglas.TamanoMaximoBytes, reglas.MaximoPaginas).ADto(),
-            t.Plantilla?.ADto(t.PlantillaVigente), t.CargaSoportada);
+            t.Plantilla?.ADto(t.PlantillaVigente), t.CargaSoportada, t.Frescura.AntiguedadMaximaDias, t.Frescura.RevalidarCadaDias);
 
     public static PlantillaVersionDto ADto(this PlantillaDeTipo p, int? vigente) =>
         new(p.Version, p.NombreOriginal, p.Mime, p.Tamano, p.Sha256, p.CargadaEn, p.CargadaPor, p.Version == vigente, p.RetiradaEn);
@@ -88,15 +109,18 @@ public static class MapeosDocumentos
     public static VigenciaDto ADto(this VigenciaDeVersion v, DateOnly hoy) =>
         new(v.VigenteHasta, v.Base.ToString(),
             CalculadoraDeVigencia.Estado(v.VigenteHasta, v.DiasAviso, v.DiasGracia, hoy, v.VencidaEn is not null).ToString(),
-            v.DiasAviso, v.DiasGracia, v.FinDeGracia, v.VencidaEn);
+            v.DiasAviso, v.DiasGracia, v.FinDeGracia, v.VencidaEn, v.AprobadaEn, v.RevalidarCadaDias);
 
-    /// <summary>Vigencia calculada al vuelo con la regla del tipo (si la bóveda aún no la registró: se calcula por mensaje).</summary>
-    public static VigenciaDto Vigencia(this TipoDocumentoTenant tipo, VersionDocumento version, DateOnly hoy)
+    /// <summary>
+    /// Vigencia calculada al vuelo con la regla del tipo (si la bóveda aún no la registró, o aún no cuenta la aprobación de la empresa: se registra por mensaje). Con
+    /// <paramref name="aprobadaEn"/> y <paramref name="ratificadaEn"/> es la misma que registrará la bóveda (TD-10): «revalidar cada N días» desde la más reciente.
+    /// </summary>
+    public static VigenciaDto Vigencia(this TipoDocumentoTenant tipo, VersionDocumento version, DateOnly hoy, DateTimeOffset? aprobadaEn = null, DateTimeOffset? ratificadaEn = null)
     {
-        var calculo = CalculadoraDeVigencia.Calcular(tipo.ReglaFrescura, version.CargadaEn, version.Datos);
+        var calculo = CalculadoraDeVigencia.Calcular(tipo.Frescura, version.Datos, aprobadaEn, ratificadaEn);
         return new VigenciaDto(calculo.VigenteHasta, calculo.Base.ToString(),
             CalculadoraDeVigencia.Estado(calculo.VigenteHasta, tipo.DiasAviso, tipo.DiasGracia, hoy).ToString(), tipo.DiasAviso, tipo.DiasGracia,
-            CalculadoraDeVigencia.FinDeGracia(calculo.VigenteHasta, tipo.DiasGracia), null);
+            CalculadoraDeVigencia.FinDeGracia(calculo.VigenteHasta, tipo.DiasGracia), null, aprobadaEn, tipo.Frescura.RevalidarCadaDias);
     }
 
     public static DateOnly Hoy(this TimeProvider reloj) => CalculadoraDeVigencia.Fecha(reloj.GetUtcNow());

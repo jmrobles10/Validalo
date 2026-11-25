@@ -65,7 +65,7 @@ export function PanelDeNotificaciones<N extends NotificacionVisible>(props: Pane
           onClick={onMarcarTodas}
           disabled={noLeidas === 0 || marcandoTodas}
           startIcon={iconoMarcarTodas}
-          sx={{ whiteSpace: 'nowrap', ...(iconoMarcarTodas ? { '& .MuiButton-startIcon': { display: { xs: 'none', sm: 'inherit' } } } : { minHeight: 32 }) }}
+          sx={{ whiteSpace: 'nowrap', ...(iconoMarcarTodas ? { '& .MuiButton-startIcon': { display: { xs: 'none', sm: 'inherit' } } } : {}) }}
         >
           {textos.marcarTodas}
         </Button>

@@ -3,7 +3,7 @@ import { pdf } from '../soporte/archivos';
 import { CLAVE_PLATAFORMA, llamar } from '../soporte/api';
 import { capturar } from '../soporte/capturas';
 import { abrirEmbebido } from '../soporte/embebido';
-import { abrirDesdeBandeja, aprobarArea, irASeccion, regionDeArea } from '../soporte/empresa';
+import { abrirDesdeBandeja, aprobarArea, irASeccion, irASector, regionDeArea } from '../soporte/empresa';
 import { publicarFlujoDeFicha } from '../soporte/ficha';
 import { crearTipoDeVinculo, invitarVinculo } from '../soporte/flujos';
 import { abrirConsolaDePlataforma } from '../soporte/plataforma';
@@ -60,6 +60,9 @@ test('El detalle del vínculo muestra el correo sin cortes feos y su historial d
   const detalle = await ventanaDe(browser, e, e.ana, e.norte, `vinculos/${invitacion.vinculoId}`);
   await expect(detalle.getByRole('heading', { level: 1, name: tercero.nombre })).toBeVisible();
   const ventana = detalle.owner().page();
+  // El historial es su sector de la ficha, con una pestaña para el expediente y otra para el vínculo (donde queda lo que el tercero aceptó).
+  await irASector(detalle, 'Historial');
+  await detalle.getByRole('tab', { name: 'Vínculo', exact: true }).click();
   await expect(detalle.getByText('Invitación aceptada', { exact: true })).toBeVisible();
   await capturar(ventana, 'pendientes-vinculo-detalle');
 
@@ -73,6 +76,7 @@ test('El detalle del vínculo muestra el correo sin cortes feos y su historial d
   // «Datos del vínculo»: el correo de contacto (largo) no se parte a mitad de línea; si no cabe, se parte en la «@» y se ve entero al pasar el cursor.
   // Se mide solo el texto del correo (el `ValorLargo`), no el `dd` entero: junto al correo va el chip de verificación (decisión AV), que cae en otra línea
   // y haría contar como «salto» la última letra del correo.
+  await irASector(detalle, 'Información general');
   const contacto = detalle.locator('dt', { hasText: /^Contacto$/ }).locator('xpath=following-sibling::dd[1]');
   const correo = contacto.getByText(tercero.correo);
   await expect(correo).toBeVisible();
@@ -119,6 +123,9 @@ test('Un vínculo bloqueado no recibe la versión nueva y, al desbloquearlo, que
   // Mientras está bloqueado, el tercero sube un RUT nuevo desde su bóveda: no le llega al vínculo bloqueado (B-5).
   await page.goto('/boveda');
   await subirVersionDesdeLaBoveda(page, RUT, pdf('RUT bloqueo v2'), 2);
+  // El certificado vive en su sector: sigue el vigente (con su folio) y no pasa a «En verificación».
+  await irASector(ana, 'Certificado');
+  await expect(ana.getByRole('main')).toContainText(new RegExp(`${e.norte.prefijo}-C-\\d{4}-\\d{6}-1`));
   await expect(ana.getByRole('main')).not.toContainText('En verificación');
 
   // Al desbloquearlo se pone al día: se abre la actualización, el vínculo queda «En revisión» y el certificado «En verificación» (VR-3, VR-11).
@@ -131,6 +138,7 @@ test('Un vínculo bloqueado no recibe la versión nueva y, al desbloquearlo, que
     await ana.owner().page().reload();
     await expect(ana.getByText(/^En revisión\. En revisión desde el /).first()).toBeVisible({ timeout: 4000 });
   }).toPass({ timeout: 60_000 });
+  await irASector(ana, 'Certificado');
   await expect(ana.getByRole('main')).toContainText(new RegExp(`En verificación\\s*${e.norte.prefijo}-C-\\d{4}-\\d{6}-1`));
   await capturar(ana.owner().page(), 'pendientes-desbloqueo-en-revision');
   // El tercero ve lo mismo: su revisión con la empresa vuelve a estar en revisión por el RUT nuevo.

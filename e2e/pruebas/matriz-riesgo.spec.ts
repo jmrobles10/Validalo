@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { pdf } from '../soporte/archivos';
 import { abrirEmbebido } from '../soporte/embebido';
-import { abrirDesdeBandeja, aprobarArea } from '../soporte/empresa';
+import { abrirDesdeBandeja, aprobarArea, irASector } from '../soporte/empresa';
 import { aprobarUltimaArea, captura, enRevision, esperarListas, pedirVerificaciones, personaEmbebida } from '../soporte/cumplimiento';
 import { esperarEstadoDelTercero } from '../soporte/proveedor';
 import { crearEscenario } from '../soporte/semilla';
@@ -62,6 +62,7 @@ test('Norte configura su matriz y el estudio del oficial la usa: resultado, ajus
   await esperarEstadoDelTercero(page, 'EnRevision');
 
   // El estudio con la matriz: solo se preguntan los factores manuales; los automáticos los evalúa el sistema.
+  await irASector(olga, 'Oficial de cumplimiento');
   await olga.getByRole('button', { name: 'Registrar estudio' }).click();
   const dialogo = olga.getByRole('dialog', { name: /Estudio de cumplimiento/ });
   await expect(dialogo.getByText('Valoración de riesgo')).toBeVisible();
@@ -101,7 +102,6 @@ test('Norte configura su matriz y el estudio del oficial la usa: resultado, ajus
 
   await dialogo.getByRole('button', { name: 'Registrar estudio' }).click();
   await expect(dialogo).toBeHidden();
-  await expect(olga.getByText(/Todas las áreas aprobaron el .* y el vínculo quedó activo\./)).toBeVisible();
 
   const guardado = olga.getByRole('region', { name: 'Estudio de cumplimiento' });
   await expect(guardado).toContainText('3 · Alto');
@@ -110,8 +110,11 @@ test('Norte configura su matriz y el estudio del oficial la usa: resultado, ajus
   await expect(guardado).toContainText('Ajustado de 2 · Medio a 3 · Alto');
   await expect(guardado).toContainText('Opera con efectivo en zona de frontera.');
   await expect(guardado.getByText('soporte-estudio.pdf')).toBeVisible();
-  // El archivo queda en el historial del expediente.
+  // El archivo queda en el historial del expediente y, como el estudio era lo último que faltaba, el expediente se aprobó (sector «Aprobaciones»).
+  await irASector(olga, 'Historial');
   await expect(olga.getByText('El oficial adjuntó un archivo: soporte-estudio.pdf')).toBeVisible();
+  await irASector(olga, 'Aprobaciones');
+  await expect(olga.getByText(/Todas las áreas aprobaron el .* y el vínculo quedó activo\./)).toBeVisible();
   await esperarEstadoDelTercero(page, 'Aprobado');
 });
 

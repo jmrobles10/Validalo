@@ -231,6 +231,8 @@ public static class ConfiguracionMarten
                     .Index(x => x.ProximaRevisionDePlazo)
                     // Barrido de alertas de SLA de revisión (OP-12): solo los que tienen un plazo corriendo llevan valor.
                     .Index(x => x.ProximaRevisionDeSla);
+                // Marca de «recalcula la vigencia de este documento» que deja una aprobación del expediente en su misma transacción (TD-10); el barrido la consume.
+                opts.Schema.For<Validalo.Aplicacion.Documentos.RecalculoDeVigenciaPendiente>().MultiTenanted().Index(x => x.Desde);
                 // Ayuda por documento que una empresa escribió para sí (OP-15): id determinista {empresa:N}:{tipo:N}.
                 opts.Schema.For<Validalo.Aplicacion.Documentos.AyudaDeDocumentoDeEmpresa>().MultiTenanted().Index(x => x.EmpresaId);
                 // Delegaciones de revisión por ausencias (OP-7): de una empresa, se leen por el delegado.

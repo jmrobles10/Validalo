@@ -16,4 +16,8 @@ export interface VigenciaDto {
   finDeGracia: string | null;
   /** @nullable */
   vencidaEn: string | null;
+  /** @nullable */
+  aprobadaEn?: string | null;
+  /** @nullable */
+  revalidarCadaDias?: number | null;
 }

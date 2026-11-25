@@ -111,19 +111,25 @@ public static class DeclaracionesPepEndpoints
     /// <summary>
     /// Los PDF de las declaraciones PEP activas de una versión de la sección (uno por persona con «Sí» a PEP y declaración): nombre de archivo y
     /// contenido. Lo usan la descarga del ZIP del expediente (el equivalente de la hoja de vida del SRM) y, de a uno, <see cref="Pdf"/>.
+    /// <b>Una persona, un PDF:</b> quien es representante legal y además socio tiene una fila por rol en la sección legal (PS-1), las dos con la misma
+    /// declaración; sale un solo PDF (el de la primera fila) y su rol dice los dos.
     /// </summary>
     public static IReadOnlyList<(string Nombre, byte[] Contenido)> PdfsDeLaVersion(string seccion, string nombreSeccion, VersionDeSeccion version, string empresa,
         string tercero, IGeneradorDePdfDeDeclaracionPep generador, DateTimeOffset ahora, string? logoUrl = null)
     {
         var indices = seccion == CodigosDeSeccion.General ? [(int?)null] : Enumerable.Range(0, JsonDeFicha.Deserializar<DatosLegales>(version.Datos).Personas?.Count ?? 0).Select(i => (int?)i).ToList();
+        var declaradas = indices
+            .Select(indice => (Indice: indice, Resultado: DeclaracionDe(seccion, version.Datos, indice)))
+            .Where(f => f.Resultado.Declaracion is not null)
+            .Select(f => (f.Indice, Declaracion: f.Resultado.Declaracion!, f.Resultado.Rol));
         var pdfs = new List<(string, byte[])>();
-        foreach (var indice in indices)
+        // La misma persona (tipo y número que fijó el servidor en la declaración) con varios roles: una sola declaración. Sin número no hay con qué juntarlas.
+        foreach (var persona in declaradas.GroupBy(f => f.Declaracion.Numero is { Length: > 0 } numero ? $"{f.Declaracion.TipoIdentificacion}|{numero}" : $"#{f.Indice}"))
         {
-            var (declaracion, rol) = DeclaracionDe(seccion, version.Datos, indice);
-            if (declaracion is null)
-                continue;
-            pdfs.Add((NombreDelArchivo(declaracion, ahora), generador.Generar(new DatosDelPdfDeDeclaracionPep(empresa, tercero, nombreSeccion, version.Numero, version.Fecha, rol,
-                declaracion, ahora, logoUrl))));
+            var primera = persona.First();
+            var roles = string.Join(" y ", persona.Select(f => f.Rol).OfType<string>().Distinct());
+            pdfs.Add((NombreDelArchivo(primera.Declaracion, ahora), generador.Generar(new DatosDelPdfDeDeclaracionPep(empresa, tercero, nombreSeccion, version.Numero, version.Fecha,
+                roles.Length == 0 ? null : roles, primera.Declaracion, ahora, logoUrl))));
         }
 
         return pdfs;

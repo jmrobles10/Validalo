@@ -5,6 +5,7 @@ import {
   getBuscarEnCatalogoPublicoQueryOptions,
   getObtenerFichaQueryKey,
   getListarPropuestasFichaQueryOptions,
+  getListarRelacionesDelTerceroQueryKey,
   getObtenerFichaQueryOptions,
   getObtenerPropuestasSeccionQueryOptions,
   getObtenerSeccionFichaQueryKey,
@@ -63,6 +64,8 @@ export function useGuardarSeccion(codigo: string, periodo: number | null) {
     onSuccess: (respuesta: SeccionGuardadaDto) => {
       cliente.setQueryData(getObtenerSeccionFichaQueryKey(codigo, parametrosPeriodo(periodo)), respuesta.seccion);
       void cliente.invalidateQueries({ queryKey: getObtenerFichaQueryKey() });
+      // Las personas de la información legal son relaciones del tercero (ADR-0010): su documento de identidad en la tarjeta sale de ellas.
+      if (codigo === 'FICHA_LEGAL') void cliente.invalidateQueries({ queryKey: getListarRelacionesDelTerceroQueryKey() });
       // Con la versión nueva guardada (y su soporte) las propuestas ya no son las mismas.
       void cliente.invalidateQueries({ predicate: (consulta) => typeof consulta.queryKey[0] === 'string' && consulta.queryKey[0].endsWith('/propuestas') });
     },

@@ -27,6 +27,7 @@ export const vencimientos = {
     vencioHace_other: 'Venció hace {{count}} días',
   },
   bases: {
+    Aprobacion: 'Aprobación de la empresa',
     FechaExpedicion: 'Fecha de expedición',
     FechaCarga: 'Fecha de carga',
     VencimientoPropio: 'Vencimiento del documento',

@@ -3,7 +3,7 @@ import { formatearDiaCivil } from '@validalo/ui';
 import { describe, expect, it } from 'vitest';
 import { detalleComparticion } from '../boveda/versiones';
 import i18n from '../i18n';
-import { avisoDeVigencia, ESTADO_DEL_CHIP, estadoDeVigencia, requiereAtencion, textoVigencia } from './vigencia';
+import { avisoDeVigencia, ESTADO_DEL_CHIP, estadoDeVigencia, plazoEnPalabras, requiereAtencion, textoPorAprobar, textoSinVencimiento, textoVigencia } from './vigencia';
 
 const t = i18n.t.bind(i18n);
 
@@ -50,6 +50,35 @@ describe('vigencia de un documento', () => {
     expect(ESTADO_DEL_CHIP.Vencida).toBe('Vencida');
     expect(estadoDeVigencia(vigencia('Renovando'))).toBeNull();
     expect(estadoDeVigencia(null)).toBeNull();
+  });
+
+  it('dice un plazo como se habla: años, meses o días', () => {
+    expect(plazoEnPalabras(365, t)).toBe('1 año');
+    expect(plazoEnPalabras(730, t)).toBe('2 años');
+    expect(plazoEnPalabras(180, t)).toBe('6 meses');
+    expect(plazoEnPalabras(60, t)).toBe('2 meses');
+    expect(plazoEnPalabras(30, t)).toBe('30 días');
+    expect(plazoEnPalabras(45, t)).toBe('45 días');
+    expect(plazoEnPalabras(1, t)).toBe('1 día');
+  });
+
+  it('antes de que la empresa apruebe un documento que se revalida cada N días no hay fecha: dice cuándo empieza a contar', () => {
+    const sinAprobar = vigencia('SinVencimiento', { vigenteHasta: null, base: 'SinVencimiento', finDeGracia: null, revalidarCadaDias: 365 });
+    expect(textoPorAprobar(sinAprobar, 'Constructora Norte', t)).toBe('Vence 1 año después de que Constructora Norte lo apruebe');
+    expect(textoPorAprobar(sinAprobar, null, t)).toBe('Vence 1 año después de que la empresa lo apruebe');
+    expect(textoPorAprobar({ ...sinAprobar, revalidarCadaDias: 90 }, 'Norte', t)).toBe('Vence 3 meses después de que Norte lo apruebe');
+    expect(textoPorAprobar({ ...sinAprobar, revalidarCadaDias: 45 }, 'Norte', t)).toBe('Vence 45 días después de que Norte lo apruebe');
+    // En la tarjeta de la bóveda reemplaza a «No vence».
+    expect(textoSinVencimiento(sinAprobar, t)).toBe('Vence 1 año después de que la empresa lo apruebe');
+  });
+
+  it('sin regla de revalidación, o con la fecha ya calculada, sigue diciendo lo de siempre', () => {
+    const sinRegla = vigencia('SinVencimiento', { vigenteHasta: null, base: 'SinVencimiento', finDeGracia: null });
+    expect(textoPorAprobar(sinRegla, 'Norte', t)).toBeNull();
+    expect(textoSinVencimiento(sinRegla, t)).toBe('No vence');
+    const aprobada = vigencia('Vigente', { base: 'Aprobacion', aprobadaEn: '2026-11-25T10:00:00Z', revalidarCadaDias: 365, vigenteHasta: '2027-11-25' });
+    expect(textoPorAprobar(aprobada, 'Norte', t)).toBeNull();
+    expect(textoVigencia(aprobada, t)).toBe('Vence el 25/11/2027');
   });
 
   it('en la bóveda, cada empresa dice hasta cuándo le sirve el documento solo si difiere de la cabecera, y por qué', () => {

@@ -20,14 +20,15 @@ function Esqueleto() {
   return (
     <Stack spacing={2} role="status" aria-busy aria-label={t('comun.cargando')}>
       <Skeleton variant="rounded" height={88} />
-      <TablaEsqueleto columnas={6} filas={5} />
+      <TablaEsqueleto columnas={7} filas={5} />
     </Stack>
   );
 }
 
 /**
- * Uso de IA por cliente (PI-12): para cada grupo y empresa, en el mes elegido, las validaciones incluidas y adicionales, los tokens, el costo del proveedor y lo
- * que valen las adicionales con el precio vigente. Exportable a Excel o CSV con los mismos filtros.
+ * Uso de IA por cliente (PI-12): para cada grupo y empresa, en el mes elegido, las validaciones incluidas y adicionales, los tokens, el costo REAL del proveedor (sin
+ * doble conteo) y lo que valen las adicionales con el precio vigente. Lo reutilizado (IA-15: el costo de los análisis que una empresa recibió ya hechos por otra) se
+ * muestra aparte, solo como dato informativo, y nunca se suma al costo. Exportable a Excel o CSV con los mismos filtros.
  */
 export function PaginaConsumoIa() {
   const { t } = useTranslation();
@@ -103,6 +104,9 @@ export function PaginaConsumoIa() {
               <Dato etiqueta={t('consola.consumo.totales.adicionales')}>{formatearEntero(resumen.totales.adicionalesConsumidas)}</Dato>
               <Dato etiqueta={t('consola.consumo.totales.tokens')}>{`${formatearTokens(resumen.totales.tokensEntrada)} · ${formatearTokens(resumen.totales.tokensSalida)}`}</Dato>
               <Dato etiqueta={t('consola.consumo.totales.costo')}>{formatearUsd(resumen.totales.costoUsd)}</Dato>
+              <Dato etiqueta={t('consola.consumo.totales.reutilizado')}>
+                {t('consola.consumo.totales.reutilizadoValor', { costo: formatearUsd(resumen.totales.costoReutilizadoUsd ?? 0), count: resumen.totales.validacionesReutilizadas ?? 0 })}
+              </Dato>
               <Dato etiqueta={t('consola.consumo.totales.valor')}>{aNumero(resumen.totales.valorAdicional) > 0 ? formatearMoneda(resumen.totales.valorAdicional, moneda) : '—'}</Dato>
             </RejillaDatos>
           </Tarjeta>

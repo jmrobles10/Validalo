@@ -4,6 +4,7 @@
  * Validalo.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { AntiguedadDocumentoDto } from './antiguedadDocumentoDto';
 import type { DatoDeclaradoDto } from './datoDeclaradoDto';
 import type { VigenciaDto } from './vigenciaDto';
 
@@ -19,4 +20,5 @@ export interface VersionRequisitoDto {
   estado?: string | null;
   /** @nullable */
   clase?: string | null;
+  antiguedad?: null | AntiguedadDocumentoDto;
 }

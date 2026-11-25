@@ -21,7 +21,6 @@ export function BotonVerVersion({ documento, puedeVerArchivo, variante = 'outlin
   if (documento.sinArchivo) {
     return (
       <Button
-        size="small"
         variant={variante}
         startIcon={<ClipboardList size={14} aria-hidden />}
         onClick={() => onVer(documento)}
@@ -34,7 +33,6 @@ export function BotonVerVersion({ documento, puedeVerArchivo, variante = 'outlin
   if (!puedeVerArchivo) return null;
   return (
     <Button
-      size="small"
       variant={variante}
       startIcon={<Eye size={variante === 'text' ? 14 : 16} aria-hidden />}
       onClick={() => onVer(documento)}

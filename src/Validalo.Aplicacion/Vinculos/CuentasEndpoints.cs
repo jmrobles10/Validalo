@@ -39,7 +39,8 @@ public static class CuentasPublicasEndpoints
         await using var consulta = sesiones.ConsultaGlobal();
         var vistos = await VistaDelTercero.CargarAsync(consulta, tercero, [.. tercero.Vinculos.Select(v => v.VinculoId)], ct);
         var dueno = await consulta.LoadAsync<Tercero>(terceroId, ct);
-        return [.. cuentas.Where(c => alcance is null || alcance.EsDelAlcance(c)).Select(c => APublica(c, vistos, certificaciones.GetValueOrDefault(c.Id), dueno, protector))];
+        var reglas = await CertificacionesDeCuentas.ReglasDeAntiguedadAsync(consulta, tercero, vistos, ct);
+        return [.. cuentas.Where(c => alcance is null || alcance.EsDelAlcance(c)).Select(c => APublica(c, vistos, certificaciones.GetValueOrDefault(c.Id), dueno, protector, reglas))];
     }
 
     [WolverinePost("/public/v1/boveda/cuentas-bancarias")]
@@ -103,7 +104,7 @@ public static class CuentasPublicasEndpoints
         boveda.Store(cuenta);
         await boveda.SaveChangesAsync(ct);
         var certificacion = await boveda.Query<Documento>().FirstOrDefaultAsync(d => d.CuentaBancariaId == id, ct);
-        return APublica(cuenta, vistos, certificacion, await consulta.LoadAsync<Tercero>(tercero.TerceroId, ct), protector);
+        return APublica(cuenta, vistos, certificacion, await consulta.LoadAsync<Tercero>(tercero.TerceroId, ct), protector, await CertificacionesDeCuentas.ReglasDeAntiguedadAsync(consulta, tercero, vistos, ct));
     }
 
     /// <summary>
@@ -163,7 +164,7 @@ public static class CuentasPublicasEndpoints
         var vistos = await VistaDelTercero.CargarAsync(consulta, tercero, [.. tercero.Vinculos.Select(v => v.VinculoId)], ct);
         await using var lectura = sesiones.ConsultaBoveda();
         var delTercero = await lectura.Query<Documento>().FirstOrDefaultAsync(d => d.CuentaBancariaId == cuenta.Id, ct);
-        return APublica(cuenta, vistos, delTercero, await consulta.LoadAsync<Tercero>(tercero.TerceroId, ct), protector);
+        return APublica(cuenta, vistos, delTercero, await consulta.LoadAsync<Tercero>(tercero.TerceroId, ct), protector, await CertificacionesDeCuentas.ReglasDeAntiguedadAsync(consulta, tercero, vistos, ct));
     }
 
     /// <summary>
@@ -176,7 +177,8 @@ public static class CuentasPublicasEndpoints
 
     private static ContactoDePagosDto? ADto(ContactoDePagos? c) => c is null ? null : new ContactoDePagosDto(c.Nombre, c.Correo, c.Telefono);
 
-    private static CuentaBancariaPublicaDto APublica(CuentaBancaria c, IReadOnlyList<VinculoVisto> vistos, Documento? certificacion, Tercero? dueno, IProtectorDeSecretos protector) =>
+    private static CuentaBancariaPublicaDto APublica(CuentaBancaria c, IReadOnlyList<VinculoVisto> vistos, Documento? certificacion, Tercero? dueno, IProtectorDeSecretos protector,
+        IReadOnlyList<CertificacionesDeCuentas.ReglaDeAntiguedad>? reglas = null) =>
         new(c.Id, c.Banco, c.TipoCuenta.ToString(), c.NumeroEnmascarado, c.Titular, c.IdentificacionTitular, c.Moneda, c.Estado.ToString(),
             c.RegistradaEn,
             [
@@ -184,7 +186,7 @@ public static class CuentasPublicasEndpoints
                     .Where(d => d?.Cuenta.CuentaId == c.Id)
                     .Select(d => new DesignacionDeCuentaDto(v.Vinculo.Id, v.Vinculo.EmpresaId, v.Empresa?.Nombre ?? string.Empty, d!.Estado.ToString(),
                         d.MotivoRechazo)))
-            ], c.BancoCodigo, c.BancoSwift, ADto(c.ContactoPagos), CertificacionesDeCuentas.ParaElTercero(c, certificacion, dueno, protector.Desproteger),
+            ], c.BancoCodigo, c.BancoSwift, ADto(c.ContactoPagos), CertificacionesDeCuentas.ParaElTercero(c, certificacion, dueno, protector.Desproteger, reglas),
             c.Estado == EstadoCuentaBancaria.Activa && !CertificacionesDeCuentas.TieneVigente(certificacion));
 }
 

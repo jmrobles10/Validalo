@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import i18n from '../../i18n';
 import { vigencia } from '../expedientes/datosPrueba';
-import { CHIP_VIGENCIA, estadoVigencia, etiquetaVigencia, explicacionVigencia, requiereAviso, severidadAviso, textoAvisoVigencia, textoVencimiento } from './vigencia';
+import { CHIP_VIGENCIA, estaPorAprobar, estadoVigencia, etiquetaVigencia, explicacionVigencia, requiereAviso, severidadAviso, textoAvisoVigencia, textoVencimiento } from './vigencia';
 
 const t = i18n.t.bind(i18n);
 
@@ -18,6 +18,29 @@ describe('texto de la vigencia', () => {
 
   it('sin fecha: lo dice', () => {
     expect(textoVencimiento(vigencia({ vigenteHasta: null, estado: 'SinVencimiento', base: 'SinVencimiento' }), t)).toBe('Sin fecha de vencimiento');
+  });
+
+  it('sin fecha porque la empresa aún no lo aprueba: dice cuánto después de aprobarlo vence (revalidar cada N días, TD-10)', () => {
+    const sinAprobar = { vigenteHasta: null, estado: 'SinVencimiento', base: 'SinVencimiento' };
+    expect(textoVencimiento(vigencia({ ...sinAprobar, revalidarCadaDias: 365 }), t)).toBe('Vence 1 año después de que lo apruebes');
+    expect(textoVencimiento(vigencia({ ...sinAprobar, revalidarCadaDias: 90 }), t)).toBe('Vence 90 días después de que lo apruebes');
+  });
+
+  it('mientras la empresa no aprueba, el chip y la explicación no dicen que el documento no vence (TD-10)', () => {
+    const sinAprobar = vigencia({ vigenteHasta: null, estado: 'SinVencimiento', base: 'SinVencimiento', revalidarCadaDias: 365 });
+    expect(estaPorAprobar(sinAprobar)).toBe(true);
+    expect(etiquetaVigencia(sinAprobar, t)).toBe('Sin fecha aún');
+    expect(explicacionVigencia(sinAprobar, t)).toBe('Empieza a contar cuando tu empresa apruebe el documento.');
+    // Sin regla de revalidación, o con fecha ya calculada, sigue siendo lo de siempre.
+    const sinRegla = vigencia({ vigenteHasta: null, estado: 'SinVencimiento', base: 'SinVencimiento' });
+    expect(estaPorAprobar(sinRegla)).toBe(false);
+    expect(explicacionVigencia(sinRegla, t)).toBe('Este tipo de documento no vence.');
+    expect(estaPorAprobar(vigencia({ base: 'Aprobacion', revalidarCadaDias: 365 }))).toBe(false);
+  });
+
+  it('la base explica que la fecha cuenta desde la aprobación o la ratificación', () => {
+    expect(explicacionVigencia(vigencia({ base: 'Aprobacion' }), t)).toBe('Calculada desde que tu empresa aprobó el documento (revalidar cada N días).');
+    expect(explicacionVigencia(vigencia({ base: 'Ratificacion' }), t)).toBe('Calculada desde que el tercero confirmó que el documento no cambió.');
   });
 
   it('el chip dice el estado y la fecha que importa (en gracia, hasta cuándo se acepta)', () => {

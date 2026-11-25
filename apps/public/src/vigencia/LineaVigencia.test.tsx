@@ -25,6 +25,41 @@ function montar(v: VigenciaDto) {
   );
 }
 
+describe('lo que ve el tercero mientras la empresa no aprueba un documento que se revalida cada año', () => {
+  it('dice cuándo empezará a vencer, con el nombre de la empresa, en vez de «No vence»', () => {
+    const sinAprobar: VigenciaDto = { vigenteHasta: null, base: 'SinVencimiento', estado: 'SinVencimiento', diasAviso: [30], diasGracia: 5, finDeGracia: null, vencidaEn: null, revalidarCadaDias: 365 };
+    render(
+      <ThemeProvider theme={createValidaloTheme('light', { app: 'public' })}>
+        <LineaVigencia vigencia={sinAprobar} empresa="Constructora Norte" />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByText('Vence 1 año después de que Constructora Norte lo apruebe')).toBeInTheDocument();
+    expect(screen.queryByText('No vence')).not.toBeInTheDocument();
+  });
+
+  it('una vez aprobado muestra la fecha que calculó la API', () => {
+    const aprobada: VigenciaDto = {
+      vigenteHasta: '2027-11-25',
+      base: 'Aprobacion',
+      estado: 'Vigente',
+      diasAviso: [30],
+      diasGracia: 5,
+      finDeGracia: '2027-11-30',
+      vencidaEn: null,
+      aprobadaEn: '2026-11-25T10:00:00Z',
+      revalidarCadaDias: 365,
+    };
+    render(
+      <ThemeProvider theme={createValidaloTheme('light', { app: 'public' })}>
+        <LineaVigencia vigencia={aprobada} empresa="Constructora Norte" />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByText('Vence el 25/11/2027')).toBeInTheDocument();
+  });
+});
+
 describe('lo que ve el tercero de un documento según cuándo se expidió', () => {
   it.each([
     ['expedido hace 3 días', 'Vigente', 'Vence el 09/12/2026', null, vigencia('Vigente', '2026-12-09', '2026-12-14')],

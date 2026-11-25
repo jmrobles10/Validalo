@@ -14,7 +14,7 @@ export const personasRelacionadas = {
     MiembroDe: 'Miembro del consorcio',
   },
   principal: 'Principal',
-  participacion: '{{valor}} % de participación',
+  rolConParticipacion: '{{rol}} · {{valor}} %',
   cargo: 'Cargo: {{cargo}}',
   desde: 'Desde el {{fecha}}',
   sinDocumentos: 'Aún no se comparte ningún documento de esta persona con el vínculo.',

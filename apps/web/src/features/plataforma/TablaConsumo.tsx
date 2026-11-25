@@ -50,6 +50,9 @@ function FilaEmpresa({ empresa, moneda }: { empresa: ConsumoDeIaEmpresaDto; mone
         <Cifra>{formatearUsd(empresa.costoUsd)}</Cifra>
       </TableCell>
       <TableCell align="right" sx={{ verticalAlign: 'top' }}>
+        <Cifra>{aNumero(empresa.costoReutilizadoUsd) > 0 ? formatearUsd(empresa.costoReutilizadoUsd ?? 0) : '—'}</Cifra>
+      </TableCell>
+      <TableCell align="right" sx={{ verticalAlign: 'top' }}>
         <Cifra>{aNumero(empresa.valorAdicional) > 0 ? formatearMoneda(empresa.valorAdicional, moneda) : '—'}</Cifra>
       </TableCell>
     </TableRow>
@@ -91,6 +94,9 @@ function FilaGrupo({ grupo, moneda }: { grupo: ConsumoDeIaGrupoDto; moneda: stri
           <Cifra>{formatearUsd(grupo.costoUsd)}</Cifra>
         </TableCell>
         <TableCell align="right">
+          <Cifra>{aNumero(grupo.costoReutilizadoUsd) > 0 ? formatearUsd(grupo.costoReutilizadoUsd ?? 0) : '—'}</Cifra>
+        </TableCell>
+        <TableCell align="right">
           <Cifra>{aNumero(grupo.valorAdicional) > 0 ? formatearMoneda(grupo.valorAdicional, moneda) : '—'}</Cifra>
         </TableCell>
       </TableRow>
@@ -120,6 +126,9 @@ export function TablaConsumo({ grupos, moneda }: { grupos: readonly ConsumoDeIaG
               </TableCell>
               <TableCell align="right" sx={{ width: 130 }}>
                 {t('consola.consumo.columnas.costo')}
+              </TableCell>
+              <TableCell align="right" sx={{ width: 150 }}>
+                {t('consola.consumo.columnas.reutilizado')}
               </TableCell>
               <TableCell align="right" sx={{ width: 150 }}>
                 {t('consola.consumo.columnas.valor')}

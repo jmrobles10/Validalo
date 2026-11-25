@@ -39,6 +39,28 @@ export function textoVigencia(vigencia: VigenciaDto, t: TFunction): string | nul
   return estado === 'EnGracia' || estado === 'Vencida' ? t('vigencia.vencioEl', { fecha }) : t('vigencia.venceEl', { fecha });
 }
 
+/** Un plazo en días, como se dice: «1 año» (365 o múltiplos), «6 meses» (múltiplos de 30 desde 60), «30 días». */
+export function plazoEnPalabras(dias: number, t: TFunction): string {
+  if (dias >= 365 && dias % 365 === 0) return t('vigencia.plazo.anios', { count: dias / 365 });
+  if (dias >= 60 && dias % 30 === 0) return t('vigencia.plazo.meses', { count: dias / 30 });
+  return t('vigencia.plazo.dias', { count: dias });
+}
+
+/**
+ * Antes de que la empresa apruebe el documento no hay fecha de vencimiento si el tipo se revalida cada N días (TD-10): «Vence 1 año después de que Acme lo
+ * apruebe». Nulo si ya hay fecha, el tipo no se revalida o hay un estado distinto de «sin vencimiento».
+ */
+export function textoPorAprobar(vigencia: VigenciaDto, empresa: string | null | undefined, t: TFunction): string | null {
+  if (estadoDeVigencia(vigencia) !== 'SinVencimiento' || vigencia.vigenteHasta || !vigencia.revalidarCadaDias) return null;
+  const plazo = plazoEnPalabras(vigencia.revalidarCadaDias, t);
+  return empresa ? t('vigencia.porAprobar', { plazo, empresa }) : t('vigencia.porAprobarSinEmpresa', { plazo });
+}
+
+/** Lo que dice la tarjeta de la bóveda donde decía «No vence»: lo de antes de aprobarse si el tipo se revalida, o «No vence». */
+export function textoSinVencimiento(vigencia: VigenciaDto, t: TFunction): string {
+  return textoPorAprobar(vigencia, null, t) ?? t('vigencia.estados.SinVencimiento');
+}
+
 export interface AvisoVigencia {
   severidad: 'warning' | 'error';
   texto: string;

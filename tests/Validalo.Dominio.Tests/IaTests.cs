@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using JasperFx.Events;
 using Microsoft.Extensions.Configuration;
 using Validalo.Aplicacion.Ia;
 using Validalo.Aplicacion.Notificaciones;
@@ -228,6 +229,125 @@ public class IaTests
         uso.PorDia["2026-11-10"].CostoUsd.ShouldBe(0.001m);
     }
 
+    // ---------- costo atribuido (IA-15) ----------
+
+    private static readonly CostoDeAnalisis CostoDelOriginal = new(1000, 200, 300, 0.000232m);
+
+    [Fact]
+    public void Con_llave_propia_la_validacion_suma_a_lo_propio_y_no_a_lo_reutilizado()
+    {
+        var plan = Plan(5);
+        var uso = UsoMensualIa.Nuevo(plan.EmpresaId, "2026-11");
+
+        uso.Consumir(plan, Hoy).Tipo.ShouldBe(TipoValidacionIa.Incluida);
+        uso.RegistrarCosto(1000, 200, 300, 0.000232m, Hoy, analisis: true);
+
+        (uso.AnalisisPagados, uso.TokensEntrada, uso.TokensEntradaEnCache, uso.TokensSalida, uso.CostoUsd).ShouldBe((1, 1000L, 200L, 300L, 0.000232m));
+        (uso.ValidacionesReutilizadas, uso.TokensEntradaReutilizados, uso.TokensSalidaReutilizados, uso.CostoReutilizadoUsd).ShouldBe((0, 0L, 0L, 0m));
+        var dia = uso.PorDia["2026-11-09"];
+        (dia.CostoUsd, dia.Reutilizadas, dia.CostoReutilizadoUsd).ShouldBe((0.000232m, 0, 0m));
+    }
+
+    [Fact]
+    public void Una_validacion_reutilizada_suma_a_lo_reutilizado_con_el_costo_del_analisis_original_y_no_toca_lo_real()
+    {
+        var plan = Plan(5, llave: null); // sin llave: recibe el análisis que pagó otra empresa
+        var uso = UsoMensualIa.Nuevo(plan.EmpresaId, "2026-11");
+
+        uso.Consumir(plan, Hoy).Tipo.ShouldBe(TipoValidacionIa.Incluida);
+        uso.RegistrarReutilizada(CostoDelOriginal, Hoy);
+        uso.Consumir(plan, Hoy.AddDays(1));
+        uso.RegistrarReutilizada(new CostoDeAnalisis(500, 0, 100, 0.001m), Hoy.AddDays(1));
+
+        uso.IncluidasConsumidas.ShouldBe(2); // IA-3: cada empresa que recibe el análisis consume una validación de su cupo
+        (uso.ValidacionesReutilizadas, uso.TokensEntradaReutilizados, uso.TokensEntradaEnCacheReutilizados, uso.TokensSalidaReutilizados, uso.CostoReutilizadoUsd)
+            .ShouldBe((2, 1500L, 200L, 400L, 0.001232m));
+        (uso.AnalisisPagados, uso.TokensEntrada, uso.TokensEntradaEnCache, uso.TokensSalida, uso.CostoUsd).ShouldBe((0, 0L, 0L, 0L, 0m));
+        var primero = uso.PorDia["2026-11-09"];
+        (primero.Incluidas, primero.Reutilizadas, primero.TokensEntradaReutilizados, primero.TokensSalidaReutilizados, primero.CostoReutilizadoUsd, primero.CostoUsd)
+            .ShouldBe((1, 1, 1000L, 300L, 0.000232m, 0m));
+        uso.PorDia["2026-11-10"].CostoReutilizadoUsd.ShouldBe(0.001m);
+    }
+
+    [Fact]
+    public void Sin_cupo_no_se_consume_y_por_tanto_no_se_atribuye_nada()
+    {
+        var plan = Plan(1, llave: null);
+        var uso = UsoMensualIa.Nuevo(plan.EmpresaId, "2026-11");
+        uso.Consumir(plan, Hoy);
+        uso.RegistrarReutilizada(CostoDelOriginal, Hoy);
+
+        // La segunda no tiene cupo: el consumo se niega y quien lo pide no llega a registrar lo reutilizado (CupoDeIa.ConsumirAsync).
+        uso.CupoDisponible(plan).ShouldBeNull();
+        uso.Consumir(plan, Hoy).ShouldBe(ConsumoDeValidacion.SinCupo);
+
+        (uso.IncluidasConsumidas, uso.ValidacionesReutilizadas, uso.CostoReutilizadoUsd).ShouldBe((1, 1, 0.000232m));
+    }
+
+    [Fact]
+    public void Devolver_una_validacion_reutilizada_devuelve_tambien_lo_atribuido_sin_bajar_de_cero()
+    {
+        var plan = Plan(5, llave: null);
+        var uso = UsoMensualIa.Nuevo(plan.EmpresaId, "2026-11");
+        uso.Consumir(plan, Hoy);
+        uso.RegistrarReutilizada(CostoDelOriginal, Hoy);
+
+        uso.Revertir(TipoValidacionIa.Incluida, Hoy);
+        uso.RevertirReutilizada(CostoDelOriginal, Hoy);
+        uso.RevertirReutilizada(CostoDelOriginal, Hoy); // repetida: nunca queda negativo
+
+        (uso.IncluidasConsumidas, uso.ValidacionesReutilizadas, uso.TokensEntradaReutilizados, uso.TokensEntradaEnCacheReutilizados, uso.TokensSalidaReutilizados,
+            uso.CostoReutilizadoUsd).ShouldBe((0, 0, 0L, 0L, 0L, 0m));
+        (uso.PorDia["2026-11-09"].Reutilizadas, uso.PorDia["2026-11-09"].CostoReutilizadoUsd).ShouldBe((0, 0m));
+    }
+
+    [Fact]
+    public void Reconstruir_lo_reutilizado_es_idempotente_y_no_toca_lo_real()
+    {
+        var plan = Plan(5);
+        var uso = UsoMensualIa.Nuevo(plan.EmpresaId, "2026-11");
+        uso.Consumir(plan, Hoy);
+        uso.RegistrarCosto(1000, 200, 300, 0.000232m, Hoy, analisis: true);
+        uso.RegistrarReutilizada(new CostoDeAnalisis(1, 1, 1, 9m), Hoy); // un valor de más que el recálculo debe corregir
+        var reutilizadas = new[] { (Hoy, CostoDelOriginal), (Hoy.AddDays(2), new CostoDeAnalisis(500, 0, 100, 0.001m)) };
+
+        uso.ReconstruirReutilizado(reutilizadas);
+        var primera = System.Text.Json.JsonSerializer.Serialize(uso);
+        uso.ReconstruirReutilizado(reutilizadas);
+
+        System.Text.Json.JsonSerializer.Serialize(uso).ShouldBe(primera);
+        (uso.ValidacionesReutilizadas, uso.TokensEntradaReutilizados, uso.TokensSalidaReutilizados, uso.CostoReutilizadoUsd).ShouldBe((2, 1500L, 400L, 0.001232m));
+        (uso.IncluidasConsumidas, uso.AnalisisPagados, uso.CostoUsd).ShouldBe((1, 1, 0.000232m));
+        uso.PorDia["2026-11-09"].CostoReutilizadoUsd.ShouldBe(0.000232m);
+        uso.PorDia["2026-11-11"].Reutilizadas.ShouldBe(1);
+    }
+
+    [Fact]
+    public void La_validacion_reutilizada_guarda_el_costo_atribuido_y_sin_atribuir_vale_cero()
+    {
+        var validacion = new ValidacionIaConsumida { PagoLaLlamada = false };
+        validacion.CostoAtribuido.ShouldBeFalse();
+        validacion.Atribuido.ShouldBe(CostoDeAnalisis.Ninguno);
+
+        validacion.Atribuir(CostoDelOriginal);
+
+        validacion.CostoAtribuido.ShouldBeTrue();
+        validacion.Atribuido.ShouldBe(CostoDelOriginal);
+    }
+
+    [Fact]
+    public void El_costo_del_analisis_sale_del_evento_registrado_de_esa_version_y_es_nulo_si_no_lo_hay()
+    {
+        AnalisisDeIaRegistrado Analisis(int numero, decimal costo) => new(numero, "gpt-6-luna", false, 0.97m, true, "RUT", new Dictionary<string, JsonElement>(), [], null, null, 1000, 300,
+            costo, Guid.NewGuid(), Guid.NewGuid(), Ahora, TokensEntradaEnCache: 200);
+        IEvent[] eventos = [new Event<AnalisisDeIaRegistrado>(Analisis(1, 0.5m)), new Event<AnalisisDeIaRegistrado>(Analisis(2, 0.25m)), new Event<AnalisisDeIaFallido>(new AnalisisDeIaFallido(3, "http-500", Ahora))];
+
+        CostoDeAnalisisRegistrado.De(eventos, 2).ShouldBe(new CostoDeAnalisis(1000, 200, 300, 0.25m));
+        CostoDeAnalisisRegistrado.De(eventos, 1)!.CostoUsd.ShouldBe(0.5m);
+        CostoDeAnalisisRegistrado.De(eventos, 3).ShouldBeNull(); // falló: no hay costo que atribuir
+        CostoDeAnalisisRegistrado.De([], 1).ShouldBeNull();
+    }
+
     [Fact]
     public void La_validacion_consumida_tiene_id_determinista_por_empresa_documento_y_version()
     {
@@ -280,7 +400,7 @@ public class IaTests
             "responsabilidades"]);
         Campos("CAMARA_COMERCIO").ShouldBe(["razonSocial", "nit", "matricula", "estadoMatricula", "domicilio", "correo", "fechaExpedicion", "representantesLegales"]);
         Campos("CEDULA").ShouldBe(["numero", "nombres", "apellidos", "fechaNacimiento", "fechaExpedicion"]);
-        Campos("CERTIFICACION_BANCARIA").ShouldBe(["banco", "tipoCuenta", "numeroCuenta", "titular", "identificacionTitular", "estadoCuenta", "fechaExpedicion"]);
+        Campos("CERTIFICACION_BANCARIA").ShouldBe(["banco", "tipoCuenta", "numeroCuenta", "titular", "identificacionTitular", "fechaExpedicion"]);
         Campos("ESTADOS_FINANCIEROS").ShouldBe(["razonSocial", "nit", "periodo", "fechaCorte", "activoTotal", "pasivoTotal", "patrimonio", "ingresos",
             "ingresosBrutos", "utilidadNeta", "firmadoPorContador"]);
         var listas = EsquemasDeAnalisis.Para("RUT")!.Json()["properties"]!["campos"]!["properties"]!["responsabilidades"]!;

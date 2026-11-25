@@ -1,4 +1,4 @@
-import { Avatar, Box, ButtonBase, InputBase, ListItemIcon, ListItemText, Menu, MenuItem, Typography } from '@mui/material';
+import { Avatar, Box, ButtonBase, InputBase, ListItemIcon, ListItemText, Menu, MenuItem, Typography, type Theme } from '@mui/material';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { iniciales } from './datos';
@@ -20,6 +20,8 @@ export interface SelectorEmpresaProps {
   onCambiar: (empresaId: string) => void;
   etiqueta?: string;
   deshabilitado?: boolean;
+  /** Ocupa todo el ancho disponible y el alto táctil (44 px): para un cajón o panel angosto en el celular, donde es un bloque y no un control de barra. */
+  completo?: boolean;
 }
 
 /** Con más empresas que esto, el menú trae buscador. */
@@ -39,9 +41,9 @@ export function LogoEmpresa({ empresa, tamano = 24 }: { empresa: EmpresaOpcion; 
   );
 }
 
-function Textos({ empresa }: { empresa: EmpresaOpcion }) {
+function Textos({ empresa, crece = false }: { empresa: EmpresaOpcion; crece?: boolean }) {
   return (
-    <Box component="span" sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left' }}>
+    <Box component="span" sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left', ...(crece && { flex: 1 }) }}>
       <Typography variant="subtitle2" component="span" noWrap>
         {empresa.nombre}
       </Typography>
@@ -58,7 +60,7 @@ function Textos({ empresa }: { empresa: EmpresaOpcion }) {
  * Empresa activa con logo, razón social y NIT: toda pantalla de operación trabaja dentro de una empresa (ADR-0008).
  * Con una sola empresa se muestra fija, sin menú.
  */
-export function SelectorEmpresa({ empresas, actual, onCambiar, etiqueta = 'Empresa', deshabilitado = false }: SelectorEmpresaProps) {
+export function SelectorEmpresa({ empresas, actual, onCambiar, etiqueta = 'Empresa', deshabilitado = false, completo = false }: SelectorEmpresaProps) {
   const [ancla, setAncla] = useState<HTMLElement | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const idMenu = useId();
@@ -77,13 +79,15 @@ export function SelectorEmpresa({ empresas, actual, onCambiar, etiqueta = 'Empre
   }
 
   const textoAccesible = `${etiqueta}: ${seleccionada.nombre}${seleccionada.identificacion ? `, NIT ${seleccionada.identificacion}` : ''}`;
-  const caja = { display: 'inline-flex', alignItems: 'center', gap: 1, height: 36, maxWidth: 300, minWidth: 0, pl: '5px', pr: 1 } as const;
+  const caja = completo
+    ? ({ display: 'flex', alignItems: 'center', gap: 1, height: (t: Theme) => t.densidad.objetivoTactil, width: '100%', minWidth: 0, pl: '11px', pr: 1.25 } as const)
+    : ({ display: 'inline-flex', alignItems: 'center', gap: 1, height: 36, maxWidth: 300, minWidth: 0, pl: '5px', pr: 1 } as const);
 
   if (empresas.length === 1) {
     return (
-      <Box aria-label={textoAccesible} role="group" sx={{ ...caja, pl: 0 }}>
+      <Box aria-label={textoAccesible} role="group" sx={{ ...caja, pl: completo ? '12px' : 0 }}>
         <LogoEmpresa empresa={seleccionada} />
-        <Textos empresa={seleccionada} />
+        <Textos empresa={seleccionada} crece={completo} />
       </Box>
     );
   }
@@ -117,7 +121,7 @@ export function SelectorEmpresa({ empresas, actual, onCambiar, etiqueta = 'Empre
         }}
       >
         <LogoEmpresa empresa={seleccionada} />
-        <Textos empresa={seleccionada} />
+        <Textos empresa={seleccionada} crece={completo} />
         <Box component="span" sx={{ color: 'text.secondary', display: 'flex', flex: 'none' }}>
           <ChevronsUpDown size={16} strokeWidth={1.75} aria-hidden />
         </Box>

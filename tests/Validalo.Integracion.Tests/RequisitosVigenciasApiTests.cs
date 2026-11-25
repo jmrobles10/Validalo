@@ -365,7 +365,12 @@ public sealed class RequisitosVigenciasApiTests(ApiFixture fixture, ITestOutputH
         await SubirAsync(sesion, "RUT", Pdf("RUT v1"));
         await SubirAsync(sesion, "CAMARA_COMERCIO", Pdf("Cámara v1"));
         await AceptarAsync(sesion, vinculo.Id);
-        await AprobarAreasAsync(e, await ExpedienteAbiertoAsync(e, vinculo.Id));
+        var inicial = await ExpedienteAbiertoAsync(e, vinculo.Id);
+        await AprobarAreasAsync(e, inicial);
+        // La vigencia del RUT (revalidar cada 365 días) cuenta desde que Norte lo aprueba: llega por el barrido de recálculos (TD-10).
+        var rutAprobado = (await ApiAsync<ExpedienteDto>("GET", $"/api/v1/expedientes/{inicial}", Admin(e.Norte), null, 200))
+            .Requisitos!.Single(r => r.TipoDocumento.Codigo == "RUT").VersionActual!;
+        await EsperarVigenciaAsync(rutAprobado.DocumentoId, vinculo.Id, "RUT");
         var plataforma = new Credencial(ApiFixture.ClavePlataforma);
 
         // Sin tenant y fecha no se pueden incluir los documentos.

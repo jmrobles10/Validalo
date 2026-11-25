@@ -3,6 +3,7 @@ import { ClienteValidalo } from '@validalo/sdk';
 import { API } from '../soporte/api';
 import { capturar } from '../soporte/capturas';
 import { abrirEmbebido } from '../soporte/embebido';
+import { irASector } from '../soporte/empresa';
 import { abrirEmpresa, entrarPorInvitacion } from '../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero, type Invitacion } from '../soporte/semilla';
 
@@ -56,18 +57,20 @@ test('el tercero y cada empresa manejan contactos distintos con cada empresa, y 
   await page.goto('/empresas');
 
   // Contactos con Norte (pagos y cumplimiento) y con Sur (solo comercial): listas independientes.
-  await expect(page.getByRole('button', { name: `Mis contactos con ${e.norte.nombre}` })).toContainText('0 contactos');
+  await expect(page.getByRole('button', { name: `Mis contactos con ${e.norte.nombre}` })).toHaveText('Mis contactos'); // sin contactos no muestra cuántos
   await contactosDelTercero(page, e.norte.nombre, [
     { nombre: 'Marta Ríos', cargo: 'Tesorera', correo: 'pagos@aceros.co', telefono: '6015551234', rol: 'Pagos' },
     { nombre: 'Olga Sánchez', cargo: 'Oficial', correo: 'cumplimiento@aceros.co', telefono: '', rol: 'Cumplimiento' },
   ]);
   await expect(page.getByRole('button', { name: `Mis contactos con ${e.norte.nombre}` })).toContainText('2 contactos');
-  await expect(page.getByRole('button', { name: `Mis contactos con ${e.sur.nombre}` })).toContainText('0 contactos');
+  await expect(page.getByRole('button', { name: `Mis contactos con ${e.sur.nombre}` })).toHaveText('Mis contactos');
   await contactosDelTercero(page, e.sur.nombre, [{ nombre: 'Luis Pérez', cargo: 'Gerente comercial', correo: 'comercial@aceros.co', telefono: '3001234567', rol: 'Comercial' }]);
   await expect(page.getByRole('button', { name: `Mis contactos con ${e.sur.nombre}` })).toContainText('1 contacto');
 
   // Norte ve los suyos en el vínculo y agrega uno desde la web de la empresa.
   const web = await abrirEmbebido(await (await browser.newContext()).newPage(), e, e.ana, e.norte, `vinculos/${norte.vinculoId}`);
+  // La ficha del vínculo se lee por sectores: los contactos viven en «Datos de contacto».
+  await irASector(web, 'Datos de contacto');
   const tarjeta = web.getByRole('region', { name: 'Contactos del tercero' });
   await expect(tarjeta).toContainText('Marta Ríos · Tesorera');
   await expect(tarjeta).toContainText('pagos@aceros.co · 6015551234');
@@ -93,6 +96,7 @@ test('el tercero y cada empresa manejan contactos distintos con cada empresa, y 
 
   // Sur sigue con su único contacto: la web de Sur no ve lo de Norte.
   const webSur = await abrirEmbebido(await (await browser.newContext()).newPage(), e, e.sofia, e.sur, `vinculos/${sur.vinculoId}`);
+  await irASector(webSur, 'Datos de contacto');
   const tarjetaSur = webSur.getByRole('region', { name: 'Contactos del tercero' });
   await expect(tarjetaSur).toContainText('Luis Pérez · Gerente comercial');
   await expect(tarjetaSur).not.toContainText('Marta Ríos');

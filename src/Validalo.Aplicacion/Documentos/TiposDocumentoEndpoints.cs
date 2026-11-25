@@ -34,7 +34,8 @@ public static class TiposDocumentoEndpoints
     /// 201 con el tipo. 409 <c>tipo-documento-duplicado</c>; 422 <c>codigo-invalido</c>, <c>ambito-no-ampliable</c>,
     /// <c>formato-invalido</c>, <c>formato-mas-laxo</c>, <c>limite-invalido</c>, <c>limite-mas-laxo</c>,
     /// <c>limite-sobre-el-global</c>, <c>modo-invalido</c>, <c>campos-requeridos</c>, <c>campo-invalido</c>,
-    /// <c>campo-duplicado</c>, <c>campo-reservado</c>, <c>formulario-solo-por-vinculo</c>.
+    /// <c>campo-duplicado</c>, <c>campo-reservado</c>, <c>formulario-solo-por-vinculo</c>, <c>frescura-invalida</c>, <c>antiguedad-invalida</c>,
+    /// <c>revalidacion-invalida</c>.
     /// </summary>
     [WolverinePost("/api/v1/tipos-documento")]
     [Authorize(Policy = Permisos.ConfiguracionEscribir)]
@@ -47,7 +48,7 @@ public static class TiposDocumentoEndpoints
         await using var sesion = sesiones.DelTenant();
         var tipo = TipoDocumentoTenant.Crear(tenantId, dto.Codigo, dto.Nombre, dto.TipoCanonico,
             MapeosDocumentos.AAmbito(dto.Ambito), dto.ReglaFrescura.ADominio(), dto.DiasAviso, dto.DiasGracia, dto.DiasRevalidacion,
-            dto.TextoAyuda, ahora);
+            dto.TextoAyuda, ahora, dto.AntiguedadMaximaDias, dto.RevalidarCadaDias);
         tipo.ConfigurarCaptura(dto.FormatosPermitidos, dto.TamanoMaximoMb, dto.PaginasMaximas, MapeosDocumentos.AModo(dto.Modo),
             dto.Campos?.Select(c => c.ADominio()));
         ValidarContraGlobales(tipo, reglas);
@@ -82,7 +83,7 @@ public static class TiposDocumentoEndpoints
     }
 
     /// <summary>
-    /// Código y canónico son inmutables; los campos nulos conservan su valor. Si cambian la frescura, los avisos o la gracia,
+    /// Código y canónico son inmutables; los campos nulos conservan su valor. Si cambian la revalidación (o la regla heredada), los avisos o la gracia,
     /// las vigencias de los documentos del tipo se recalculan por mensaje (<see cref="RecalcularVigenciasDelTipo"/>).
     /// </summary>
     [WolverinePut("/api/v1/tipos-documento/{id}")]
@@ -95,7 +96,7 @@ public static class TiposDocumentoEndpoints
         var antes = tipo.ADto(reglas);
 
         tipo.Actualizar(dto.Nombre, MapeosDocumentos.AAmbito(dto.Ambito), dto.ReglaFrescura.ADominio(), dto.DiasAviso, dto.DiasGracia,
-            dto.DiasRevalidacion, dto.TextoAyuda, dto.Activo);
+            dto.DiasRevalidacion, dto.TextoAyuda, dto.Activo, dto.AntiguedadMaximaDias, dto.RevalidarCadaDias);
         tipo.ConfigurarCaptura(dto.FormatosPermitidos, dto.TamanoMaximoMb, dto.PaginasMaximas, MapeosDocumentos.AModo(dto.Modo),
             dto.Campos?.Select(c => c.ADominio()));
         ValidarContraGlobales(tipo, reglas);
@@ -103,8 +104,9 @@ public static class TiposDocumentoEndpoints
         sesion.Store(tipo);
         var despues = tipo.ADto(reglas);
         Auditoria.Registrar(sesion, contexto, Entidad, tipo.Id.ToString(), AccionConfiguracion.Modificado, antes, despues, reloj.GetUtcNow());
-        if (antes.ReglaFrescura != despues.ReglaFrescura || !antes.DiasAviso.SequenceEqual(despues.DiasAviso) || antes.DiasGracia != despues.DiasGracia ||
-            antes.Ambito != despues.Ambito)
+        // La antigüedad máxima no entra: es una condición de aceptación que se evalúa al leer, no cambia la vigencia de lo ya aprobado (TD-10).
+        if (antes.ReglaFrescura != despues.ReglaFrescura || antes.RevalidarCadaDias != despues.RevalidarCadaDias || !antes.DiasAviso.SequenceEqual(despues.DiasAviso) ||
+            antes.DiasGracia != despues.DiasGracia || antes.Ambito != despues.Ambito)
             await mensajes.PublishAsync(new RecalcularVigenciasDelTipo(tipo.TenantId, tipo.Id));
         await sesion.SaveChangesAsync(ct);
         return despues;

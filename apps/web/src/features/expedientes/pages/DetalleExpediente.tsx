@@ -10,7 +10,7 @@ import { usePermisos } from '../../../shared/usePermisos';
 import { useEmpresaActiva } from '../../empresas/useEmpresas';
 import { useVinculo } from '../../vinculos/api';
 import { FichaVinculo } from '../../vinculos/ficha/FichaVinculo';
-import { EsqueletoFicha } from '../../vinculos/pages/DetalleVinculo';
+import { EsqueletoFicha } from '../../vinculos/ficha/EsqueletoFicha';
 import { useExpediente } from '../api';
 
 /**
@@ -42,7 +42,7 @@ export function DetalleExpediente() {
       </>
     );
   }
-  if (!consulta.data || !vinculo.data) return <EsqueletoFicha volver={volver} />;
+  if (!consulta.data || !vinculo.data) return <EsqueletoFicha sector="aprobaciones" volver={volver} />;
 
   return <FichaVinculo vinculo={vinculo.data} expedienteId={consulta.data.id} sectorPorDefecto="aprobaciones" volver={volver} />;
 }

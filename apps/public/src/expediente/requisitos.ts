@@ -1,4 +1,5 @@
 import type { ExpedientePublicoDto, ObservacionPublicaDto, RequisitoPublicoDto, VigenciaDto } from '@validalo/api-client';
+import { aparienciaDe, type TonoEstado } from '@validalo/ui';
 import type { SolicitudDeSubida } from '../boveda/solicitudDeSubida';
 import { enlaceSeccion } from '../ficha/secciones';
 import { requiereAtencion } from '../vigencia/vigencia';
@@ -28,10 +29,6 @@ export function accionDeRequisito(
   }
 }
 
-/** La acción de la tarjeta (subir, corregir, reemplazar): destacada salvo reemplazar, que es la menos urgente. */
-export const propiedadesDeLaAccion = (accion: Exclude<AccionRequisito, null>) =>
-  ({ variant: accion === 'reemplazar' ? 'text' : 'contained', sx: { mt: 1, ml: accion === 'reemplazar' ? 2.25 : 3.25 } }) as const;
-
 /**
  * Orden de lo que ve el tercero: primero lo que le toca (observado, por subir), luego lo que revisa la empresa y al
  * final lo listo (design system P2PubExpediente: «Te toca», «Lo revisa la empresa», «Listo»).
@@ -42,6 +39,17 @@ export function grupoDeRequisito(requisito: Pick<RequisitoPublicoDto, 'estado'>)
   if (requisito.estado === 'Observado' || requisito.estado === 'Pendiente') return 'te-toca';
   if (requisito.estado === 'Cargado' || requisito.estado === 'EnRevision') return 'en-revision';
   return 'listo';
+}
+
+/**
+ * El tono con el que la tarjeta de un requisito se distingue de un vistazo (el cuadro de su ícono y, si es de advertencia, su borde): lo que
+ * le toca al tercero (observado, desactualizado o pendiente y obligatorio) en ámbar, lo que revisa la empresa en el tono «en curso» (el
+ * mismo de su chip), lo aprobado en verde y lo demás (un opcional sin subir, eximido) en neutro. Es el tono canónico del estado salvo en el
+ * pendiente: ahí el canónico es neutro, pero si es obligatorio es justo lo que falta.
+ */
+export function tonoDeRequisito(requisito: Pick<RequisitoPublicoDto, 'estado' | 'obligatorio'>): TonoEstado {
+  if (requisito.estado === 'Pendiente') return requisito.obligatorio ? 'advertencia' : 'neutro';
+  return aparienciaDe(requisito.estado).tono;
 }
 
 export function requisitosPorGrupo(expediente: Pick<ExpedientePublicoDto, 'requisitos'>): Record<GrupoRequisito, RequisitoPublicoDto[]> {

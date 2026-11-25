@@ -1,8 +1,8 @@
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Skeleton, Stack, Typography } from '@mui/material';
+import { Box, Skeleton, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { getObtenerVersionTextoLegalQueryOptions, type EventoHistorialDto } from '@validalo/api-client';
 import { EstadoVacio, formatearFecha, formatearFechaHora } from '@validalo/ui';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorRecuperable, Tarjeta } from '../../../shared/componentes';
 import { conEmpresa } from '../../../shared/consultas';
@@ -49,77 +49,61 @@ function aceptacionesDe(eventos: readonly EventoHistorialDto[] | undefined): Ace
 
 /**
  * Lo que el tercero aceptó al entrar (autorización de datos, términos de la empresa y el aviso de la plataforma), con la versión del
- * texto, la fecha y la evidencia (correo y si lo verificó con un código). Es el «Autorización y declaración» del SRM.
+ * texto, la fecha y la evidencia (correo y si lo verificó con un código). Cada texto se lee ahí mismo, en la versión exacta que aceptó
+ * (aunque ya haya otra vigente). Es el «Autorización y declaración» del SRM.
  */
 export function AceptacionesDelTercero({ empresaId, vinculoId }: { empresaId: string; vinculoId: string }) {
   const { t } = useTranslation();
   const consulta = useHistorialVinculo(empresaId, vinculoId);
   const aceptaciones = useMemo(() => aceptacionesDe(consulta.data), [consulta.data]);
-  const [abierto, setAbierto] = useState<Aceptado | null>(null);
   const nombreDe = (tipo: string) => (esTipo(tipo) ? t(`vinculos.ficha.aceptaciones.tipos.${tipo}`) : tipo);
 
   return (
     <Tarjeta titulo={t('vinculos.ficha.aceptaciones.titulo')}>
+      {consulta.isPending && <Skeleton variant="rounded" height={160} />}
       {consulta.isError && <ErrorRecuperable mensaje={t('vinculos.detalle.errorHistorial')} onReintentar={() => void consulta.refetch()} />}
       {consulta.data && aceptaciones.length === 0 && <EstadoVacio compacto titulo={t('vinculos.ficha.aceptaciones.vacio')} texto={t('vinculos.ficha.aceptaciones.vacioAyuda')} />}
-      <Stack spacing={1.5}>
+      <Stack spacing={3}>
         {aceptaciones.map((a) => (
-          <Box key={a.fecha}>
-            <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mb: 0.5 }}>
+          <Stack key={a.fecha} spacing={1.5}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               {t('vinculos.ficha.aceptaciones.cuando', { fecha: formatearFechaHora(a.fecha) })}
               {a.correo && ` · ${a.correo}`}
               {a.otpVerificado && ` · ${t('vinculos.ficha.aceptaciones.conCodigo')}`}
             </Typography>
-            <Stack component="ul" spacing={0.5} sx={{ p: 0, m: 0, listStyle: 'none' }}>
-              {a.consentimientos.map((c) => (
-                <Typography component="li" key={`${c.tipo}-${String(c.version)}`} sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 0.5 }} title={c.hash ? `SHA-256 ${c.hash}` : undefined}>
-                  {nombreDe(c.tipo)}
-                  <Typography component="span" sx={{ color: 'text.secondary' }}>
-                    {' · '}
-                    {t('vinculos.ficha.aceptaciones.version', { n: String(c.version) })}
-                  </Typography>
-                  {c.id && (
-                    <Button size="small" variant="text" sx={{ ml: 0.5, minWidth: 0, py: 0 }} onClick={() => setAbierto(c)} aria-label={t('vinculos.ficha.aceptaciones.verAccesible', { texto: nombreDe(c.tipo), n: String(c.version) })}>
-                      {t('vinculos.ficha.aceptaciones.ver')}
-                    </Button>
-                  )}
-                </Typography>
-              ))}
-            </Stack>
-          </Box>
+            {a.consentimientos.map((c) => (
+              <TextoAceptado key={`${c.tipo}-${String(c.version)}`} empresaId={empresaId} aceptado={c} titulo={nombreDe(c.tipo)} />
+            ))}
+          </Stack>
         ))}
       </Stack>
-      {abierto && <DialogoTextoAceptado empresaId={empresaId} aceptado={abierto} titulo={nombreDe(abierto.tipo)} onCerrar={() => setAbierto(null)} />}
     </Tarjeta>
   );
 }
 
-/** El texto exacto que el tercero aceptó (esa versión, aunque ya haya otra vigente). */
-function DialogoTextoAceptado({ empresaId, aceptado, titulo, onCerrar }: { empresaId: string; aceptado: Aceptado; titulo: string; onCerrar: () => void }) {
+/** Un texto aceptado: nombre, versión y fecha de publicación, y el contenido exacto de esa versión con desplazamiento propio. */
+function TextoAceptado({ empresaId, aceptado, titulo }: { empresaId: string; aceptado: Aceptado; titulo: string }) {
   const { t } = useTranslation();
   const opciones = getObtenerVersionTextoLegalQueryOptions(aceptado.id, { request: { empresa: empresaId } });
-  const consulta = useQuery({ ...opciones, queryKey: conEmpresa(opciones.queryKey, empresaId), staleTime: Infinity });
+  const consulta = useQuery({ ...opciones, queryKey: conEmpresa(opciones.queryKey, empresaId), staleTime: Infinity, enabled: Boolean(aceptado.id) });
   return (
-    <Dialog open onClose={onCerrar} maxWidth="md" fullWidth aria-labelledby="titulo-texto-aceptado">
-      <DialogTitle id="titulo-texto-aceptado">
+    <Box component="section" aria-label={titulo} sx={(th) => ({ border: 1, borderColor: 'divider', borderRadius: `${String(th.radio.md)}px`, p: 2 })}>
+      <Typography variant="subtitle1" component="h3">
         {titulo}
-        <Typography component="span" sx={{ display: 'block', color: 'text.secondary' }}>
-          {t('vinculos.ficha.aceptaciones.version', { n: String(aceptado.version) })}
-          {consulta.data && ` · ${t('vinculos.ficha.aceptaciones.publicado', { fecha: formatearFecha(consulta.data.publicadoEn) })}`}
-        </Typography>
-      </DialogTitle>
-      <DialogContent dividers>
-        {consulta.isPending && <Skeleton variant="rounded" height={160} />}
-        {consulta.isError && <ErrorRecuperable mensaje={mensajeDeError(consulta.error, t)} onReintentar={() => void consulta.refetch()} />}
-        {consulta.data && (
+      </Typography>
+      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1.5 }} title={aceptado.hash ? `SHA-256 ${aceptado.hash}` : undefined}>
+        {t('vinculos.ficha.aceptaciones.version', { n: String(aceptado.version) })}
+        {consulta.data && ` · ${t('vinculos.ficha.aceptaciones.publicado', { fecha: formatearFecha(consulta.data.publicadoEn) })}`}
+      </Typography>
+      {aceptado.id && consulta.isPending && <Skeleton variant="rounded" height={96} />}
+      {consulta.isError && <ErrorRecuperable mensaje={mensajeDeError(consulta.error, t)} onReintentar={() => void consulta.refetch()} />}
+      {consulta.data && (
+        <Box tabIndex={0} sx={(th) => ({ maxHeight: 220, overflowY: 'auto', bgcolor: 'action.hover', borderRadius: `${String(th.radio.sm)}px`, px: 2, py: 1.5 })}>
           <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
             {consulta.data.contenido}
           </Typography>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onCerrar}>{t('comun.cerrar')}</Button>
-      </DialogActions>
-    </Dialog>
+        </Box>
+      )}
+    </Box>
   );
 }

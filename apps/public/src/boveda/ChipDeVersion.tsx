@@ -3,7 +3,7 @@ import type { VersionDocumentoDto } from '@validalo/api-client';
 import { ChipEstado } from '@validalo/ui';
 import { useTranslation } from 'react-i18next';
 import { ChipVigencia } from '../vigencia/ChipVigencia';
-import { estadoDeVigencia, requiereAtencion, textoVigencia } from '../vigencia/vigencia';
+import { estadoDeVigencia, requiereAtencion, textoSinVencimiento, textoVigencia } from '../vigencia/vigencia';
 
 type VersionParaChip = Pick<VersionDocumentoDto, 'estado' | 'cargadaEn' | 'vigencia'>;
 
@@ -27,7 +27,7 @@ export function ChipDeVersion({ version }: { version: VersionParaChip }) {
 export function LineaDeVersionVigente({ version }: { version: VersionParaChip }) {
   const { t } = useTranslation();
   const vigencia = version.vigencia;
-  const texto = !vigencia ? null : estadoDeVigencia(vigencia) === 'SinVencimiento' ? t('vigencia.estados.SinVencimiento') : textoVigencia(vigencia, t);
+  const texto = !vigencia ? null : estadoDeVigencia(vigencia) === 'SinVencimiento' ? textoSinVencimiento(vigencia, t) : textoVigencia(vigencia, t);
   return (
     <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 0.5 }}>
       <ChipDeVersion version={version} />

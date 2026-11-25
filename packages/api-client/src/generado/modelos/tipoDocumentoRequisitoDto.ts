@@ -23,4 +23,8 @@ export interface TipoDocumentoRequisitoDto {
   tienePlantilla?: boolean;
   /** @nullable */
   textoAyuda?: string | null;
+  /** @nullable */
+  antiguedadMaximaDias?: number | null;
+  /** @nullable */
+  revalidarCadaDias?: number | null;
 }

@@ -8,8 +8,8 @@ import { REGLAS_GLOBALES, type ReglasArchivo } from './subida';
 /**
  * Zona de subida móvil (Dropzone del design system): «Tomar foto» abre la cámara trasera (`capture="environment"`),
  * «Elegir archivo» la galería o los archivos, y en escritorio se puede arrastrar. Zona baja (ícono al lado del texto,
- * límites en una línea) y acciones de tamaño natural: en móvil se reparten una fila de 44 px; en escritorio, 36 px y sin
- * estirarse. Con las reglas del tipo: dice qué admite, el selector solo ofrece esos formatos y sin imágenes no hay cámara.
+ * límites en una línea) y acciones de tamaño natural (36 px, el del tema, con área táctil de 44 en el celular): en móvil se
+ * reparten la fila; en escritorio no se estiran. Con las reglas del tipo: dice qué admite, el selector solo ofrece esos formatos y sin imágenes no hay cámara.
  */
 export function Dropzone({
   titulo,
@@ -82,13 +82,12 @@ export function Dropzone({
       </Box>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, '& > .MuiButton-root': { flex: { xs: '1 1 0', sm: '0 1 auto' }, minWidth: 0 } }}>
         {fotos && (
-          <Button variant="contained" size="large" startIcon={<Camera size={18} aria-hidden />} disabled={deshabilitado} onClick={() => camara.current?.click()}>
+          <Button variant="contained" startIcon={<Camera size={18} aria-hidden />} disabled={deshabilitado} onClick={() => camara.current?.click()}>
             {t('subir.tomarFoto')}
           </Button>
         )}
         <Button
           variant={fotos ? 'outlined' : 'contained'}
-          size="large"
           startIcon={<FileUp size={18} aria-hidden />}
           disabled={deshabilitado}
           onClick={() => archivos.current?.click()}

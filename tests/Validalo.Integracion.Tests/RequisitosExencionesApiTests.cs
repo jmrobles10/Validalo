@@ -51,8 +51,18 @@ public sealed class RequisitosExencionesApiTests(ApiFixture fixture, ITestOutput
         await alcance.ServiceProvider.GetRequiredService<IMessageBus>().InvokeAsync(mensaje);
     }
 
+    /// <summary>
+    /// El catálogo sugiere revalidar la Cámara y el RUT cada 365 días (TD-10), así que vencen a la vez. Las pruebas de exención que necesitan que la Cámara sea la primera en vencer (el RUT sigue
+    /// vigente cuando ella termina su gracia, y sus avisos no se mezclan con los del RUT) la ponen a revalidar cada 30 días y esperan a que la bóveda recalcule su vigencia.
+    /// </summary>
+    private async Task<(VigenciaDeVersion Vigencia, Guid DocumentoId)> LaCamaraVenceAntesAsync(Aprobado a, Guid camaraTipo)
+    {
+        await ApiAsync<TipoDocumentoTenantDto>("PUT", $"/api/v1/tipos-documento/{camaraTipo}", Admin(a.E.Norte), new ActualizarTipoDocumentoDto(RevalidarCadaDias: 30), 200);
+        return await VigenciaDeAsync(a, "CAMARA_COMERCIO", v => v.RevalidarCadaDias == 30);
+    }
+
     /// <summary>La vigencia (para el vínculo) de la versión 1 del documento del canónico, esperando a que la bóveda la calcule.</summary>
-    private async Task<(VigenciaDeVersion Vigencia, Guid DocumentoId)> VigenciaDeAsync(Aprobado a, string codigo)
+    private async Task<(VigenciaDeVersion Vigencia, Guid DocumentoId)> VigenciaDeAsync(Aprobado a, string codigo, Func<VigenciaDeVersion, bool>? condicion = null)
     {
         var expediente = await ApiAsync<ExpedienteDto>("GET", $"/api/v1/expedientes/{a.Expediente}", Admin(a.E.Norte), null, 200);
         var documentoId = expediente.Requisitos!.Single(r => r.TipoDocumento.Codigo == codigo).VersionActual!.DocumentoId;
@@ -60,7 +70,7 @@ public sealed class RequisitosExencionesApiTests(ApiFixture fixture, ITestOutput
         while (true)
         {
             await using (var boveda = Host.Services.GetRequiredService<IDocumentStore>().QuerySession(TenantsTecnicos.Boveda))
-                if ((await boveda.LoadAsync<Documento>(documentoId))!.Buscar(1)!.VigenciaPara(a.Vinculo.Id) is { VigenteHasta: not null } vigencia)
+                if ((await boveda.LoadAsync<Documento>(documentoId))!.Buscar(1)!.VigenciaPara(a.Vinculo.Id) is { VigenteHasta: not null } vigencia && (condicion?.Invoke(vigencia) ?? true))
                     return (vigencia, documentoId);
             if (DateTime.UtcNow > limite)
                 throw new TimeoutException($"{codigo} no tiene vigencia para el vínculo.");
@@ -161,7 +171,7 @@ public sealed class RequisitosExencionesApiTests(ApiFixture fixture, ITestOutput
         try
         {
             var camaraTipo = await TipoDeDocumentoAsync(a.E.Norte, "CAMARA_COMERCIO");
-            var (camara, documentoId) = await VigenciaDeAsync(a, "CAMARA_COMERCIO");
+            var (camara, documentoId) = await LaCamaraVenceAntesAsync(a, camaraTipo);
             await VigenciaDeAsync(a, "RUT");
             var exencion = await EximirAsync(a.E.Norte, a.Vinculo.Id, EximirDocumento(camaraTipo));
 
@@ -304,7 +314,7 @@ public sealed class RequisitosExencionesApiTests(ApiFixture fixture, ITestOutput
         try
         {
             var camaraTipo = await TipoDeDocumentoAsync(a.E.Norte, "CAMARA_COMERCIO");
-            var (camara, documentoId) = await VigenciaDeAsync(a, "CAMARA_COMERCIO");
+            var (camara, documentoId) = await LaCamaraVenceAntesAsync(a, camaraTipo);
             var fechas = CalculadoraDeVigencia.FechasDeAviso(camara.VigenteHasta!.Value, camara.DiasAviso).Where(f => f > Hoy()).ToList();
             fechas.Count.ShouldBeGreaterThanOrEqualTo(2);
             var (primero, segundo) = (fechas[0], fechas[1]);

@@ -79,7 +79,7 @@ function SesionInactiva() {
         texto={t('ingreso.inactivaTexto')}
         rol="alert"
         acciones={
-          <Button variant="contained" size="large" onClick={() => continuar.mutate()} disabled={continuar.isPending} startIcon={continuar.isPending ? <IconoCarga /> : undefined}>
+          <Button variant="contained" onClick={() => continuar.mutate()} disabled={continuar.isPending} startIcon={continuar.isPending ? <IconoCarga /> : undefined}>
             {t('ingreso.continuarSesion')}
           </Button>
         }

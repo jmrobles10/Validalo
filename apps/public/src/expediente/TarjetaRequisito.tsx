@@ -1,33 +1,37 @@
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Typography } from '@mui/material';
 import type { ExpedientePublicoDto, RequisitoPublicoDto } from '@validalo/api-client';
 import { ChipEstado, formatearFecha, textoDelPorQue } from '@validalo/ui';
 import { FileText, PencilLine, Upload, UsersRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router';
 import { enlaceDeSolicitud, type SolicitudDeSubida } from '../boveda/solicitudDeSubida';
 import { useDialogoSubir } from '../boveda/useDialogoSubir';
-import { modoDe, reglasDe, textoReglas } from '../tipoDocumento/reglas';
+import { modoDe, reglasDe, textoAntiguedad, textoReglas } from '../tipoDocumento/reglas';
 import { Plantilla } from '../tipoDocumento/Plantilla';
 import { esRol } from '../personas/modelo';
 import { enlaceParaRegistrarPersona } from '../ficha/legal/personas';
 import { requiereAtencion } from '../vigencia/vigencia';
 import { AvisoVigencia, LineaVigencia } from '../vigencia/ChipVigencia';
 import { ConfirmarRatificacion } from './ConfirmarRatificacion';
+import { AvisoAntiguedad } from './AvisoAntiguedad';
 import { Observacion } from './Observacion';
 import { AccionCertificacionBancaria } from './AccionCertificacionBancaria';
 import { esRequisitoDeCertificacionBancaria } from './certificacionBancaria';
-import { accionDeRequisito, observacionesDeRequisito, propiedadesDeLaAccion } from './requisitos';
+import { BotonDeAccion } from './BotonDeAccion';
+import { MarcoDeRequisito } from './MarcoDeRequisito';
+import { accionDeRequisito, observacionesDeRequisito, tonoDeRequisito } from './requisitos';
 
 /**
- * Un documento que pide la empresa, como fila de la lista de su grupo: nombre y estado, la versión con su vigencia y, si
- * le toca al tercero, qué admite (formatos, tamaño, páginas), la plantilla y la acción de tamaño natural para subirlo o
- * llenar el formulario. Subir abre el diálogo de subida (no saca al tercero de su revisión); llenar un formulario sí lleva a su página.
- * `subida` es lo que pide el requisito (`solicitudDeRequisito`); sin ella (solo lectura o falta el vínculo) no hay acción. La certificación bancaria no se sube suelta: su acción
- * lleva a la cuenta a la que pertenece (`AccionCertificacionBancaria`, CB-8).
+ * Un documento que pide la empresa, como tarjeta de la lista de su grupo (`MarcoDeRequisito`): el título con su estado, una línea con la
+ * versión (o que aún no lo sube) y, si le toca al tercero, qué admite (formatos, tamaño, páginas); debajo la vigencia, la ayuda del tipo
+ * y la plantilla, y al pie la acción para subirlo o llenar el formulario. Subir abre el diálogo de subida (no saca al tercero de su revisión);
+ * llenar un formulario sí lleva a su página. `subida` es lo que pide el requisito (`solicitudDeRequisito`); sin ella (solo lectura o falta el
+ * vínculo) no hay acción. La certificación bancaria no se sube suelta: su acción lleva a la cuenta a la que pertenece
+ * (`AccionCertificacionBancaria`, CB-8). Reemplazar una versión vigente es la acción menos urgente: va con borde, no rellena.
  */
 export function TarjetaRequisito({ requisito, expediente, subida }: { requisito: RequisitoPublicoDto; expediente: ExpedientePublicoDto; subida: SolicitudDeSubida | null }) {
   const { t } = useTranslation();
   const abrirSubida = useDialogoSubir((s) => s.abrir);
+  const empresa = expediente.empresa.nombre;
   const accion = accionDeRequisito(requisito, expediente);
   const observaciones = requisito.estado === 'Observado' ? observacionesDeRequisito(requisito, expediente) : [];
   const version = requisito.versionActual;
@@ -40,94 +44,89 @@ export function TarjetaRequisito({ requisito, expediente, subida }: { requisito:
   const rolDePersona = persona ? (esRol(persona.rol) ? t(`personas.roles.${persona.rol}`) : persona.rol) : '';
   // Le toca subirlo (o renovarlo porque vence): entonces se dice qué admite y se ofrece la plantilla.
   const teToca = Boolean(accion && subida) && (accion !== 'reemplazar' || requiereAtencion(version?.vigencia));
+  // Reemplazar una versión vigente (o renovar cuando ya puede ratificarla) es lo menos urgente: acción de borde; las demás, rellenas.
+  const variante = accion === 'reemplazar' && (!teToca || requisito.puedeRatificar) ? 'outlined' : 'contained';
+
+  const estadoDeLaVersion = requisito.ratificadoEn
+    ? t('expediente.ratificar.ratificado', { fecha: formatearFecha(requisito.ratificadoEn) })
+    : version
+      ? t(version.clase === 'Formulario' ? 'expediente.documentos.versionFormulario' : 'expediente.documentos.version', {
+          n: String(version.n),
+          fecha: formatearFecha(version.cargadaEn),
+        })
+      : requisito.obligatorio
+        ? t('expediente.documentos.faltaObligatorio')
+        : t('expediente.documentos.faltaOpcional');
+  // Una sola línea de metadatos: el estado de la versión y, si le toca subirlo, lo que admite el archivo y qué tan reciente debe ser (antigüedad máxima, TD-10).
+  const meta = [estadoDeLaVersion, teToca && modo !== 'Formulario' ? textoReglas(reglasDe(tipo.archivo), t) : null, teToca ? textoAntiguedad(tipo, t) : null]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <Box component="li" sx={{ py: 1, px: { xs: 1.5, sm: 2 }, minHeight: 44 }}>
-      <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
-        <Box sx={{ color: 'text.secondary', pt: '2px', display: 'flex' }} aria-hidden>
-          <FileText size={16} />
-        </Box>
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography variant="subtitle1" component="h4">
-            {tipo.nombre}
-          </Typography>
-          {persona && (
-            <Typography>
-              {persona.sinPersona
-                ? t('personas.expediente.sinPersona', { rol: rolDePersona.toLowerCase() })
-                : t('personas.expediente.de', { nombre: persona.nombre ?? '', rol: rolDePersona })}
-            </Typography>
-          )}
-          <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }}>
-            {requisito.ratificadoEn
-              ? t('expediente.ratificar.ratificado', { fecha: formatearFecha(requisito.ratificadoEn) })
-              : version
-              ? t(version.clase === 'Formulario' ? 'expediente.documentos.versionFormulario' : 'expediente.documentos.version', {
-                  n: String(version.n),
-                  fecha: formatearFecha(version.cargadaEn),
-                })
-              : requisito.obligatorio
-                ? t('expediente.documentos.faltaObligatorio')
-                : t('expediente.documentos.faltaOpcional')}
-          </Typography>
-          <LineaVigencia vigencia={version?.vigencia} />
+    <MarcoDeRequisito
+      icono={FileText}
+      tono={tonoDeRequisito(requisito)}
+      titulo={tipo.nombre}
+      chip={<ChipEstado estado={requisito.estado} size="medium" />}
+      persona={
+        persona &&
+        (persona.sinPersona
+          ? t('personas.expediente.sinPersona', { rol: rolDePersona.toLowerCase() })
+          : t('personas.expediente.de', { nombre: persona.nombre ?? '', rol: rolDePersona }))
+      }
+      meta={meta}
+      cuerpo={
+        <>
+          <LineaVigencia vigencia={version?.vigencia} empresa={empresa} />
           {/* Por qué se le pide este documento: lo que declaró en su ficha y lo hizo aplicar (EF-6). */}
           {(requisito.porQue?.length ?? 0) > 0 && (
-            <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 0.25 }} data-por-que="">
-              {t('expediente.documentos.porQue', { empresa: expediente.empresa.nombre, motivos: textoDelPorQue(requisito.porQue ?? []) })}
+            <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }} data-por-que="">
+              {t('expediente.documentos.porQue', { empresa, motivos: textoDelPorQue(requisito.porQue ?? []) })}
             </Typography>
           )}
-        </Box>
-        <ChipEstado estado={requisito.estado} size="medium" />
-      </Stack>
-
-      <AvisoVigencia vigencia={version?.vigencia} />
-
-      {observaciones.map((o) => (
-        <Observacion key={o.fecha} observacion={o} />
-      ))}
-
-      {teToca && (Boolean(tipo.textoAyuda) || modo !== 'Formulario') && (
-        <Box sx={{ mt: 0.75, pl: 3.25 }}>
-          {bancaria && <Typography>{t('expediente.documentos.bancaria.ayuda', { empresa: expediente.empresa.nombre })}</Typography>}
-          {tipo.textoAyuda && <Typography>{tipo.textoAyuda}</Typography>}
-          {modo !== 'Formulario' && (
-            <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: tipo.textoAyuda ? 0.25 : 0 }}>
-              {textoReglas(reglasDe(tipo.archivo), t)}
+          {teToca && bancaria && (
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              {t('expediente.documentos.bancaria.ayuda', { empresa })}
             </Typography>
           )}
-        </Box>
-      )}
-
-      {teToca && tipo.tienePlantilla && (
-        <Box sx={{ mt: 1, pl: 3.25 }}>
-          <Plantilla expedienteId={expediente.id} requisitoId={requisito.id} empresa={expediente.empresa.nombre} />
-        </Box>
-      )}
-
-      {accion && subida && modo === 'Formulario' && (
-        // Llenar un formulario es una página (con su propio regreso a la revisión)…
-        <Button component={RouterLink} to={enlaceDeSolicitud(subida)} {...propiedadesDeLaAccion(accion)} startIcon={<PencilLine size={16} aria-hidden />}>
-          {t(`expediente.documentos.accionesFormulario.${accion}`)}
-        </Button>
-      )}
-      {accion && subida && bancaria && <AccionCertificacionBancaria accion={accion} vinculoId={subida.vinculoId ?? null} empresa={expediente.empresa.nombre} />}
-      {accion && subida && !bancaria && modo !== 'Formulario' && (
-        // …y subir un archivo, un diálogo: el tercero no sale de su revisión.
-        <Button onClick={() => abrirSubida(subida)} {...propiedadesDeLaAccion(accion)} startIcon={<Upload size={16} aria-hidden />}>
-          {t(`expediente.documentos.acciones.${accion}`)}
-        </Button>
-      )}
-
-      {persona?.sinPersona && (
-        <Button component={RouterLink} to={enlaceParaRegistrarPersona(persona.rol)} variant="contained" startIcon={<UsersRound size={16} aria-hidden />} sx={{ mt: 1, ml: 3.25 }}>
-          {t('personas.expediente.agregarPersona')}
-        </Button>
-      )}
-
-      {requisito.puedeRatificar && subida && (
-        <ConfirmarRatificacion expedienteId={expediente.id} requisitoId={requisito.id} documento={tipo.nombre} empresa={expediente.empresa.nombre} />
-      )}
-    </Box>
+          {teToca && tipo.textoAyuda && (
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              {tipo.textoAyuda}
+            </Typography>
+          )}
+          {teToca && tipo.tienePlantilla && <Plantilla expedienteId={expediente.id} requisitoId={requisito.id} empresa={empresa} />}
+          <AvisoVigencia vigencia={version?.vigencia} />
+          <AvisoAntiguedad antiguedad={version?.antiguedad} decidido={requisito.estado === 'Observado' || requisito.estado === 'Aprobado'} />
+          {observaciones.map((o) => (
+            <Observacion key={o.fecha} observacion={o} />
+          ))}
+        </>
+      }
+      acciones={
+        <>
+          {accion && subida && modo === 'Formulario' && (
+            // Llenar un formulario es una página (con su propio regreso a la revisión)…
+            <BotonDeAccion to={enlaceDeSolicitud(subida)} icono={PencilLine} variant={variante}>
+              {t(`expediente.documentos.accionesFormulario.${accion}`)}
+            </BotonDeAccion>
+          )}
+          {accion && subida && bancaria && <AccionCertificacionBancaria accion={accion} vinculoId={subida.vinculoId ?? null} empresa={empresa} variant={variante} />}
+          {accion && subida && !bancaria && modo !== 'Formulario' && (
+            // …y subir un archivo, un diálogo: el tercero no sale de su revisión.
+            <BotonDeAccion onClick={() => abrirSubida(subida)} icono={Upload} variant={variante}>
+              {t(`expediente.documentos.acciones.${accion}`)}
+            </BotonDeAccion>
+          )}
+          {persona?.sinPersona && (
+            <BotonDeAccion to={enlaceParaRegistrarPersona(persona.rol)} icono={UsersRound}>
+              {t('personas.expediente.agregarPersona')}
+            </BotonDeAccion>
+          )}
+          {requisito.puedeRatificar && subida && (
+            <ConfirmarRatificacion variante="contained" compacto expedienteId={expediente.id} requisitoId={requisito.id} documento={tipo.nombre} empresa={empresa} />
+          )}
+        </>
+      }
+    />
   );
 }

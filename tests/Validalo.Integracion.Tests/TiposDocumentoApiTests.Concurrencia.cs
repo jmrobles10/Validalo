@@ -43,14 +43,16 @@ public sealed partial class TiposDocumentoApiTests
             documentos.Add(enviado.Version.DocumentoId);
         }
 
-        var hasta = (await EsperarEventoAsync<VigenciaDeVersionCalculada>(documentos[0])).VigenteHasta!.Value;
-        await EsperarEventoAsync<VigenciaDeVersionCalculada>(documentos[1]);
+        // Revalidar cada 30 días cuenta desde que la empresa aprueba: los dos documentos vencen el mismo día.
+        await AprobarAsync(empresa, (await ApiAsync<VinculoDto>("GET", $"/api/v1/vinculos/{vinculo.Id}", Admin(empresa), null, 200)).ExpedienteAbiertoId!.Value);
+        var hasta = (await EsperarEventoAsync<VigenciaDeVersionCalculada>(documentos[0], c => c.VigenteHasta is not null)).VigenteHasta!.Value;
+        await EsperarEventoAsync<VigenciaDeVersionCalculada>(documentos[1], c => c.VigenteHasta is not null);
         var fechaAviso = hasta.AddDays(-5);
         var clave = AvisoDeVencimiento.Clave(sesion.TerceroId, fechaAviso);
 
         try
         {
-            fixture.Reloj.Desfase = TimeSpan.FromDays(5);
+            fixture.Reloj.Desfase = TimeSpan.FromDays(25);
             // Ocho copias del mismo mensaje (varios mensajes programados para el mismo tercero y fecha) en la cola local, que las
             // procesa en paralelo: solo una puede enviar el correo y publicar los eventos; las demás vuelven a leer el aviso ya enviado.
             await using (var alcance = Host.Services.CreateAsyncScope())
@@ -115,7 +117,7 @@ public sealed partial class TiposDocumentoApiTests
 
     private async Task<TipoDocumentoTenantDto> TipoDeFormularioAsync(Empresa empresa, string codigo, string nombre) =>
         await ApiAsync<TipoDocumentoTenantDto>("POST", "/api/v1/tipos-documento", Admin(empresa),
-            new CrearTipoDocumentoDto(codigo, nombre, null, ReglaFrescura: new ReglaFrescuraDto("MaxDiasDesdeExpedicion", 30), DiasAviso: [5], DiasGracia: 2,
+            new CrearTipoDocumentoDto(codigo, nombre, null, AntiguedadMaximaDias: 30, RevalidarCadaDias: 30, DiasAviso: [5], DiasGracia: 2,
                 Modo: "Formulario",
                 Campos:
                 [

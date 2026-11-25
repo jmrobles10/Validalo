@@ -42,7 +42,7 @@ recorrido(
     await paso(paginaAna, {
       titulo: 'Revisa cómo se cuenta una validación',
       explicacion:
-        'Una validación es el análisis automático de un documento que recibe la empresa. Si otra empresa ya pagó el análisis de ese mismo documento, igual cuenta una validación de tu cupo. Los administradores reciben un aviso al llegar al 80 % y al 100 % de las incluidas.',
+        'Una validación es el análisis automático de un documento que recibe la empresa. El «Costo estimado de IA» es el de los análisis de tus validaciones del mes, calculado con los tokens usados: puede diferir de lo que te cobra OpenAI, cuyo saldo y límite reales ves en tu cuenta de OpenAI. Los administradores reciben un aviso al llegar al 80 % y al 100 % de las incluidas.',
       resaltar: ana.getByText('Validaciones por día', { exact: true }).or(ana.getByText('Sin validaciones en este mes.')),
       avisos: false,
     });

@@ -200,3 +200,25 @@ export function camposQueNoCoinciden(certificacion: CertificacionDeCuentaDto): C
 export function camposSinVerificar(certificacion: CertificacionDeCuentaDto): CampoCruzadoDto[] {
   return certificacion.campos.filter((c) => c.resultado === 'NoVerificable' && c.critico);
 }
+
+/** Lo que una empresa le pide a la certificación por su antigüedad máxima (TD-10) y no cumple: el texto es el del expediente (el detalle y lo que debe hacer). */
+export interface AvisoDeAntiguedad {
+  empresa: string;
+  texto: string;
+  /** El estado de la evaluación (`Excedida` o `SinFecha`). */
+  estado: string;
+  /** El aviso nombra a la empresa: hay más de una con regla de antigüedad, así que sin el nombre no se sabría quién lo pide. */
+  nombrar: boolean;
+}
+
+/**
+ * Los avisos de antigüedad de la certificación: uno por empresa que la exige y no la cumple (la que cumple, o aún no tiene lectura, no pide nada). Es la misma evaluación
+ * del expediente de cada empresa (`versionActual.antiguedad`): aquí llega por empresa, en la propia certificación de la cuenta. Con una sola empresa con regla el aviso no la
+ * nombra; con varias (reglas que pueden ser distintas) sí.
+ */
+export function avisosDeAntiguedad(certificacion: Pick<CertificacionDeCuentaDto, 'antiguedad'>): AvisoDeAntiguedad[] {
+  const reglas = certificacion.antiguedad ?? [];
+  return reglas.flatMap(({ empresa, antiguedad }) =>
+    antiguedad.mensaje ? [{ empresa, texto: `${antiguedad.detalle} ${antiguedad.mensaje}`, estado: antiguedad.estado, nombrar: reglas.length > 1 }] : [],
+  );
+}

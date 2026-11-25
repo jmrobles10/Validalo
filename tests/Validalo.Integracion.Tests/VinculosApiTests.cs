@@ -141,6 +141,10 @@ public sealed class ApiFixture : IAsyncLifetime
             b.UseSetting("Validalo:Migraciones:CertificacionPorNumero:Habilitada", "false");
             // Ni la de las personas declaradas a mano a la ficha legal: su prueba la ejecuta a mano sobre sus datos.
             b.UseSetting("Validalo:Migraciones:PersonasEnLaFicha:Habilitada", "false");
+            // Ni la de las reglas de frescura de los tipos (TD-10): su prueba la ejecuta a mano sobre sus datos.
+            b.UseSetting("Validalo:Migraciones:ReglasDeFrescura:Habilitada", "false");
+            // La aprobación de un documento pide recalcular su vigencia por un barrido corto (TD-10): casi al instante.
+            b.UseSetting("Validalo:VigenciasDeDocumentos:SegundosProceso", "1");
             b.ConfigureTestServices(s =>
             {
                 // El transporte SMTP se reemplaza, no el enviador: el aislamiento del sandbox (SB-4) sigue activo en las pruebas y lo que

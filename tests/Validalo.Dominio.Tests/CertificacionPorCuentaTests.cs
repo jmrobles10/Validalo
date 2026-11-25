@@ -41,7 +41,7 @@ public class CertificacionPorCuentaTests
     {
         var campos = JsonSerializer.SerializeToElement(new
         {
-            banco, tipoCuenta = "Cuenta de ahorros", numeroCuenta, titular = "ACEROS DEL NORTE SAS", identificacionTitular, estadoCuenta = "Activa"
+            banco, tipoCuenta = "Cuenta de ahorros", numeroCuenta, titular = "ACEROS DEL NORTE SAS", identificacionTitular
         }).EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
         var analisis = new AnalisisDeIaRegistrado(version, "gpt-test", false, 0.93m, legible, "CERTIFICACION_BANCARIA", campos, [], 1, 0, 100, 100, 0m, Guid.NewGuid(), Guid.NewGuid(), Ahora);
         d.Aplicar(d.RegistrarAnalisisDeIa(analisis).ShouldNotBeNull());
@@ -227,7 +227,7 @@ public class CertificacionPorCuentaTests
     {
         CruceDeSeccion Cruce(string numero, string identificacionTitular = "900373913", bool legible = true, object? extra = null)
         {
-            var campos = JsonSerializer.SerializeToElement(extra ?? new { banco = "Bancolombia", tipoCuenta = "Ahorros", numeroCuenta = numero, titular = "ACEROS DEL NORTE SAS", identificacionTitular, estadoCuenta = "Activa" })
+            var campos = JsonSerializer.SerializeToElement(extra ?? new { banco = "Bancolombia", tipoCuenta = "Ahorros", numeroCuenta = numero, titular = "ACEROS DEL NORTE SAS", identificacionTitular })
                 .EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
             return CruceConDocumento.CruzarCuenta(new DatosDeCuentaParaCruce("Bancolombia", "Ahorros", "03112345678", "Aceros del Norte S.A.S.", "NIT 900373913"),
                 "Aceros del Norte S.A.S.", "900373913", Guid.NewGuid(), 1, campos, 0.9m, legible, Ahora);
@@ -239,8 +239,25 @@ public class CertificacionPorCuentaTests
         ResumenDeCruceDeCuenta.De(Cruce("03112345678", "800111222")).ShouldBe(VerificacionDeCuenta.Discrepa); // el titular no es el tercero
         ResumenDeCruceDeCuenta.De(Cruce("03112345678", legible: false)).ShouldBe(VerificacionDeCuenta.NoSeLee);
         // Sin el número en el documento lo crítico no se pudo verificar; sin el banco ni el tipo (evidencia) sí se da por verificada.
-        ResumenDeCruceDeCuenta.De(Cruce("x", extra: new { titular = "ACEROS DEL NORTE SAS", identificacionTitular = "900373913", estadoCuenta = "Activa" })).ShouldBe(VerificacionDeCuenta.NoVerificable);
-        ResumenDeCruceDeCuenta.De(Cruce("03112345678", extra: new { numeroCuenta = "03112345678", titular = "ACEROS DEL NORTE SAS", identificacionTitular = "900373913", estadoCuenta = "Activa" }))
+        ResumenDeCruceDeCuenta.De(Cruce("x", extra: new { titular = "ACEROS DEL NORTE SAS", identificacionTitular = "900373913" })).ShouldBe(VerificacionDeCuenta.NoVerificable);
+        ResumenDeCruceDeCuenta.De(Cruce("03112345678", extra: new { numeroCuenta = "03112345678", titular = "ACEROS DEL NORTE SAS", identificacionTitular = "900373913" }))
             .ShouldBe(VerificacionDeCuenta.Coincide);
+    }
+
+    [Fact]
+    public void Una_certificacion_sin_el_estado_de_la_cuenta_queda_verificada_si_lo_demas_coincide_CB_12()
+    {
+        // CB-12 (decisión del usuario, 2026-11-25): el estado de la cuenta ya no se valida, así que que la IA no lo lea no deja la certificación «sin verificar».
+        var campos = JsonSerializer.SerializeToElement(new
+        {
+            banco = "Bancolombia S.A.", tipoCuenta = "Cuenta de ahorros", numeroCuenta = "03112345678", titular = "ACEROS DEL NORTE SAS", identificacionTitular = "900373913"
+        }).EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
+        var cruce = CruceConDocumento.CruzarCuenta(new DatosDeCuentaParaCruce("Bancolombia", "Ahorros", "03112345678", "Aceros del Norte S.A.S.", "NIT 900373913"),
+            "Aceros del Norte S.A.S.", "900373913", Guid.NewGuid(), 1, campos, 0.9m, true, Ahora);
+
+        cruce.Campos.Select(c => c.Campo).ShouldNotContain("estado_cuenta");
+        cruce.Campos.Where(c => c.Critico).Select(c => c.Campo).ShouldBe(["numero", "titular", "identificacion_titular", "titular_es_el_tercero"]);
+        cruce.Campos.Where(c => c.Critico).ShouldAllBe(c => c.Resultado == ResultadoDeCruce.Coincide);
+        ResumenDeCruceDeCuenta.De(cruce).ShouldBe(VerificacionDeCuenta.Coincide);
     }
 }

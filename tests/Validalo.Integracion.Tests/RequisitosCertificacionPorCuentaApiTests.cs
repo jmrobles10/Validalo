@@ -21,9 +21,9 @@ public sealed class RequisitosCertificacionPorCuentaApiTests(ApiFixture fixture,
     private const string Cuentas = "/public/v1/boveda/cuentas-bancarias";
 
     /// <summary>Certificación bancaria con marcas que lee el analizador falso (como el simulado de la API).</summary>
-    private static byte[] CertificacionCon(string numeroCuenta, string identificacionTitular, string banco = "Bancolombia S.A.") =>
+    private static byte[] CertificacionCon(string numeroCuenta, string identificacionTitular, string banco = "Bancolombia S.A.", DateOnly? expedida = null) =>
         Pdf($"Certificación [[banco={banco}]][[tipoCuenta=Cuenta de ahorros]][[numeroCuenta={numeroCuenta}]][[titular=ACEROS DEL NORTE SAS]]" +
-            $"[[identificacionTitular={identificacionTitular}]][[estadoCuenta=Activa]]");
+            $"[[identificacionTitular={identificacionTitular}]]" + (expedida is { } f ? $"[[fechaExpedicion={f:yyyy-MM-dd}]]" : string.Empty));
 
     private Task<CuentaBancariaPublicaDto> RegistrarAsync(SesionTerceroDto sesion, string banco, string numero, string nit) =>
         TerceroAsync<CuentaBancariaPublicaDto>("POST", Cuentas, sesion.AccessToken,
@@ -86,12 +86,44 @@ public sealed class RequisitosCertificacionPorCuentaApiTests(ApiFixture fixture,
         cruce.Campos.Select(c => (c.Campo, c.Resultado)).ShouldBe(
         [
             ("numero", "Coincide"), ("titular", "Coincide"), ("identificacion_titular", "Coincide"), ("titular_es_el_tercero", "Coincide"),
-            ("estado_cuenta", "Coincide"), ("banco", "Coincide"), ("tipo_cuenta", "Coincide")
+            ("banco", "Coincide"), ("tipo_cuenta", "Coincide")
         ]);
         var numero = cruce.Campos.Single(c => c.Campo == "numero");
         (numero.Declarado, numero.Extraido).ShouldBe(("****5678", "****5678"));
         JsonSerializer.Serialize(certificacion).ShouldNotContain("03112345678"); // el cruce nunca lleva el número completo (lo ve aparte, en `numero`, quien aprueba)
         vista.Propuesta.Numero.ShouldBe("03112345678");
+    }
+
+    [Fact]
+    public async Task Una_certificacion_vieja_dice_en_Mis_cuentas_la_antiguedad_que_exige_la_empresa_y_una_reciente_cumple()
+    {
+        var e = await PrepararAsync();
+        await PlanIaAsync(e.Norte, new ActualizarPlanIaEmpresaDto(10, false, ApiKeyOpenAi: LlaveIa()));
+        var correo = CorreoNuevo();
+        var vinculo = await CrearVinculoAsync(e.Norte, "CLIENTE", correo);
+        var nit = await NitDelTerceroAsync(e.Norte, vinculo);
+        var sesion = await SesionAsync(correo);
+        await AceptarAsync(sesion, vinculo.Id);
+        var cuenta = await RegistrarAsync(sesion, "Bancolombia", "031-123456-78", nit);
+
+        // El tercero sube una certificación expedida el 17/07/2024 y la designa: la empresa la recibe y la IA la lee. La empresa exige 30 días (lo sugerido del tipo).
+        await SubirCertificacionAsync(sesion, cuenta.Id, CertificacionCon("03112345678", nit, expedida: new DateOnly(2024, 7, 17)));
+        await TerceroAsync<CuentaBancariaPublicaDto>("POST", $"/public/v1/vinculos/{vinculo.Id}/cuenta-designada", sesion.AccessToken, new DesignarCuentaDto(cuenta.Id), 200);
+        await EsperarAsync(async () => (await CuentasAsync(sesion)).Single().Certificacion!.Verificacion == "Coincide", "la lectura de la certificación");
+
+        // En «Mis cuentas» la tarjeta trae la antigüedad de esa empresa (la misma evaluación de su expediente), con lo que debe hacer el tercero.
+        var dias = Hoy().DayNumber - new DateOnly(2024, 7, 17).DayNumber;
+        var aviso = (await CuentasAsync(sesion)).Single().Certificacion!.Antiguedad.ShouldNotBeNull().ShouldHaveSingleItem();
+        aviso.EmpresaId.ShouldBe(e.Norte.Datos.Id);
+        (aviso.Antiguedad.Estado, aviso.Antiguedad.Dias, aviso.Antiguedad.MaximoDias, aviso.Antiguedad.Fuente, aviso.Antiguedad.Critico).ShouldBe(("Excedida", dias, 30, "Ia", true));
+        aviso.Antiguedad.Detalle.ShouldBe($"Expedida el 17/07/2024: {dias} días; el máximo es 30.");
+        aviso.Antiguedad.Mensaje.ShouldBe("Sube el documento «Certificación bancaria» expedido hace menos de 30 días.");
+
+        // La versión 2, reciente, cumple: la empresa ya no pide nada.
+        await SubirCertificacionAsync(sesion, cuenta.Id, CertificacionCon("03112345678", nit, expedida: Hoy().AddDays(-3)));
+        await EsperarAsync(async () => (await CuentasAsync(sesion)).Single().Certificacion is { Version: 2, Verificacion: "Coincide" }, "la lectura de la versión 2");
+        var cumple = (await CuentasAsync(sesion)).Single().Certificacion!.Antiguedad.ShouldNotBeNull().ShouldHaveSingleItem();
+        (cumple.Antiguedad.Estado, cumple.Antiguedad.Mensaje).ShouldBe(("Cumple", null));
     }
 
     [Fact]

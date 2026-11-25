@@ -298,9 +298,8 @@ public static class EsquemasDeAnalisis
             Texto("numeroCuenta", "Número de la cuenta."),
             Texto("titular", "Titular de la cuenta."),
             Texto("identificacionTitular", "Identificación del titular."),
-            Texto("estadoCuenta", "Estado de la cuenta (activa, inactiva…)."),
             Fecha("fechaExpedicion", "Fecha de expedición de la certificación.")
-        ], ["banco", "tipoCuenta", "numeroCuenta", "titular", "identificacionTitular", "estadoCuenta"],
+        ], ["banco", "tipoCuenta", "numeroCuenta", "titular", "identificacionTitular"],
             ["banco", "numeroCuenta", "titular", "identificacionTitular"]),
         ["ESTADOS_FINANCIEROS"] = new("ESTADOS_FINANCIEROS", "Estados financieros",
         [

@@ -1,6 +1,7 @@
 using Marten;
 using Validalo.Aplicacion.Comun;
 using Validalo.Aplicacion.Notificaciones;
+using Validalo.Dominio.Documentos;
 using Validalo.Dominio.Ia;
 using Validalo.Dominio.Identidad;
 using Validalo.Dominio.Plataforma;
@@ -69,13 +70,16 @@ public sealed class CupoDeIa(ISesiones sesiones, TimeProvider reloj)
     /// <summary>
     /// La empresa consume la validación de la versión: incluida, adicional o sin cupo (IA-4). Si cruza el 80 % o el 100 % de
     /// las incluidas, avisa a sus administradores (campana en la misma transacción; correo por el outbox de
-    /// <paramref name="mensajes"/>).
+    /// <paramref name="mensajes"/>). Si <paramref name="pagaLaLlamada"/> es falso, la empresa reutiliza un análisis que pagó otra (IA-3): la validación queda marcada como
+    /// reutilizada y se le atribuye el costo y los tokens de ese análisis (IA-15), que se leen del análisis registrado de la versión. Sin cupo no se consume ni se atribuye
+    /// nada (IA-4).
     /// </summary>
     public async Task<ResultadoDeConsumo> ConsumirAsync(EmpresaDestinataria empresa, Guid documentoId, int numero, bool pagaLaLlamada,
         IMessageContext mensajes, CancellationToken ct)
     {
         var dia = await DiaAsync(empresa.TenantId, ct);
         var intento = 0;
+        CostoDeAnalisis? costoDelAnalisis = null; // se lee una sola vez aunque el intento se repita
         return await Peticiones.ConReintentosAsync(async () =>
         {
             // Lo que publicó un intento que perdió la carrera no debe salir con el siguiente.
@@ -92,11 +96,14 @@ public sealed class CupoDeIa(ISesiones sesiones, TimeProvider reloj)
             var plan = await sesion.LoadAsync<PlanDeIaEmpresa>(empresa.EmpresaId, ct);
             var mes = UsoMensualIa.MesDe(dia);
             var uso = await sesion.LoadAsync<UsoMensualIa>(UsoMensualIa.Clave(empresa.EmpresaId, mes), ct) ?? UsoMensualIa.Nuevo(empresa.EmpresaId, mes);
+            // Sin cupo no hace falta saber cuánto costó el análisis: la empresa no lo recibe.
+            if (!pagaLaLlamada && uso.CupoDisponible(plan) is not null)
+                costoDelAnalisis ??= await CostoDelAnalisisAsync(documentoId, numero, ct);
             var consumo = uso.Consumir(plan, dia);
             if (consumo.Tipo is not { } tipo)
                 return ResultadoDeConsumo.SinCupo;
 
-            sesion.Insert(new ValidacionIaConsumida
+            var validacion = new ValidacionIaConsumida
             {
                 Id = id,
                 EmpresaId = empresa.EmpresaId,
@@ -106,13 +113,33 @@ public sealed class CupoDeIa(ISesiones sesiones, TimeProvider reloj)
                 Tipo = tipo,
                 PagoLaLlamada = pagaLaLlamada,
                 Fecha = reloj.GetUtcNow()
-            });
+            };
+            if (!pagaLaLlamada)
+            {
+                // Reutilizada: el costo del análisis original se le atribuye como si lo hubiera pagado (IA-15). Si el análisis no se encuentra queda sin atribuir y el
+                // recálculo del histórico lo completa cuando aparezca.
+                if (costoDelAnalisis is { } atribuido)
+                    validacion.Atribuir(atribuido);
+                uso.RegistrarReutilizada(costoDelAnalisis ?? CostoDeAnalisis.Ninguno, dia);
+            }
+
+            sesion.Insert(validacion);
             sesion.Store(uso);
             foreach (var umbral in consumo.AvisosCruzados)
                 await AvisarAsync(sesion, mensajes, empresa, plan!, uso, umbral, ct);
             await sesion.SaveChangesAsync(ct);
             return ResultadoDeConsumo.Consumida;
         });
+    }
+
+    /// <summary>
+    /// Lo que costó el análisis de la versión (tokens y dólares de la llamada y, si la hubo, de la de escalamiento): se lee del evento <see cref="AnalisisDeIaRegistrado"/> de la
+    /// bóveda, porque la proyección de la versión no guarda costos (nunca se exponen a quien ve el análisis). Nulo si la versión no tiene análisis registrado.
+    /// </summary>
+    public async Task<CostoDeAnalisis?> CostoDelAnalisisAsync(Guid documentoId, int numero, CancellationToken ct)
+    {
+        await using var consulta = sesiones.ConsultaBoveda();
+        return CostoDeAnalisisRegistrado.De(await consulta.Events.FetchStreamAsync(documentoId, token: ct), numero);
     }
 
     /// <summary>Devuelve la validación consumida por la versión (el análisis falló y no se cobra, IA-6). Idempotente.</summary>
@@ -128,7 +155,11 @@ public sealed class CupoDeIa(ISesiones sesiones, TimeProvider reloj)
             var uso = await sesion.LoadAsync<UsoMensualIa>(UsoMensualIa.Clave(empresa.EmpresaId, validacion.Mes), ct);
             if (uso is not null)
             {
-                uso.Revertir(validacion.Tipo, CalendarioDeIa.Dia(validacion.Fecha, await ZonaAsync(empresa.TenantId, ct)));
+                var dia = CalendarioDeIa.Dia(validacion.Fecha, await ZonaAsync(empresa.TenantId, ct));
+                uso.Revertir(validacion.Tipo, dia);
+                // Una validación reutilizada también devuelve lo que se le había atribuido (IA-15).
+                if (!validacion.PagoLaLlamada)
+                    uso.RevertirReutilizada(validacion.Atribuido, dia);
                 sesion.Store(uso);
             }
 

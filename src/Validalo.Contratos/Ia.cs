@@ -26,14 +26,24 @@ public sealed record PlanIaResumenDto(
     bool Configurado, int ValidacionesIncluidasMes, bool AdicionalHabilitado, int? TopeAdicionalMes, bool LlaveConfigurada, string ModeloPorDefecto,
     string ModeloEscalamiento, decimal UmbralConfianza, bool Activo);
 
-/// <summary>Uso de un día (fecha en la zona horaria del tenant).</summary>
-public sealed record UsoIaDiaDto(DateOnly Fecha, int Incluidas, int Adicionales, int AnalisisPagados, long TokensEntrada, long TokensSalida, decimal CostoUsd);
+/// <summary>
+/// Uso de un día (fecha en la zona horaria del tenant). <see cref="TokensEntrada"/>, <see cref="TokensSalida"/> y <see cref="CostoUsd"/> son lo que pagó la llave de la empresa;
+/// lo reutilizado (IA-15) va aparte: validaciones del día que usaron un análisis de otra empresa y el costo y los tokens de ese análisis atribuidos a esta.
+/// </summary>
+public sealed record UsoIaDiaDto(
+    DateOnly Fecha, int Incluidas, int Adicionales, int AnalisisPagados, long TokensEntrada, long TokensSalida, decimal CostoUsd,
+    int Reutilizadas = 0, long TokensEntradaReutilizados = 0, long TokensSalidaReutilizados = 0, decimal CostoReutilizadoUsd = 0m);
 
 /// <summary>
 /// Uso de IA de la empresa en un mes (<c>yyyy-MM</c>, zona del tenant): validaciones incluidas y adicionales consumidas,
 /// las que quedan (<see cref="AdicionalesRestantes"/> nulo = adicional sin tope), los análisis que pagó su llave con sus
-/// tokens y su costo real en dólares, y la serie por día.
+/// tokens y su costo estimado en dólares, y la serie por día. <see cref="AnalisisPagados"/>, los tokens y <see cref="CostoUsd"/> son lo que se calculó de lo que facturó OpenAI a la
+/// llave de la empresa; el costo es una <b>estimación</b> (tokens por la tarifa conocida de cada modelo) y puede diferir de lo que cobra OpenAI: el saldo y el límite reales están en su cuenta de OpenAI. Lo <b>reutilizado</b> (IA-15) va en campos aparte: <see cref="ValidacionesReutilizadas"/> de las validaciones del mes usaron un análisis que
+/// pagó otra empresa, y <see cref="CostoReutilizadoUsd"/> y los tokens reutilizados son el costo de esos análisis atribuido a esta empresa. El costo atribuido total
+/// es el propio más el reutilizado (<c>CostoUsd + CostoReutilizadoUsd</c>), y lo mismo con los tokens. Los campos reutilizados son opcionales (cero si faltan).
 /// </summary>
 public sealed record UsoIaDto(
     string Mes, PlanIaResumenDto Plan, int IncluidasConsumidas, int AdicionalesConsumidas, int IncluidasRestantes, int? AdicionalesRestantes,
-    int AnalisisPagados, long TokensEntrada, long TokensEntradaEnCache, long TokensSalida, decimal CostoUsd, IReadOnlyList<UsoIaDiaDto> PorDia);
+    int AnalisisPagados, long TokensEntrada, long TokensEntradaEnCache, long TokensSalida, decimal CostoUsd, IReadOnlyList<UsoIaDiaDto> PorDia,
+    int ValidacionesReutilizadas = 0, long TokensEntradaReutilizados = 0, long TokensEntradaEnCacheReutilizados = 0, long TokensSalidaReutilizados = 0,
+    decimal CostoReutilizadoUsd = 0m);

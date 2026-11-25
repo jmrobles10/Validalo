@@ -88,7 +88,7 @@ test('el tercero designa su cuenta: la ficha ya abierta de la empresa la muestra
   for (const tarjeta of [tarjetaOlga, tarjetaAna]) {
     await expect(tarjeta).toContainText('Por aprobar', EN_VIVO);
     await expect(tarjeta).toContainText('03112345678');
-    await expect(tarjeta).toContainText('0 de 2 aprobaciones');
+    await expect(tarjeta).toContainText('Necesita 2 aprobaciones · van 0');
   }
   // La campana de Olga se enciende con el aviso de lo que hay que aprobar y la lleva al vínculo.
   await expect(async () => expect(await noLeidas(campanaDeLaEmpresa(olga))).toBeGreaterThan(antesOlga)).toPass({ timeout: 30_000 });
@@ -102,8 +102,8 @@ test('el tercero designa su cuenta: la ficha ya abierta de la empresa la muestra
   // Olga la aprueba: Ana, sin recargar, ve que falta solo ella.
   await tarjetaOlga.getByRole('button', { name: 'Aprobar' }).click();
   await olga.getByRole('dialog').getByRole('button', { name: 'Aprobar' }).click();
-  await expect(tarjetaOlga).toContainText('1 de 2 aprobaciones: Olga Oficial');
-  await expect(tarjetaAna).toContainText('1 de 2 aprobaciones: Olga Oficial', EN_VIVO);
+  await expect(tarjetaOlga).toContainText('Necesita 2 aprobaciones · van 1: Olga Oficial');
+  await expect(tarjetaAna).toContainText('Necesita 2 aprobaciones · van 1: Olga Oficial', EN_VIVO);
 
   // Ana completa las dos: queda designada para las dos personas y para el tercero, que sigue en «Mis cuentas» sin recargar.
   await tarjetaAna.getByRole('button', { name: 'Aprobar' }).click();

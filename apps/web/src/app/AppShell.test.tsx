@@ -1,21 +1,29 @@
 import { ThemeProvider } from '@mui/material';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { SCOPES } from '@validalo/api-client';
 import { createValidaloTheme } from '@validalo/ui';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { usePreferencias } from '../shared/preferencias';
 import { AppShell } from './AppShell';
 
 const permisos = vi.hoisted(() => ({ scopes: new Set<string>() }));
 const excepciones = vi.hoisted(() => ({ conteo: null as number | null }));
+const grupo = vi.hoisted(() => ({ empresas: [] as { id: string; nombre: string }[] }));
 vi.mock('../features/empresas/useEmpresas', () => ({
-  useEmpresaActiva: () => ({ empresa: { id: 'emp', nombre: 'Constructora Norte' }, empresas: [] }),
+  useEmpresaActiva: () => ({ empresa: { id: 'emp', nombre: 'Constructora Norte' }, empresas: grupo.empresas }),
   aOpcion: (e: { id: string; nombre: string }) => ({ id: e.id, nombre: e.nombre, identificacion: '' }),
 }));
 vi.mock('../shared/usePermisos', () => ({ usePermisos: () => ({ scopes: permisos.scopes, puede: (s: string) => permisos.scopes.has(s) }) }));
 vi.mock('../features/notificaciones/Campana', () => ({ Campana: () => null }));
 vi.mock('../features/revisionAutomatica/api', () => ({ useConteoExcepciones: () => excepciones.conteo }));
 vi.mock('../sesion/useYo', () => ({ useYo: () => ({ data: undefined }) }));
+
+/** Muestra la ruta actual: para comprobar que elegir una opción del cajón navega. */
+function RutaActual() {
+  return <output data-testid="ruta">{useLocation().pathname}</output>;
+}
 
 function montar(ruta: string) {
   render(
@@ -24,6 +32,7 @@ function montar(ruta: string) {
         <Routes>
           <Route path="/e/:empresaId/*" element={<AppShell />} />
         </Routes>
+        <RutaActual />
       </MemoryRouter>
     </ThemeProvider>,
   );
@@ -32,6 +41,9 @@ function montar(ruta: string) {
 afterEach(() => {
   permisos.scopes = new Set();
   excepciones.conteo = null;
+  grupo.empresas = [];
+  usePreferencias.setState({ modo: 'light' });
+  vi.unstubAllGlobals();
 });
 
 describe('AppShell', () => {
@@ -137,5 +149,123 @@ describe('AppShell', () => {
     permisos.scopes = new Set([SCOPES.vinculosLeer]);
     montar('/e/emp/vinculos');
     expect(screen.queryByRole('link', { name: /^Excepciones/ })).not.toBeInTheDocument();
+  });
+});
+
+/** Un `matchMedia` que contesta solo a `min-width: 600px` (el punto donde aparece el riel) y permite ensanchar la ventana. */
+function simularVentana(anchoInicial: number) {
+  let ancho = anchoInicial;
+  const oyentes = new Set<() => void>();
+  vi.stubGlobal('matchMedia', (consulta: string) => ({
+    get matches() {
+      return /min-width:\s*600px/.test(consulta) && ancho >= 600;
+    },
+    media: consulta,
+    addEventListener: (_: string, oyente: () => void) => oyentes.add(oyente),
+    removeEventListener: (_: string, oyente: () => void) => oyentes.delete(oyente),
+  }));
+  return {
+    ensanchar: (nuevo: number) => {
+      ancho = nuevo;
+      act(() => oyentes.forEach((oyente) => oyente()));
+    },
+  };
+}
+
+describe('AppShell en el celular: el cajón del menú', () => {
+  // jsdom aplica las reglas de `@media` sin evaluarlas: el botón de menú (`display: none` desde `sm`) queda «oculto» y sin nombre para los roles.
+  const botonDeMenu = () => screen.getByLabelText('Abrir el menú');
+  const abrirCajon = async () => {
+    const usuario = userEvent.setup();
+    await usuario.click(botonDeMenu());
+    return { usuario, cajon: await screen.findByRole('dialog', { name: 'Menú principal' }) };
+  };
+
+  it('el botón de menú abre un cajón con el logo, el botón de cerrar y las secciones como filas (ícono y rótulo, alto táctil)', async () => {
+    permisos.scopes = new Set(Object.values(SCOPES));
+    montar('/e/emp/bandeja');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const { cajon } = await abrirCajon();
+
+    expect(within(cajon).getByRole('img', { name: 'Valídalo' }).closest('a')).toHaveAttribute('href', '/e/emp/inicio');
+    expect(within(cajon).getByRole('button', { name: 'Cerrar el menú' })).toBeInTheDocument();
+
+    const menu = within(within(cajon).getByRole('navigation', { name: 'Secciones' }));
+    const secciones = within(menu.getByRole('list')).getAllByRole('link');
+    expect(secciones.map((e) => e.textContent)).toEqual([
+      'Inicio',
+      'Bandeja',
+      'Excepciones',
+      'Revalidaciones',
+      'Vencimientos',
+      'Cumplimiento',
+      'Evaluaciones',
+      'Certificados',
+      'Vínculos',
+      'Informes',
+      'Auditoría',
+    ]);
+    // Filas horizontales de al menos 44 px, no el rótulo apilado bajo el ícono del riel.
+    for (const fila of [...secciones, menu.getByRole('link', { name: 'Configuración' })]) {
+      expect(fila).toHaveStyle({ display: 'flex', minHeight: '44px', justifyContent: 'flex-start' });
+      expect(fila).not.toHaveStyle({ flexDirection: 'column' });
+      expect(fila.querySelector('svg')).not.toBeNull();
+    }
+    // La sección actual va marcada; Configuración queda fuera de la lista, al pie.
+    expect(menu.getByRole('link', { name: 'Bandeja' })).toHaveAttribute('aria-current', 'page');
+    expect(menu.getByRole('link', { name: 'Inicio' })).not.toHaveAttribute('aria-current');
+    expect(within(menu.getByRole('list')).queryByRole('link', { name: 'Configuración' })).not.toBeInTheDocument();
+  });
+
+  it('muestra la empresa activa como bloque y el tema, y el tema cambia desde el cajón', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer]);
+    grupo.empresas = [
+      { id: 'emp', nombre: 'Constructora Norte' },
+      { id: 'otra', nombre: 'Constructora Sur' },
+    ];
+    montar('/e/emp/vinculos');
+    const { usuario, cajon } = await abrirCajon();
+
+    expect(within(cajon).getByText('Empresa activa')).toBeInTheDocument();
+    const empresa = within(cajon).getByRole('button', { name: /Empresa: Constructora Norte/ });
+    expect(empresa).toHaveStyle({ width: '100%', height: '44px' });
+
+    await usuario.click(within(cajon).getByRole('button', { name: 'Usar tema oscuro' }));
+    expect(usePreferencias.getState().modo).toBe('dark');
+    expect(within(cajon).getByRole('button', { name: 'Usar tema claro' })).toBeInTheDocument();
+  });
+
+  it('elegir una opción navega y cierra el cajón', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.configuracionLeer]);
+    montar('/e/emp/vinculos');
+    const { usuario, cajon } = await abrirCajon();
+
+    await usuario.click(within(cajon).getByRole('link', { name: 'Configuración' }));
+    expect(screen.getByTestId('ruta')).toHaveTextContent('/e/emp/tipos-vinculo');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('Esc y el botón de cerrar cierran el cajón sin navegar', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer]);
+    montar('/e/emp/vinculos');
+    const { usuario } = await abrirCajon();
+
+    await usuario.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await usuario.click(botonDeMenu());
+    await usuario.click(within(await screen.findByRole('dialog', { name: 'Menú principal' })).getByRole('button', { name: 'Cerrar el menú' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByTestId('ruta')).toHaveTextContent('/e/emp/vinculos');
+  });
+
+  it('el cajón no se queda abierto si la ventana se ensancha hasta donde aparece el riel', async () => {
+    const ventana = simularVentana(375);
+    permisos.scopes = new Set([SCOPES.vinculosLeer]);
+    montar('/e/emp/vinculos');
+    await abrirCajon();
+
+    ventana.ensanchar(900);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });

@@ -48,27 +48,29 @@ public sealed record IngresoDeOperadorDto(
 
 // ---------- Consumo de IA por cliente (PI-12) ----------
 
-/// <summary>Lo que gastó una empresa con un modelo en el mes: llamadas, tokens y costo real (con la llave de la propia empresa).</summary>
+/// <summary>Lo que gastó una empresa con un modelo en el mes: llamadas, tokens y costo estimado (con la llave de la propia empresa).</summary>
 public sealed record UsoPorModeloIaDto(string Modelo, int Llamadas, long TokensEntrada, long TokensEntradaEnCache, long TokensSalida, decimal CostoUsd);
 
 /// <summary>
 /// El consumo de IA de una empresa en un mes y lo que se le cobra por las validaciones adicionales. <see cref="PrecioPropio"/> verdadero = el precio es el que
-/// Plataforma fijó para esa empresa; falso = el de la tarifa general.
+/// Plataforma fijó para esa empresa; falso = el de la tarifa general. <see cref="CostoUsd"/> es el costo ESTIMADO de lo que OpenAI facturó a la llave de la empresa (tokens por la tarifa conocida del modelo; puede diferir del cobro de OpenAI). Lo
+/// reutilizado (IA-15) es informativo y nunca se suma al costo de la empresa que pagó: <see cref="ValidacionesReutilizadas"/> usaron un análisis que pagó otra empresa y
+/// <see cref="CostoReutilizadoUsd"/> es el costo atribuido de esos análisis (la empresa lo ve como propio; en Plataforma ya está contado en la empresa que pagó).
 /// </summary>
 public sealed record ConsumoDeIaEmpresaDto(
     Guid EmpresaId, string Empresa, int ValidacionesIncluidasMes, int IncluidasConsumidas, int AdicionalesConsumidas, bool AdicionalHabilitado, int AnalisisPagados,
     long TokensEntrada, long TokensEntradaEnCache, long TokensSalida, decimal CostoUsd, decimal PrecioAdicional, bool PrecioPropio, decimal ValorAdicional,
-    IReadOnlyList<UsoPorModeloIaDto> Modelos);
+    IReadOnlyList<UsoPorModeloIaDto> Modelos, int ValidacionesReutilizadas = 0, decimal CostoReutilizadoUsd = 0m);
 
 /// <summary>El consumo de las empresas de un grupo (los totales del grupo suman sus empresas).</summary>
 public sealed record ConsumoDeIaGrupoDto(
     Guid GrupoId, string Grupo, string Slug, int IncluidasConsumidas, int AdicionalesConsumidas, int AnalisisPagados, long TokensEntrada, long TokensSalida,
-    decimal CostoUsd, decimal ValorAdicional, IReadOnlyList<ConsumoDeIaEmpresaDto> Empresas);
+    decimal CostoUsd, decimal ValorAdicional, IReadOnlyList<ConsumoDeIaEmpresaDto> Empresas, int ValidacionesReutilizadas = 0, decimal CostoReutilizadoUsd = 0m);
 
-/// <summary>Totales del mes de todos los grupos que cumplen el filtro (no solo los de la página).</summary>
+/// <summary>Totales del mes de todos los grupos que cumplen el filtro (no solo los de la página). El costo reutilizado es informativo: no está sumado en <see cref="CostoUsd"/>.</summary>
 public sealed record ConsumoDeIaTotalesDto(
     int Grupos, int Empresas, int IncluidasConsumidas, int AdicionalesConsumidas, int AnalisisPagados, long TokensEntrada, long TokensSalida, decimal CostoUsd,
-    decimal ValorAdicional);
+    decimal ValorAdicional, int ValidacionesReutilizadas = 0, decimal CostoReutilizadoUsd = 0m);
 
 /// <summary>
 /// Consumo de IA por cliente en un mes (<c>yyyy-MM</c>): una página de grupos con sus empresas, los totales y la tarifa vigente con la que se calculó el valor

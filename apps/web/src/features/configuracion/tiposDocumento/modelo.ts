@@ -7,7 +7,7 @@ import type {
 } from '@validalo/api-client';
 
 /**
- * Tipos de documento configurables (docs/05 §2.9.4, TD-1…TD-9): reglas de archivo, modo y campos, vigencia y plantilla.
+ * Tipos de documento configurables (docs/05 §2.9.4, TD-1…TD-10): reglas de archivo, modo y campos, frescura (antigüedad máxima al subirlo y revalidación) y plantilla.
  * Aquí vive el borrador del formulario y su validación, igual que la API, para avisar antes de guardar; la API decide
  * (422 `formato-mas-laxo`, `limite-mas-laxo`, `limite-sobre-el-global`, `campo-duplicado`, `campo-reservado`…).
  */
@@ -26,9 +26,11 @@ export type Modo = (typeof MODOS)[number];
 export const AMBITOS = ['Global', 'PorVinculo'] as const;
 export const TIPOS_CAMPO = ['Texto', 'Numero', 'Fecha', 'Lista', 'SiNo'] as const;
 export type TipoCampo = (typeof TIPOS_CAMPO)[number];
-export const REGLAS_FRESCURA = ['Ninguna', 'MaxDiasDesdeExpedicion', 'MaxDiasDesdeAprobacion', 'PeriodoMinimo'] as const;
-export type ReglaFrescura = (typeof REGLAS_FRESCURA)[number];
-/** Claves con significado propio: la fecha de expedición alimenta la vigencia y el vencimiento propio la acota. */
+/** Unidad en la que se escribe «Revalidar cada»: se guarda siempre en días (un mes cuenta como 365/12 días, así 12 meses son 365). */
+export const UNIDADES_REVALIDACION = ['dias', 'meses'] as const;
+export type UnidadRevalidacion = (typeof UNIDADES_REVALIDACION)[number];
+export const MAXIMO_DIAS_FRESCURA = 3650;
+/** Claves con significado propio: la fecha de expedición se coteja con la antigüedad máxima y el vencimiento propio acota la vigencia. */
 export const CLAVES_RESERVADAS = ['fecha_expedicion', 'fecha_vencimiento'] as const;
 export const MAXIMO_CAMPOS = 50;
 
@@ -54,8 +56,12 @@ export interface BorradorTipo {
   paginas: string;
   modo: Modo;
   campos: CampoBorrador[];
-  frescura: ReglaFrescura;
-  diasFrescura: string;
+  /** Antigüedad máxima al subirlo, en días desde la expedición; vacío = no se exige. */
+  antiguedad: string;
+  /** Revalidar cada…, en la `unidadRevalidar` elegida, desde que la empresa lo aprueba; vacío = no vence por revalidación. */
+  revalidar: string;
+  unidadRevalidar: UnidadRevalidacion;
+  /** Periodo mínimo (regla heredada, aún sin fecha): solo se muestra si el tipo ya lo trae o su canónico lo sugiere. */
   periodo: string;
   diasAviso: string;
   diasGracia: string;
@@ -73,15 +79,16 @@ export type CodigoError =
   | 'campo-duplicado'
   | 'campo-reservado'
   | 'opciones-requeridas'
-  | 'dias-invalidos';
+  | 'dias-invalidos'
+  | 'antiguedad-invalida'
+  | 'revalidacion-invalida';
 
-export type CampoDelBorrador = 'codigo' | 'nombre' | 'tamanoMb' | 'paginas' | 'diasFrescura' | 'periodo' | 'diasAviso' | 'diasGracia' | 'campos' | 'ambito';
+export type CampoDelBorrador = 'codigo' | 'nombre' | 'tamanoMb' | 'paginas' | 'antiguedad' | 'revalidar' | 'diasAviso' | 'diasGracia' | 'campos' | 'ambito';
 
 export type ErrorBorrador = { campo: CampoDelBorrador; codigo: CodigoError } | { campo: 'campo'; indice: number; codigo: CodigoError };
 
 const esModo = (v: string | undefined): v is Modo => MODOS.some((m) => m === v);
 const esTipoCampo = (v: string): v is TipoCampo => TIPOS_CAMPO.some((t) => t === v);
-const esFrescura = (v: string): v is ReglaFrescura => REGLAS_FRESCURA.some((r) => r === v);
 
 export function formatoCortoDe(mime: string): FormatoCorto | null {
   return FORMATOS.find((f) => f.mime === mime || f.corto === mime)?.corto ?? null;
@@ -104,16 +111,30 @@ export function borradorNuevo(): BorradorTipo {
     paginas: '',
     modo: 'Archivo',
     campos: [],
-    frescura: 'Ninguna',
-    diasFrescura: '',
+    antiguedad: '',
+    revalidar: '',
+    unidadRevalidar: 'dias',
     periodo: '',
     diasAviso: '30, 15, 5',
     diasGracia: '15',
   };
 }
 
+/** Días de un mes: 365/12, redondeado, así «12 meses» son 365 días (un año) y «6 meses», 183. */
+export const mesesADias = (meses: number) => Math.round((meses * 365) / 12);
+
+/**
+ * Cómo se muestra un plazo en días al abrir el editor: en meses si es exactamente una cantidad entera de meses de dos o más (365 ⇒ 12 meses, 183 ⇒ 6 meses);
+ * si no, en días (30 sigue siendo «30 días»).
+ */
+export function plazoParaEditar(dias: number | null | undefined): { valor: string; unidad: UnidadRevalidacion } {
+  if (!dias) return { valor: '', unidad: 'dias' };
+  const meses = Math.round((dias * 12) / 365);
+  return meses >= 2 && mesesADias(meses) === dias ? { valor: String(meses), unidad: 'meses' } : { valor: String(dias), unidad: 'dias' };
+}
+
 export function borradorDe(tipo: TipoDocumentoTenantDto): BorradorTipo {
-  const frescura = esFrescura(tipo.reglaFrescura.tipo) ? tipo.reglaFrescura.tipo : 'Ninguna';
+  const revalidar = plazoParaEditar(tipo.revalidarCadaDias);
   return {
     codigo: tipo.codigo,
     nombre: tipo.nombre,
@@ -133,9 +154,10 @@ export function borradorDe(tipo: TipoDocumentoTenantDto): BorradorTipo {
       opciones: (c.opciones ?? []).join('\n'),
       ayuda: c.ayuda ?? '',
     })),
-    frescura,
-    diasFrescura: tipo.reglaFrescura.dias ? String(tipo.reglaFrescura.dias) : '',
-    periodo: tipo.reglaFrescura.regla ?? '',
+    antiguedad: tipo.antiguedadMaximaDias ? String(tipo.antiguedadMaximaDias) : '',
+    revalidar: revalidar.valor,
+    unidadRevalidar: revalidar.unidad,
+    periodo: tipo.reglaFrescura.tipo === 'PeriodoMinimo' ? (tipo.reglaFrescura.regla ?? '') : '',
     diasAviso: tipo.diasAviso.join(', '),
     diasGracia: String(tipo.diasGracia),
   };
@@ -158,6 +180,13 @@ export function claveDesdeEtiqueta(etiqueta: string): string {
 }
 
 const entero = (texto: string) => (/^\d+$/.test(texto.trim()) ? Number(texto.trim()) : null);
+/** Antigüedad máxima al subirlo en días; nula si el campo está vacío o no es un número. */
+export const diasDeAntiguedad = (b: Pick<BorradorTipo, 'antiguedad'>) => entero(b.antiguedad);
+/** «Revalidar cada» en días, con la unidad elegida; nulo si el campo está vacío o no es un número. */
+export function diasDeRevalidacion(b: Pick<BorradorTipo, 'revalidar' | 'unidadRevalidar'>): number | null {
+  const cantidad = entero(b.revalidar);
+  return cantidad === null ? null : b.unidadRevalidar === 'meses' ? mesesADias(cantidad) : cantidad;
+}
 const lista = (texto: string) => texto.split(/[\s,;]+/).filter(Boolean);
 export const opcionesDe = (texto: string) => texto.split('\n').map((o) => o.trim()).filter(Boolean);
 export const conCampos = (modo: Modo) => modo !== 'Archivo';
@@ -186,9 +215,10 @@ export function validarBorrador(b: BorradorTipo, creando: boolean): ErrorBorrado
     });
   }
 
-  if ((b.frescura === 'MaxDiasDesdeExpedicion' || b.frescura === 'MaxDiasDesdeAprobacion') && !(entero(b.diasFrescura) !== null && Number(b.diasFrescura) >= 1))
-    errores.push({ campo: 'diasFrescura', codigo: 'dias-invalidos' });
-  if (b.frescura === 'PeriodoMinimo' && !b.periodo.trim()) errores.push({ campo: 'periodo', codigo: 'requerido' });
+  const antiguedad = diasDeAntiguedad(b);
+  if (b.antiguedad.trim() && (antiguedad === null || antiguedad < 1 || antiguedad > MAXIMO_DIAS_FRESCURA)) errores.push({ campo: 'antiguedad', codigo: 'antiguedad-invalida' });
+  const revalidar = diasDeRevalidacion(b);
+  if (b.revalidar.trim() && (revalidar === null || revalidar < 1 || revalidar > MAXIMO_DIAS_FRESCURA)) errores.push({ campo: 'revalidar', codigo: 'revalidacion-invalida' });
   if (lista(b.diasAviso).some((d) => entero(d) === null || Number(d) < 1 || Number(d) > 365)) errores.push({ campo: 'diasAviso', codigo: 'dias-invalidos' });
   if (b.diasGracia.trim() && !(entero(b.diasGracia) !== null && Number(b.diasGracia) <= 365)) errores.push({ campo: 'diasGracia', codigo: 'dias-invalidos' });
   return errores;
@@ -206,18 +236,14 @@ function camposDto(b: BorradorTipo): CampoFormularioDto[] {
 }
 
 function comunes(b: BorradorTipo) {
-  const dias = entero(b.diasFrescura);
   return {
     nombre: b.nombre.trim(),
     ambito: b.ambito,
     textoAyuda: b.textoAyuda.trim() || null,
     formatosPermitidos: b.formatos,
     modo: b.modo,
-    reglaFrescura: {
-      tipo: b.frescura,
-      dias: b.frescura === 'MaxDiasDesdeExpedicion' || b.frescura === 'MaxDiasDesdeAprobacion' ? dias : null,
-      regla: b.frescura === 'PeriodoMinimo' ? b.periodo.trim() : null,
-    },
+    // La regla heredada solo conserva el periodo; la antigüedad máxima y la revalidación van en sus propios campos (TD-10).
+    reglaFrescura: b.periodo.trim() ? { tipo: 'PeriodoMinimo', dias: null, regla: b.periodo.trim() } : { tipo: 'Ninguna', dias: null, regla: null },
     diasAviso: lista(b.diasAviso).map(Number),
     diasGracia: entero(b.diasGracia) ?? 0,
   };
@@ -231,10 +257,12 @@ export function cuerpoCrear(b: BorradorTipo): CrearTipoDocumentoDto {
     tamanoMaximoMb: entero(b.tamanoMb),
     paginasMaximas: entero(b.paginas),
     campos: conCampos(b.modo) ? camposDto(b) : null,
+    antiguedadMaximaDias: diasDeAntiguedad(b),
+    revalidarCadaDias: diasDeRevalidacion(b),
   };
 }
 
-/** En un PUT, `0` vuelve al límite global y `[]` quita los campos (solo con modo Archivo). */
+/** En un PUT, `0` vuelve al límite global (o quita una regla de frescura) y `[]` quita los campos (solo con modo Archivo). */
 export function cuerpoActualizar(b: BorradorTipo): ActualizarTipoDocumentoDto {
   return {
     ...comunes(b),
@@ -242,6 +270,8 @@ export function cuerpoActualizar(b: BorradorTipo): ActualizarTipoDocumentoDto {
     tamanoMaximoMb: entero(b.tamanoMb) ?? 0,
     paginasMaximas: entero(b.paginas) ?? 0,
     campos: conCampos(b.modo) ? camposDto(b) : [],
+    antiguedadMaximaDias: diasDeAntiguedad(b) ?? 0,
+    revalidarCadaDias: diasDeRevalidacion(b) ?? 0,
   };
 }
 
@@ -277,4 +307,20 @@ export function megas(bytes: number): string {
   if (bytes < 1024 * 1024) return `${String(Math.max(1, Math.round(bytes / 1024)))} KB`;
   const mb = bytes / (1024 * 1024);
   return `${mb >= 10 || Number.isInteger(mb) ? String(Math.round(mb)) : mb.toFixed(1)} MB`;
+}
+
+/**
+ * Lo que sugiere el canónico para la frescura (TD-10): antigüedad máxima, revalidación y, si lo hay, el periodo. Al elegir el canónico al crear un tipo se
+ * precarga (la empresa lo ajusta); la API aplica lo mismo si no se manda ninguna regla.
+ */
+export function frescuraSugerida(
+  canonico: Pick<TipoDocumentoCanonicoDto, 'antiguedadMaximaSugeridaDias' | 'revalidarCadaSugeridoDias' | 'reglaFrescuraSugerida'>,
+): Pick<BorradorTipo, 'antiguedad' | 'revalidar' | 'unidadRevalidar' | 'periodo'> {
+  const revalidar = plazoParaEditar(canonico.revalidarCadaSugeridoDias);
+  return {
+    antiguedad: canonico.antiguedadMaximaSugeridaDias ? String(canonico.antiguedadMaximaSugeridaDias) : '',
+    revalidar: revalidar.valor,
+    unidadRevalidar: revalidar.unidad,
+    periodo: canonico.reglaFrescuraSugerida?.tipo === 'PeriodoMinimo' ? (canonico.reglaFrescuraSugerida.regla ?? '') : '',
+  };
 }

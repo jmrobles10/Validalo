@@ -27,7 +27,7 @@ public sealed class RequisitosLigaDeCertificacionApiTests(ApiFixture fixture, IT
     /// <summary>Certificación bancaria con marcas que lee el analizador falso (como el simulado de la API).</summary>
     private static byte[] CertificacionCon(string numeroCuenta, string identificacionTitular, string banco = "Davivienda S.A.") =>
         Pdf($"Certificación [[banco={banco}]][[tipoCuenta=Cuenta corriente]][[numeroCuenta={numeroCuenta}]][[titular=ACEROS DEL NORTE SAS]]" +
-            $"[[identificacionTitular={identificacionTitular}]][[estadoCuenta=Activa]]");
+            $"[[identificacionTitular={identificacionTitular}]]");
 
     private Task<CuentaBancariaPublicaDto> RegistrarAsync(SesionTerceroDto sesion, string banco, string numero, string nit) =>
         TerceroAsync<CuentaBancariaPublicaDto>("POST", Cuentas, sesion.AccessToken,

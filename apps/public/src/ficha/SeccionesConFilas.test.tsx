@@ -32,6 +32,8 @@ describe('Mi información: Información legal', () => {
     await escribir(usuario, within(dialogo).getByRole('textbox', { name: 'Apellidos' }), 'Gómez Ruiz');
     const pep = within(dialogo).getByRole('radiogroup', { name: '¿Es persona expuesta políticamente (PEP)?' });
     await usuario.click(within(pep).getByRole('radio', { name: 'No' }));
+    await usuario.click(within(within(dialogo).getByRole('radiogroup', { name: '¿Tiene vínculo con una persona expuesta políticamente?' })).getByRole('radio', { name: 'No' }));
+    await usuario.click(within(within(dialogo).getByRole('radiogroup', { name: '¿También es socio o accionista?' })).getByRole('radio', { name: 'No' }));
     await usuario.click(within(dialogo).getByRole('button', { name: 'Listo' }));
 
     await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -43,7 +45,7 @@ describe('Mi información: Información legal', () => {
     await usuario.click(screen.getByRole('button', { name: 'Guardar y continuar' }));
     await vi.waitFor(() => expect(guardados).toHaveLength(1));
     expect(guardados[0]?.cuerpo).toEqual({
-      datos: { personas: [{ rol: 'RepresentanteLegal', tipo_identificacion: 'CC', numero: '1020304050', nombres: 'Ana María', apellidos: 'Gómez Ruiz', pep: false }] },
+      datos: { personas: [{ rol: 'RepresentanteLegal', tipo_identificacion: 'CC', numero: '1020304050', nombres: 'Ana María', apellidos: 'Gómez Ruiz', pep: false, vinculo_pep: false }] },
       soportes: [],
     });
     await vi.waitFor(() => expect(screen.getByTestId('ubicacion')).toHaveTextContent('/ficha/financiera'));

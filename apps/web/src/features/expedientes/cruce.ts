@@ -27,9 +27,23 @@ export function porcentaje(valor: number): string {
 /** Largo mínimo de la justificación para aprobar con una discrepancia crítica (`Expediente.LongitudMinimaJustificacion`). */
 export const LONGITUD_MINIMA_JUSTIFICACION = 10;
 
-/** ¿El cruce que ve la empresa tiene diferencias en campos críticos? Un requisito de sección, un documento que respalda secciones o la certificación frente a las cuentas. */
-export function tieneDiscrepanciaCritica(requisito: Pick<RequisitoExpedienteDto, 'seccion' | 'soporteDeSecciones'>): boolean {
-  return requisito.seccion?.cruce?.discrepanciaCritica === true || requisito.soporteDeSecciones?.discrepanciaCritica === true;
+/**
+ * El campo «Antigüedad del documento» de la versión vigente (la regla de la antigüedad máxima del tipo, TD-10): lo que la API calcula como un campo del cruce, con su resultado
+ * (Coincide, Discrepa o NoVerificable) y su detalle. `null` si el tipo no tiene regla de antigüedad: entonces no aparece en ninguna parte.
+ */
+export const campoDeAntiguedad = (requisito: Pick<RequisitoExpedienteDto, 'versionActual'>): CampoCruzadoDto | null => requisito.versionActual?.antiguedad?.campo ?? null;
+
+/**
+ * ¿La antigüedad del documento es un hallazgo crítico? Lo es cuando supera el máximo de su tipo (`Excedida`) o no trae una fecha de expedición verificable (`SinFecha`): es una
+ * discrepancia crítica más (la API ya la cuenta: nunca se aprueba sola y aprobarla sin justificación es 422).
+ */
+export function antiguedadEsCritica(requisito: Pick<RequisitoExpedienteDto, 'versionActual'>): boolean {
+  return requisito.versionActual?.antiguedad?.critico === true;
+}
+
+/** ¿El cruce que ve la empresa tiene diferencias en campos críticos? Un requisito de sección, un documento que respalda secciones, la certificación frente a las cuentas o la antigüedad del documento. */
+export function tieneDiscrepanciaCritica(requisito: Pick<RequisitoExpedienteDto, 'seccion' | 'soporteDeSecciones' | 'versionActual'>): boolean {
+  return requisito.seccion?.cruce?.discrepanciaCritica === true || requisito.soporteDeSecciones?.discrepanciaCritica === true || antiguedadEsCritica(requisito);
 }
 
 /** ¿La sección cambió un campo crítico (identidad o representante legal) sin un documento nuevo que la respalde? (FM-15, FD-4). */
@@ -38,7 +52,7 @@ export function tieneSinSoporteCritico(requisito: Pick<RequisitoExpedienteDto, '
 }
 
 /** Aprobarlo exige una justificación: el cruce difiere en campos críticos o el cambio crítico no trae un documento nuevo. */
-export function requiereJustificacion(requisito: Pick<RequisitoExpedienteDto, 'seccion' | 'soporteDeSecciones'>): boolean {
+export function requiereJustificacion(requisito: Pick<RequisitoExpedienteDto, 'seccion' | 'soporteDeSecciones' | 'versionActual'>): boolean {
   return tieneDiscrepanciaCritica(requisito) || tieneSinSoporteCritico(requisito);
 }
 

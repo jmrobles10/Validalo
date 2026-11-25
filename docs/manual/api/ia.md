@@ -4,7 +4,7 @@
 
 ## Consumo de IA
 
-Medición del uso de IA por cliente para cobrar el adicional (PI-12): por grupo y empresa y por mes, las validaciones incluidas y adicionales consumidas, los análisis que pagó la llave de la empresa con sus tokens, modelo y costo, y el valor de lo adicional con el precio configurable (el de la empresa o, si no tiene, la tarifa general). Solo Plataforma; se ve en la consola y se exporta a Excel o CSV.
+Medición del uso de IA por cliente para cobrar el adicional (PI-12): por grupo y empresa y por mes, las validaciones incluidas y adicionales consumidas, los análisis que pagó la llave de la empresa con sus tokens, modelo y costo, y el valor de lo adicional con el precio configurable (el de la empresa o, si no tiene, la tarifa general). Solo Plataforma; se ve en la consola y se exporta a Excel o CSV. El costo es el ESTIMADO de lo que facturó OpenAI (tokens por la tarifa conocida de cada modelo; puede diferir del cobro de OpenAI) y se cuenta una sola vez, sin doble conteo: lo reutilizado (IA-15, las validaciones que usaron un análisis que pagó otra empresa y el costo atribuido de ese análisis) va aparte, solo como dato informativo, y nunca se suma a ese costo.
 
 ### `GET /api/v1/plataforma/ia/consumo`
 
@@ -44,6 +44,8 @@ Campos de la respuesta `200`:
 | `totales.tokensSalida` | entero | sí |  |
 | `totales.costoUsd` | number \| string | sí | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
 | `totales.valorAdicional` | number \| string | sí | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
+| `totales.validacionesReutilizadas` | entero | no |  |
+| `totales.costoReutilizadoUsd` | number \| string | no | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
 | `grupos` | lista de ConsumoDeIaGrupoDto | sí |  |
 | `grupos[].grupoId` | uuid | sí |  |
 | `grupos[].grupo` | texto | sí |  |
@@ -77,6 +79,10 @@ Campos de la respuesta `200`:
 | `grupos[].empresas[].modelos[].tokensEntradaEnCache` | entero | sí |  |
 | `grupos[].empresas[].modelos[].tokensSalida` | entero | sí |  |
 | `grupos[].empresas[].modelos[].costoUsd` | number \| string | sí | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
+| `grupos[].empresas[].validacionesReutilizadas` | entero | no |  |
+| `grupos[].empresas[].costoReutilizadoUsd` | number \| string | no | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
+| `grupos[].validacionesReutilizadas` | entero | no |  |
+| `grupos[].costoReutilizadoUsd` | number \| string | no | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
 | `siguienteCursor` | texto o null | no |  |
 
 <details><summary>Ejemplo de petición y respuesta</summary>
@@ -102,7 +108,9 @@ Respuesta `200`:
     "tokensEntrada": 1,
     "tokensSalida": 1,
     "costoUsd": 1,
-    "valorAdicional": 1
+    "valorAdicional": 1,
+    "validacionesReutilizadas": 1,
+    "costoReutilizadoUsd": 1
   },
   "grupos": [
     {
@@ -141,9 +149,13 @@ Respuesta `200`:
               "tokensSalida": null,
               "costoUsd": null
             }
-          ]
+          ],
+          "validacionesReutilizadas": 1,
+          "costoReutilizadoUsd": 1
         }
-      ]
+      ],
+      "validacionesReutilizadas": 1,
+      "costoReutilizadoUsd": 1
     }
   ],
   "siguienteCursor": "texto"
@@ -484,7 +496,7 @@ Plan y uso de IA de la empresa activa (pantalla «Plan y uso», ADR-0012).
 
 ### `GET /api/v1/ia/uso`
 
-**Obtener uso IA.** Plan resumido (sin la llave) y uso del mes `mes` (`yyyy-MM`; por defecto el actual en la zona horaria del tenant): validaciones incluidas y adicionales consumidas y restantes, análisis pagados con su llave, tokens, costo real en dólares y serie por día. 422 `mes-invalido`.
+**Obtener uso IA.** Plan resumido (sin la llave) y uso del mes `mes` (`yyyy-MM`; por defecto el actual en la zona horaria del tenant): validaciones incluidas y adicionales consumidas y restantes, análisis pagados con su llave, tokens, costo estimado en dólares y serie por día. Aparte, lo reutilizado (IA-15): las validaciones que usaron un análisis que pagó otra empresa y el costo y los tokens de ese análisis atribuidos a esta empresa; el costo de IA de todas sus validaciones es el propio más el reutilizado. 422 `mes-invalido`.
 
 **Permiso configuracion:leer · Empresa activa (`X-Empresa`) · API (`/api/v1`) · SDK: `obtenerUsoIa`**
 
@@ -531,6 +543,15 @@ Campos de la respuesta `200`:
 | `porDia[].tokensEntrada` | entero | sí |  |
 | `porDia[].tokensSalida` | entero | sí |  |
 | `porDia[].costoUsd` | number \| string | sí | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
+| `porDia[].reutilizadas` | entero | no |  |
+| `porDia[].tokensEntradaReutilizados` | entero | no |  |
+| `porDia[].tokensSalidaReutilizados` | entero | no |  |
+| `porDia[].costoReutilizadoUsd` | number \| string | no | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
+| `validacionesReutilizadas` | entero | no |  |
+| `tokensEntradaReutilizados` | entero | no |  |
+| `tokensEntradaEnCacheReutilizados` | entero | no |  |
+| `tokensSalidaReutilizados` | entero | no |  |
+| `costoReutilizadoUsd` | number \| string | no | patrón ^-?(?:0\|[1-9]\d*)(?:\.\d+)?$ |
 
 **Errores de negocio que lanza**
 
@@ -577,9 +598,18 @@ Respuesta `200`:
       "analisisPagados": 1,
       "tokensEntrada": 1,
       "tokensSalida": 1,
-      "costoUsd": 1
+      "costoUsd": 1,
+      "reutilizadas": 1,
+      "tokensEntradaReutilizados": 1,
+      "tokensSalidaReutilizados": 1,
+      "costoReutilizadoUsd": 1
     }
-  ]
+  ],
+  "validacionesReutilizadas": 1,
+  "tokensEntradaReutilizados": 1,
+  "tokensEntradaEnCacheReutilizados": 1,
+  "tokensSalidaReutilizados": 1,
+  "costoReutilizadoUsd": 1
 }
 ```
 

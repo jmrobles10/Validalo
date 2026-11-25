@@ -151,6 +151,15 @@ public sealed class RequisitoDeExpediente
                aprobaciones.Where(v => v.RevisorId is not null).Select(v => v.RevisorId).Distinct().Count() >= AprobadoresPara(area);
     }
 
+    /// <summary>
+    /// Cuándo la empresa aprobó este requisito (TD-10): la fecha del último veredicto de aprobación vigente de sus áreas, es decir, el momento en que
+    /// el requisito quedó <see cref="EstadoRequisito.Aprobado"/>. Nula si no lo está (o está eximido). De aquí corre «revalidar cada N días» del tipo.
+    /// </summary>
+    [JsonIgnore]
+    public DateTimeOffset? AprobadoEn => Estado == EstadoRequisito.Aprobado && !Eximido
+        ? Veredictos.Where(v => v is { Vigente: true, Veredicto: Veredicto.Aprobado, AreaId: not null }).Select(v => (DateTimeOffset?)v.Fecha).Max()
+        : null;
+
     public bool ObservadoPor(Guid areaId) => Veredictos.Any(v => v.Vigente && v.AreaId == areaId && v.Veredicto == Veredicto.Observado);
 
     public bool DecididoPor(AreaDeExpediente area) => AprobadoPor(area) || ObservadoPor(area.AreaId);
@@ -174,6 +183,32 @@ public sealed partial class Expediente
     public bool ListoParaRevision => Requisitos.Where(r => r.Obligatorio).All(r => r.VersionActual is not null || r.Eximido);
 
     public RequisitoDeExpediente? BuscarRequisito(Guid requisitoId) => Requisitos.FirstOrDefault(r => r.Id == requisitoId);
+
+    /// <summary>
+    /// Documentos de la bóveda (no secciones de la ficha) cuya aprobación por la empresa cambió respecto de <paramref name="antes"/> (nulo = el expediente
+    /// recién abierto): un requisito pasó a quedar aprobado con una versión, dejó de estarlo o cambió la versión aprobada (TD-10). Con ellos se pide recalcular la
+    /// vigencia del documento, que cuenta «revalidar cada N días» desde la aprobación.
+    /// </summary>
+    public IReadOnlyList<Guid> DocumentosConAprobacionCambiada(Expediente? antes)
+    {
+        static (Guid DocumentoId, int Numero)? Aprobada(RequisitoDeExpediente? requisito) =>
+            requisito is { EsSeccion: false, Eximido: false, Estado: EstadoRequisito.Aprobado, VersionActual: { } version } ? (version.DocumentoId, version.Numero) : null;
+
+        var documentos = new HashSet<Guid>();
+        foreach (var requisito in Requisitos.Where(r => !r.EsSeccion))
+        {
+            var despues = Aprobada(requisito);
+            var previa = Aprobada(antes?.BuscarRequisito(requisito.Id));
+            if (despues == previa)
+                continue;
+            if (despues is { } nueva)
+                documentos.Add(nueva.DocumentoId);
+            if (previa is { } anterior)
+                documentos.Add(anterior.DocumentoId);
+        }
+
+        return [.. documentos];
+    }
 
     /// <summary>Requisitos que cuentan para el área (en su alcance y no opcionales sin cargar).</summary>
     public IEnumerable<RequisitoDeExpediente> RequisitosDelArea(Guid areaId) => Requisitos.Where(r => r.Cuenta && r.LoRevisa(areaId));

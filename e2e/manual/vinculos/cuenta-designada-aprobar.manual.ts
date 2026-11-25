@@ -97,7 +97,7 @@ recorrido(
     await irASector(app, 'Cuenta bancaria');
     const tarjeta = tarjetaDe(app, 'Cuenta bancaria designada');
     await expect(tarjeta).toContainText('Por aprobar');
-    await expect(tarjeta).toContainText('0 de 2 aprobaciones');
+    await expect(tarjeta).toContainText('Necesita 2 aprobaciones · van 0');
     await paso(page, {
       titulo: 'Revisa la cuenta que el proveedor quiere designar',
       explicacion:
@@ -119,7 +119,7 @@ recorrido(
 
     await tarjeta.getByRole('button', { name: 'Aprobar' }).click();
     await app.getByRole('dialog').getByRole('button', { name: 'Aprobar' }).click();
-    await expect(tarjeta).toContainText('1 de 2 aprobaciones: Olga Oficial');
+    await expect(tarjeta).toContainText('Necesita 2 aprobaciones · van 1: Olga Oficial');
     await paso(page, {
       titulo: 'Aprueba la cuenta',
       explicacion:

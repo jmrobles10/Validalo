@@ -270,6 +270,7 @@ export const esCO = {
     vence: {
       FechaExpedicion: 'Vence el {{fecha}}: su regla de vigencia cuenta desde la fecha de expedición.',
       FechaCarga: 'Vence el {{fecha}}: su regla de vigencia cuenta desde la fecha de carga.',
+      Aprobacion: 'Vence el {{fecha}}: su regla de vigencia cuenta desde que la empresa aprobó el documento.',
       Ratificacion: 'Vence el {{fecha}}: su regla de vigencia cuenta desde que confirmaste que no cambió.',
       VencimientoPropio: 'Vence el {{fecha}}, la fecha de vencimiento del documento.',
       otra: 'Vence el {{fecha}}.',
@@ -525,6 +526,9 @@ export const esCO = {
     conPaginas_one: '{{formatos}} de hasta {{tamano}} y {{count}} página',
     conPaginas_other: '{{formatos}} de hasta {{tamano}} y {{count}} páginas',
     sinPaginas: '{{formatos}} de hasta {{tamano}}',
+    // La antigüedad máxima del documento al subirlo (TD-10): va junto a las reglas del archivo.
+    antiguedad_one: 'expedido hace menos de {{count}} día',
+    antiguedad_other: 'expedido hace menos de {{count}} días',
   },
   plantilla: {
     titulo: 'Usa el formato de {{empresa}}',
@@ -559,6 +563,17 @@ export const esCO = {
   },
   vigencia: {
     estados: { Vigente: 'Vigente', PorVencer: 'Por vencer', EnGracia: 'En periodo de gracia', Vencida: 'Vencido', SinVencimiento: 'No vence' },
+    // Antes de que la empresa apruebe el documento no hay fecha: la regla «revalidar cada N días» cuenta desde esa aprobación (TD-10).
+    porAprobar: 'Vence {{plazo}} después de que {{empresa}} lo apruebe',
+    porAprobarSinEmpresa: 'Vence {{plazo}} después de que la empresa lo apruebe',
+    plazo: {
+      dias_one: '{{count}} día',
+      dias_other: '{{count}} días',
+      meses_one: '{{count}} mes',
+      meses_other: '{{count}} meses',
+      anios_one: '{{count}} año',
+      anios_other: '{{count}} años',
+    },
     venceEl: 'Vence el {{fecha}}',
     vencioEl: 'Venció el {{fecha}}',
     avisos: {
@@ -620,9 +635,9 @@ export const esCO = {
       titulo: 'Lo que te pide {{empresa}}',
       grupos: { 'te-toca': 'Te toca', 'en-revision': 'Lo revisa {{empresa}}', listo: 'Listo' },
       version: 'Versión {{n}} · cargada el {{fecha}}',
-      faltaObligatorio: 'Aún no lo subes.',
+      faltaObligatorio: 'Aún no lo subes',
       porQue: 'Te lo pide {{empresa}} porque en tu ficha declaraste: {{motivos}}.',
-      faltaOpcional: 'Opcional: súbelo si lo tienes.',
+      faltaOpcional: 'Opcional: súbelo si lo tienes',
       acciones: { subir: 'Subir documento', corregir: 'Subir versión corregida', reemplazar: 'Subir otra versión' },
       accionesFormulario: { subir: 'Llenar formulario', corregir: 'Corregir los datos', reemplazar: 'Actualizar los datos' },
       versionFormulario: 'Versión {{n}} · enviada el {{fecha}}',

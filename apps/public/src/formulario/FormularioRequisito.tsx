@@ -54,7 +54,7 @@ export function FormularioRequisito({
         <CamposFormulario campos={campos} formulario={formulario} deshabilitado={envio.isPending} />
         <Stack direction={{ xs: 'column-reverse', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
           {formulario.falta && <FaltaParaEnviar>{formulario.falta}</FaltaParaEnviar>}
-          <Button type="submit" variant="contained" size="large" disabled={!formulario.completo || envio.isPending} sx={{ ml: { sm: 'auto' } }}>
+          <Button type="submit" variant="contained" disabled={!formulario.completo || envio.isPending} sx={{ ml: { sm: 'auto' } }}>
             {t('formulario.enviar')}
           </Button>
         </Stack>

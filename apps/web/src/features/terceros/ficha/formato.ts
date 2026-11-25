@@ -71,6 +71,13 @@ export function formatearValor(clave: string, valor: unknown, t: TFunction): str
 
 export const esObjeto = (valor: unknown): valor is Record<string, unknown> => typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 
+/** ¿El dato tiene algo que mostrar? Ni nada, ni texto vacío, ni lista o grupo vacíos (un `false` o un `0` sí cuentan: son respuestas). */
+export const tieneValor = (valor: unknown): boolean =>
+  valor !== null && valor !== undefined && valor !== '' && !(Array.isArray(valor) && valor.length === 0) && !(esObjeto(valor) && Object.values(valor).every((v) => !tieneValor(v)));
+
+/** Marca de un dato obligatorio que el tercero dejó vacío (lo dice la API en `faltantes`): se muestra como «Sin dato» en tono de advertencia. */
+export const SIN_DATO = Symbol('sin-dato');
+
 /** Lista de filas (personas, ICA): un arreglo de objetos. */
 export const esListaDeObjetos = (valor: unknown): valor is Record<string, unknown>[] => Array.isArray(valor) && valor.length > 0 && valor.every(esObjeto);
 

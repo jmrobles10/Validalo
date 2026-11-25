@@ -96,7 +96,11 @@ const ESCRITORIO = '@media (min-width:600px)';
 const MOVIL = '@media (max-width:599.95px)';
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** Alto de un campo y relleno de su texto: todos son «small» de MUI (`size="small"` por omisión): 36 px (texto de 13 px y renglón de 20) en las dos apps y en todos los anchos. */
+/**
+ * Alto de un campo y relleno de su texto: todos son «small» de MUI (`size="small"` por omisión): 36 px (texto de 13 px y renglón de 20) en las dos apps y en todos los anchos
+ * (en el celular del tercero el texto sube a 16 px, pero el renglón sigue en 20). Ese alto es `DENSIDAD.controlMedio`, el que toma el botón `small`
+ * (`control` en `createValidaloTheme`) para que un botón y un campo en la misma fila queden alineados; `pulido.test.tsx` (UI-2) comprueba que no se separen.
+ */
 const RELLENO_CAMPO = '8px 12px';
 
 /** Chevron de trazo fino de los desplegables (Select, Autocomplete): 16 px, en el color secundario; MUI lo gira al abrir. */
@@ -252,12 +256,14 @@ export function createValidaloTheme(modo: Modo = 'light', { app = 'web', colorEm
         },
       },
       MuiButtonBase: { defaultProps: { disableRipple: true } },
-      // Botones sobrios (UI-2): `medium` por omisión y el mismo alto que el campo de al lado (36 px en web; en el tercero 40 px, y 40 en el
-      // celular con el área táctil de 44 completada por un pseudoelemento invisible: el botón no se infla). `small` es para avisos, filas y
-      // tarjetas; `large` solo para la acción principal de una pantalla. Primarios rellenos del acento; secundarios (`outlined`) con borde y
-      // texto del acento; los de texto, del acento.
+      // Botones sobrios (UI-2): `small` por omisión en las dos apps, con EL MISMO alto que el campo `small` (`control`: 36 px, en escritorio y en
+      // el celular del tercero, donde el texto más grande no cambia el renglón de 20): así un botón y un campo en la misma fila quedan alineados
+      // sin compensar nada en la pantalla (ni `minHeight` ni `mt` sueltos). El área táctil de 44 del celular la completa un pseudoelemento
+      // invisible: el botón no se infla. Todas las acciones, también las principales, tienen ese tamaño; `medium` y `large` siguen definidos
+      // para quien los pida de forma explícita. Primarios rellenos del acento; secundarios (`outlined`) con borde y texto del acento; los de
+      // texto, del acento.
       MuiButton: {
-        defaultProps: { disableElevation: true, size: 'medium' },
+        defaultProps: { disableElevation: true, size: 'small' },
         styleOverrides: {
           root: {
             borderRadius: radioControl,
@@ -267,11 +273,11 @@ export function createValidaloTheme(modo: Modo = 'light', { app = 'web', colorEm
             ...(web ? {} : { [MOVIL]: { '&::after': { content: '""', position: 'absolute', left: 0, right: 0, top: '50%', height: DENSIDAD.objetivoTactil, transform: 'translateY(-50%)' } } }),
           },
           // El texto de los tres tamaños es el de la variante `button` (13 px; 15 px en el celular del tercero): aquí solo el alto y el relleno.
+          // `small`: el alto del campo (`control`); 7 px arriba y abajo + el renglón de 20 de la variante (+ el borde de 1 px del `outlined`) = 36.
           sizeSmall: {
             ...textoBoton,
-            ...(web
-              ? { minHeight: 30, padding: '4px 10px', lineHeight: '18px' }
-              : { minHeight: 32, padding: '5px 12px', [ESCRITORIO]: { minHeight: 30, padding: '4px 12px', lineHeight: '18px' } }),
+            minHeight: control,
+            padding: web ? '7px 10px' : '7px 12px',
           },
           sizeMedium: {
             ...textoBoton,

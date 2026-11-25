@@ -233,29 +233,58 @@ public class TiposDocumentoConfigurablesTests
     // ---------- vigencia (TD-6) ----------
 
     [Fact]
-    public void La_vigencia_cuenta_desde_la_expedicion_declarada_o_desde_la_carga()
+    public void La_vigencia_por_revalidacion_cuenta_desde_la_aprobacion_de_la_empresa_y_antes_no_hay_fecha()
     {
-        var regla = ReglaFrescura.DiasDesdeExpedicion(30);
+        var aprobada = new DateTimeOffset(2026, 11, 1, 15, 0, 0, TimeSpan.Zero);
         var expedida = new DatoDeclarado(EsquemaDeFormulario.FechaExpedicion, "Expedición", TipoCampo.Fecha, "2026-10-01");
 
-        CalculadoraDeVigencia.Calcular(regla, Ahora, [expedida]).ShouldBe(new CalculoDeVigencia(new DateOnly(2026, 10, 31), BaseVigencia.FechaExpedicion));
-        CalculadoraDeVigencia.Calcular(regla, Ahora, null).ShouldBe(new CalculoDeVigencia(new DateOnly(2026, 12, 6), BaseVigencia.FechaCarga));
-        CalculadoraDeVigencia.Calcular(ReglaFrescura.DiasDesdeAprobacion(10), Ahora, [expedida]).VigenteHasta.ShouldBe(new DateOnly(2026, 11, 16));
-        CalculadoraDeVigencia.Calcular(ReglaFrescura.Ninguna, Ahora, [expedida]).ShouldBe(new CalculoDeVigencia(null, BaseVigencia.SinVencimiento));
-        CalculadoraDeVigencia.Calcular(ReglaFrescura.Periodo("ultimo-anio"), Ahora, null).Base.ShouldBe(BaseVigencia.PeriodoNoCalculado);
+        // Sin aprobación no hay vigencia por revalidación; la expedición no cuenta (la antigüedad máxima no define la vigencia).
+        CalculadoraDeVigencia.Calcular(ReglasDeVigencia.Ambas(30, 365), [expedida]).ShouldBe(new CalculoDeVigencia(null, BaseVigencia.SinVencimiento));
+        CalculadoraDeVigencia.Calcular(ReglasDeVigencia.SoloRevalidacion(10), [expedida], aprobada)
+            .ShouldBe(new CalculoDeVigencia(new DateOnly(2026, 11, 11), BaseVigencia.Aprobacion));
+        // Solo la antigüedad máxima: nunca vence por revalidación, aunque esté aprobado.
+        CalculadoraDeVigencia.Calcular(ReglasDeVigencia.SoloAntiguedad(30), [expedida], aprobada).ShouldBe(new CalculoDeVigencia(null, BaseVigencia.SinVencimiento));
+        CalculadoraDeVigencia.Calcular(ReglasDeVigencia.Ninguna, [expedida], aprobada).ShouldBe(new CalculoDeVigencia(null, BaseVigencia.SinVencimiento));
+        CalculadoraDeVigencia.Calcular(ReglasDeVigencia.DePeriodo("ultimo-anio"), null).Base.ShouldBe(BaseVigencia.PeriodoNoCalculado);
     }
 
     [Fact]
-    public void El_vencimiento_propio_acota_la_vigencia_si_llega_antes()
+    public void El_vencimiento_propio_acota_la_vigencia_si_llega_antes_que_la_revalidacion()
     {
-        var expedida = new DatoDeclarado(EsquemaDeFormulario.FechaExpedicion, "Expedición", TipoCampo.Fecha, "2026-10-01");
+        var aprobada = new DateTimeOffset(2026, 10, 1, 15, 0, 0, TimeSpan.Zero);
         var vence = new DatoDeclarado(EsquemaDeFormulario.FechaVencimiento, "Vencimiento", TipoCampo.Fecha, "2026-10-20");
 
-        CalculadoraDeVigencia.Calcular(ReglaFrescura.DiasDesdeExpedicion(30), Ahora, [expedida, vence])
+        CalculadoraDeVigencia.Calcular(ReglasDeVigencia.SoloRevalidacion(30), [vence], aprobada)
             .ShouldBe(new CalculoDeVigencia(new DateOnly(2026, 10, 20), BaseVigencia.VencimientoPropio));
-        CalculadoraDeVigencia.Calcular(ReglaFrescura.DiasDesdeExpedicion(10), Ahora, [expedida, vence]).Base.ShouldBe(BaseVigencia.FechaExpedicion);
-        // Sin regla, una póliza vence en su propia fecha.
-        CalculadoraDeVigencia.Calcular(ReglaFrescura.Ninguna, Ahora, [vence]).VigenteHasta.ShouldBe(new DateOnly(2026, 10, 20));
+        CalculadoraDeVigencia.Calcular(ReglasDeVigencia.SoloRevalidacion(10), [vence], aprobada).Base.ShouldBe(BaseVigencia.Aprobacion);
+        // Antes de la aprobación solo rige el vencimiento propio, y sin regla también.
+        CalculadoraDeVigencia.Calcular(ReglasDeVigencia.SoloRevalidacion(30), [vence]).ShouldBe(new CalculoDeVigencia(new DateOnly(2026, 10, 20), BaseVigencia.VencimientoPropio));
+        CalculadoraDeVigencia.Calcular(ReglasDeVigencia.Ninguna, [vence]).VigenteHasta.ShouldBe(new DateOnly(2026, 10, 20));
+    }
+
+    [Fact]
+    public void La_revalidacion_cuenta_desde_la_aprobacion_y_no_desde_la_carga()
+    {
+        var rut = Documento.Create(Documento.CrearGlobal(Tercero, CatalogoCanonico.Requerido("RUT"), Ahora));
+        foreach (var evento in rut.RegistrarVersionArchivo(new ArchivoVerificado(1, "a1", "boveda", "t/a1", "application/pdf", "application/pdf", 10,
+                     "rut.pdf", 1, null, "t"), null, Antivirus.NoDisponible, false, Ahora))
+            rut.Aplicar(evento);
+        var a = new VinculoCandidato(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Tercero, true, EstadoVinculo.EnValidacion, true);
+        rut.Aplicar(rut.Compartir(a, OrigenComparticion.AlAceptarInvitacion, Ahora)!);
+        var tipo = TipoDocumentoTenant.Crear(a.TenantId, "RUT", null, "RUT", null, null, [5], 2, null, null, Ahora, antiguedadMaximaDias: 30, revalidarCadaDias: 365);
+
+        // Cargado y compartido pero sin aprobar: se registra la vigencia sin fecha por revalidación.
+        var sinAprobar = rut.CalcularVigencias([new DestinoDeVigencia(a.TenantId, a.EmpresaId, a.VinculoId, tipo)], Ahora).ShouldHaveSingleItem();
+        (sinAprobar.VigenteHasta, sinAprobar.Base, sinAprobar.AprobadaEn).ShouldBe((null, BaseVigencia.SinVencimiento, null));
+        rut.Aplicar(sinAprobar);
+
+        // Aprobada 20 días después de la carga: los 365 días cuentan desde la aprobación.
+        var aprobada = Ahora.AddDays(20);
+        var conAprobacion = rut.CalcularVigencias([new DestinoDeVigencia(a.TenantId, a.EmpresaId, a.VinculoId, tipo, aprobada)], aprobada).ShouldHaveSingleItem();
+        (conAprobacion.VigenteHasta, conAprobacion.Base, conAprobacion.AprobadaEn).ShouldBe((Hoy.AddDays(20 + 365), BaseVigencia.Aprobacion, aprobada));
+        rut.Aplicar(conAprobacion);
+        rut.VersionRequerida(1).VigenciaPara(a.VinculoId)!.AprobadaEn.ShouldBe(aprobada);
+        rut.CalcularVigencias([new DestinoDeVigencia(a.TenantId, a.EmpresaId, a.VinculoId, tipo, aprobada)], aprobada).ShouldBeEmpty(); // idempotente
     }
 
     [Fact]
@@ -284,12 +313,12 @@ public class TiposDocumentoConfigurablesTests
         rut.Aplicar(rut.Compartir(a, OrigenComparticion.AlAceptarInvitacion, Ahora)!);
         rut.Aplicar(rut.Compartir(b, OrigenComparticion.AlAceptarInvitacion, Ahora)!);
 
-        var estricto = TipoDocumentoTenant.Crear(a.TenantId, "RUT", null, "RUT", null, ReglaFrescura.DiasDesdeExpedicion(10), [5], 2, null, null, Ahora);
-        var laxo = TipoDocumentoTenant.Crear(b.TenantId, "RUT", null, "RUT", null, ReglaFrescura.DiasDesdeExpedicion(30), [5], 0, null, null, Ahora);
+        var estricto = TipoDocumentoTenant.Crear(a.TenantId, "RUT", null, "RUT", null, null, [5], 2, null, null, Ahora, revalidarCadaDias: 10);
+        var laxo = TipoDocumentoTenant.Crear(b.TenantId, "RUT", null, "RUT", null, null, [5], 0, null, null, Ahora, revalidarCadaDias: 30);
         DestinoDeVigencia[] destinos =
         [
-            new(a.TenantId, a.EmpresaId, a.VinculoId, estricto), new(b.TenantId, b.EmpresaId, b.VinculoId, laxo),
-            new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), laxo) // no compartido: se ignora
+            new(a.TenantId, a.EmpresaId, a.VinculoId, estricto, Ahora), new(b.TenantId, b.EmpresaId, b.VinculoId, laxo, Ahora),
+            new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), laxo, Ahora) // no compartido: se ignora
         ];
 
         var vigencias = rut.CalcularVigencias(destinos, Ahora);
@@ -329,8 +358,8 @@ public class TiposDocumentoConfigurablesTests
         var b = new VinculoCandidato(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Tercero, true, EstadoVinculo.Activo, true);
         rut.Aplicar(rut.Compartir(a, OrigenComparticion.AlAceptarInvitacion, Ahora)!);
         rut.Aplicar(rut.Compartir(b, OrigenComparticion.AlAceptarInvitacion, Ahora)!);
-        var tipo = TipoDocumentoTenant.Crear(a.TenantId, "RUT", null, "RUT", null, ReglaFrescura.DiasDesdeExpedicion(10), [5], 2, null, null, Ahora);
-        DestinoDeVigencia[] destinos = [new(a.TenantId, a.EmpresaId, a.VinculoId, tipo), new(b.TenantId, b.EmpresaId, b.VinculoId, tipo)];
+        var tipo = TipoDocumentoTenant.Crear(a.TenantId, "RUT", null, "RUT", null, null, [5], 2, null, null, Ahora, revalidarCadaDias: 10);
+        DestinoDeVigencia[] destinos = [new(a.TenantId, a.EmpresaId, a.VinculoId, tipo, Ahora), new(b.TenantId, b.EmpresaId, b.VinculoId, tipo, Ahora)];
         foreach (var evento in rut.CalcularVigencias(destinos, Ahora))
             rut.Aplicar(evento);
         var vencio = new DateTimeOffset(2026, 11, 19, 5, 0, 0, TimeSpan.Zero);
@@ -354,12 +383,12 @@ public class TiposDocumentoConfigurablesTests
     [Fact]
     public void Una_fecha_de_vencimiento_propia_sigue_acotando_la_ratificacion()
     {
-        var regla = ReglaFrescura.DiasDesdeExpedicion(365);
+        var regla = ReglasDeVigencia.SoloRevalidacion(365);
         var ratificada = new DateTimeOffset(2026, 11, 9, 12, 0, 0, TimeSpan.Zero);
-        CalculadoraDeVigencia.Calcular(regla, Ahora, null, ratificada)
+        CalculadoraDeVigencia.Calcular(regla, null, ratificadaEn: ratificada)
             .ShouldBe(new CalculoDeVigencia(new DateOnly(2027, 11, 9), BaseVigencia.Ratificacion));
         var conTope = new List<DatoDeclarado> { new(EsquemaDeFormulario.FechaVencimiento, "Fecha de vencimiento", TipoCampo.Fecha, "2027-03-01") };
-        CalculadoraDeVigencia.Calcular(regla, Ahora, conTope, ratificada)
+        CalculadoraDeVigencia.Calcular(regla, conTope, ratificadaEn: ratificada)
             .ShouldBe(new CalculoDeVigencia(new DateOnly(2027, 3, 1), BaseVigencia.VencimientoPropio));
     }
 

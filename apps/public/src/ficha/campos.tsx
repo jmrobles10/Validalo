@@ -18,10 +18,13 @@ interface PropsCampoTexto {
   autoComplete?: string;
   maxLength?: number;
   deshabilitado?: boolean;
+  /** Lo marca con el asterisco del tema. */
+  requerido?: boolean;
+  onBlur?: () => void;
 }
 
 /** Campo de texto a todo el ancho; el mensaje del servidor (faltante o error) va en su ayuda. */
-export function CampoTexto({ etiqueta, valor, onCambiar, mensaje, ayuda, tipo = 'text', inputMode, autoComplete = 'off', maxLength = 300, deshabilitado = false }: PropsCampoTexto) {
+export function CampoTexto({ etiqueta, valor, onCambiar, mensaje, ayuda, tipo = 'text', inputMode, autoComplete = 'off', maxLength = 300, deshabilitado = false, requerido = false, onBlur }: PropsCampoTexto) {
   return (
     <TextField
       label={etiqueta}
@@ -31,6 +34,8 @@ export function CampoTexto({ etiqueta, valor, onCambiar, mensaje, ayuda, tipo = 
       error={Boolean(mensaje)}
       helperText={mensaje ?? ayuda}
       disabled={deshabilitado}
+      required={requerido}
+      onBlur={onBlur}
       fullWidth
       slotProps={{ htmlInput: { inputMode, autoComplete, maxLength } }}
     />
@@ -47,12 +52,14 @@ interface PropsCampoFechaFicha {
   deshabilitado?: boolean;
   /** Última fecha elegible (ISO), p. ej. hoy en una fecha que no puede ser futura. */
   maximo?: string;
+  requerido?: boolean;
+  onBlur?: () => void;
 }
 
 /** Fecha con el selector de la aplicación (`dd/mm/aaaa` y calendario); sin fecha es `null`, como en `CampoTexto`. */
-export function CampoFechaFicha({ etiqueta, valor, onCambiar, mensaje, ayuda, deshabilitado = false, maximo }: PropsCampoFechaFicha) {
+export function CampoFechaFicha({ etiqueta, valor, onCambiar, mensaje, ayuda, deshabilitado = false, maximo, requerido = false, onBlur }: PropsCampoFechaFicha) {
   return (
-    <CampoFecha etiqueta={etiqueta} valor={valor} onCambiar={(iso) => onCambiar(iso === '' ? null : iso)} error={Boolean(mensaje)} ayuda={mensaje ?? ayuda} deshabilitado={deshabilitado} maximo={maximo} fullWidth />
+    <CampoFecha etiqueta={etiqueta} valor={valor} onCambiar={(iso) => onCambiar(iso === '' ? null : iso)} error={Boolean(mensaje)} ayuda={mensaje ?? ayuda} deshabilitado={deshabilitado} maximo={maximo} requerido={requerido} onBlur={onBlur} fullWidth />
   );
 }
 
@@ -64,13 +71,15 @@ interface PropsCampoCifra {
   ayuda?: string;
   entero?: boolean;
   deshabilitado?: boolean;
+  requerido?: boolean;
+  onBlur?: () => void;
 }
 
 /**
  * Cifra escrita como en Colombia (puntos de miles, coma decimal). Guarda el texto mientras se escribe y entrega el
  * número; lo ilegible queda vacío para el servidor y se avisa en el campo.
  */
-export function CampoCifra({ etiqueta, valor, onCambiar, mensaje, ayuda, entero = false, deshabilitado = false }: PropsCampoCifra) {
+export function CampoCifra({ etiqueta, valor, onCambiar, mensaje, ayuda, entero = false, deshabilitado = false, requerido = false, onBlur }: PropsCampoCifra) {
   const { t } = useTranslation();
   const [texto, setTexto] = useState(() => (entero && valor !== null && valor !== undefined ? String(valor) : escribirCifra(valor)));
   const leido = leerCifra(texto);
@@ -87,6 +96,8 @@ export function CampoCifra({ etiqueta, valor, onCambiar, mensaje, ayuda, entero 
       error={invalido || Boolean(mensaje)}
       helperText={invalido ? t('ficha.numeroInvalido') : (mensaje ?? ayuda)}
       disabled={deshabilitado}
+      required={requerido}
+      onBlur={onBlur}
       fullWidth
       slotProps={{ htmlInput: { inputMode: entero ? 'numeric' : 'decimal', autoComplete: 'off', maxLength: 30 } }}
     />
@@ -101,16 +112,19 @@ interface PropsCampoSiNo {
   deshabilitado?: boolean;
   /** Pregunta y opciones en la misma fila (desde tableta), para listas de preguntas como SST. */
   enLinea?: boolean;
+  /** La marca con el asterisco del tema. */
+  requerido?: boolean;
 }
 
 /** Pregunta sí/no compacta, con la pregunta y las opciones en la misma fila (desde tableta); sin responder es `null` (un «No» sí es respuesta). */
-export function CampoSiNo({ etiqueta, valor, onCambiar, mensaje, deshabilitado = false, enLinea = true }: PropsCampoSiNo) {
+export function CampoSiNo({ etiqueta, valor, onCambiar, mensaje, deshabilitado = false, enLinea = true, requerido = false }: PropsCampoSiNo) {
   const { t } = useTranslation();
   const id = useId();
   return (
     <FormControl
       error={Boolean(mensaje)}
       disabled={deshabilitado}
+      required={requerido}
       sx={enLinea ? { display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'minmax(0, 1fr) auto' }, columnGap: 3, alignItems: 'center' } : undefined}
     >
       <FormLabel id={`${id}-etiqueta`} sx={enLinea ? { typography: 'body2', color: 'text.primary' } : undefined}>

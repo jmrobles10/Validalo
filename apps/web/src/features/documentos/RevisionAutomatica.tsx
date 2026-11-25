@@ -2,9 +2,11 @@ import { Alert, AlertTitle, Box, Chip, Stack, Tooltip, Typography } from '@mui/m
 import type { HechosDto, HechosIaDto } from '@validalo/api-client';
 import { LOCALE } from '@validalo/ui';
 import { Sparkles } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { camposExtraidos, confianzaDe, estadoRevision, textoDelAnalisis, tipoNoCoincide, UMBRAL_CONFIANZA } from './revisionIa';
 import { CamposIa } from './CamposIa';
+import { EncabezadoDeLectura } from './EncabezadoDeLectura';
 import type { FilaDeDato } from './ListaDeDatos';
 
 /** El tipo canónico que pide el requisito y su nombre, para avisar si el archivo parece ser otro. */
@@ -20,6 +22,15 @@ export interface RevisionAutomaticaProps {
   limite?: number;
   /** Sin el pie «Analizado el … · modelo»: quien aloja el panel lo junta con otras notas en una sola línea (la tarjeta del requisito). */
   sinPie?: boolean;
+  /** Hay un cruce con lo declarado que ya cuenta lo importante: los datos leídos quedan tras «Ver lo que leyó la IA» (la confianza, si es legible y el tipo siguen a la vista). */
+  plegarCampos?: boolean;
+  /**
+   * La revisión dentro de un bloque propio (la tarjeta del requisito): el encabezado en una fila con el título y, a la derecha, «Analizado el … · modelo · Confianza 98 %»
+   * (la confianza como dato, no como chip), un divisor y el contenido; sin el pie de abajo.
+   */
+  enBloque?: boolean;
+  /** Lo que va primero en el contenido del bloque, antes de lo que leyó la IA (el resumen del cruce, lo importante). */
+  resumen?: ReactNode;
 }
 
 const PORCENTAJE = new Intl.NumberFormat(LOCALE, { style: 'percent', maximumFractionDigits: 0 });
@@ -29,7 +40,7 @@ const PORCENTAJE = new Intl.NumberFormat(LOCALE, { style: 'percent', maximumFrac
  * manipulación y, en una sola lista alineada, legibilidad, tipo detectado y los datos extraídos. Sin análisis visible para la
  * empresa (`conIa` falso), una línea discreta que pide revisarla a mano. El modelo solo va en texto pequeño.
  */
-export function RevisionAutomatica({ hechos, tipoEsperado, limite, sinPie = false }: RevisionAutomaticaProps) {
+export function RevisionAutomatica({ hechos, tipoEsperado, limite, sinPie = false, plegarCampos = false, enBloque = false, resumen }: RevisionAutomaticaProps) {
   const { t } = useTranslation();
   const estado = estadoRevision(hechos);
   if (estado === 'nada' || !hechos) return null;
@@ -40,10 +51,14 @@ export function RevisionAutomatica({ hechos, tipoEsperado, limite, sinPie = fals
       </Typography>
     );
   }
-  return <ConAnalisis ia={hechos.ia} tipoEsperado={tipoEsperado} limite={limite} sinPie={sinPie} />;
+  return <ConAnalisis ia={hechos.ia} tipoEsperado={tipoEsperado} limite={limite} sinPie={sinPie} plegarCampos={plegarCampos} enBloque={enBloque} resumen={resumen} />;
 }
 
-function ConAnalisis({ ia, tipoEsperado, limite, sinPie }: { ia: HechosIaDto; tipoEsperado?: TipoEsperado | null; limite?: number; sinPie: boolean }) {
+interface ConAnalisisProps extends Required<Pick<RevisionAutomaticaProps, 'sinPie' | 'plegarCampos' | 'enBloque'>>, Pick<RevisionAutomaticaProps, 'tipoEsperado' | 'limite' | 'resumen'> {
+  ia: HechosIaDto;
+}
+
+function ConAnalisis({ ia, tipoEsperado, limite, sinPie, plegarCampos, enBloque, resumen }: ConAnalisisProps) {
   const { t } = useTranslation();
   const confianza = confianzaDe(ia);
   const alta = confianza !== null && confianza >= UMBRAL_CONFIANZA;
@@ -61,19 +76,24 @@ function ConAnalisis({ ia, tipoEsperado, limite, sinPie }: { ia: HechosIaDto; ti
 
   return (
     <Box component="section" aria-label={t('ia.revision.titulo')}>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 0.75 }}>
-        <Sparkles size={14} strokeWidth={1.75} aria-hidden />
-        <Typography variant="overline" component="h3" sx={{ color: 'text.secondary' }}>
-          {t('ia.revision.titulo')}
-        </Typography>
-        {confianza !== null && (
-          <Tooltip title={t('ia.revision.confianzaAyuda', { umbral: PORCENTAJE.format(UMBRAL_CONFIANZA) })}>
-            <Chip size="small" variant="outlined" color={alta ? 'success' : 'warning'} label={t('ia.revision.confianza', { porcentaje: PORCENTAJE.format(confianza) })} />
-          </Tooltip>
-        )}
-        {ia.escalado && <Chip size="small" variant="outlined" label={t('ia.revision.escalado')} />}
-      </Stack>
+      {enBloque ? (
+        <EncabezadoDeLectura ia={ia} confianza={confianza} />
+      ) : (
+        <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 0.75 }}>
+          <Sparkles size={14} strokeWidth={1.75} aria-hidden />
+          <Typography variant="overline" component="h3" sx={{ color: 'text.secondary' }}>
+            {t('ia.revision.titulo')}
+          </Typography>
+          {confianza !== null && (
+            <Tooltip title={t('ia.revision.confianzaAyuda', { umbral: PORCENTAJE.format(UMBRAL_CONFIANZA) })}>
+              <Chip size="small" variant="outlined" color={alta ? 'success' : 'warning'} label={t('ia.revision.confianza', { porcentaje: PORCENTAJE.format(confianza) })} />
+            </Tooltip>
+          )}
+          {ia.escalado && <Chip size="small" variant="outlined" label={t('ia.revision.escalado')} />}
+        </Stack>
+      )}
       <Stack spacing={1}>
+        {resumen}
         {otroTipo && tipoEsperado && (
           <Alert severity="warning">{t('ia.revision.tipoNoCoincide', { detectado: nombreTipo(ia.tipoDetectado), esperado: tipoEsperado.nombre })}</Alert>
         )}
@@ -87,7 +107,7 @@ function ConAnalisis({ ia, tipoEsperado, limite, sinPie }: { ia: HechosIaDto; ti
             </Box>
           </Alert>
         )}
-        <CamposIa campos={campos} titulo={t('ia.revision.campos')} limite={limite} previas={previas} />
+        <CamposIa campos={campos} titulo={t('ia.revision.campos')} limite={limite} previas={previas} plegados={plegarCampos} />
         {campos.length === 0 && (
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             {t('ia.revision.sinCampos')}
@@ -103,7 +123,7 @@ function ConAnalisis({ ia, tipoEsperado, limite, sinPie }: { ia: HechosIaDto; ti
             {t('ia.revision.paginasOmitidas', { count: ia.paginasEnviadas ?? 0 })}
           </Typography>
         )}
-        {!sinPie && (
+        {!sinPie && !enBloque && (
           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
             {textoDelAnalisis(ia, t)}
           </Typography>

@@ -73,3 +73,14 @@ export const personaDesdeRelacion = (r: RelacionEntreTercerosDto): PersonaRelaci
   cargo: r.cargo,
   porcentaje: r.participacion === null ? null : Number(r.participacion),
 });
+
+/** Los roles de la ficha que son una relación con el tercero (ADR-0010): quien los tiene es una persona con bóveda propia y documentos propios. */
+export const ROLES_CON_BOVEDA: readonly RolPersona[] = ['RepresentanteLegal', 'Suplente', 'Socio'];
+
+/** El documento de la bóveda de la persona que prueba su identidad: el pasaporte para quien se identifica con uno; la cédula (de ciudadanía o de extranjería) para el resto. */
+export const tipoCanonicoDeIdentidad = (tipoIdentificacion: string | null | undefined): 'CEDULA' | 'PASAPORTE' =>
+  ['PA', 'PASAPORTE'].includes((tipoIdentificacion ?? '').trim().toUpperCase()) ? 'PASAPORTE' : 'CEDULA';
+
+/** ¿La relación es de la persona de esa fila de la ficha? Mismo tipo y número de identificación (sin puntos ni guiones). */
+export const esRelacionDe = (r: Pick<RelacionEntreTercerosDto, 'identificacion'>, p: Pick<PersonaRelacionada, 'tipo_identificacion' | 'numero'>): boolean =>
+  normalizar(p.numero) !== '' && normalizar(r.identificacion.numero) === normalizar(p.numero) && r.identificacion.tipo.toUpperCase() === (p.tipo_identificacion ?? '').trim().toUpperCase();

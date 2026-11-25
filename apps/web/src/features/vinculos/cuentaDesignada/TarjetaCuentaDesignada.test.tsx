@@ -11,9 +11,11 @@ import {
   type CruceDeSeccionDto,
   type CuentaDesignadaDelVinculoDto,
   type CuentaDesignadaDto,
+  type SesionValidalo,
 } from '@validalo/api-client';
 import { createValidaloTheme } from '@validalo/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useSesion } from '../../../sesion/sesionStore';
 import { useAvisos } from '../../../shared/useAvisos';
 import { TarjetaCuentaDesignada } from './TarjetaCuentaDesignada';
 
@@ -67,10 +69,30 @@ function montar(inicial: CuentaDesignadaDelVinculoDto, responder: (url: string, 
   return peticiones;
 }
 
+/** La persona que mira (para «Ya la aprobaste»: la API le dice `puedesAprobar: false` y la tarjeta reconoce su aprobación por el usuario de la sesión). */
+function iniciarSesion(usuarioId: string) {
+  const sesion: SesionValidalo = {
+    token: 'tok',
+    expira: new Date(Date.now() + 30 * 60_000),
+    usuarioId,
+    tenantId: 't-1',
+    nombre: null,
+    sistema: null,
+    sesionId: null,
+    metodoIngreso: null,
+    actorTipo: 'Usuario',
+    scopesDeTenant: new Set(),
+    scopesPorEmpresa: new Map(),
+    empresas: '*',
+  };
+  useSesion.setState({ sesion, estado: 'activa', empresaSugerida: null, sugerirPasskey: false });
+}
+
 afterEach(() => {
   reiniciarCliente();
   permisos.scopes = new Set();
   useAvisos.getState().cerrar();
+  useSesion.setState({ sesion: null, estado: 'sin-sesion' });
 });
 
 describe('Cuenta bancaria designada del vínculo', () => {
@@ -85,14 +107,16 @@ describe('Cuenta bancaria designada del vínculo', () => {
     expect(await screen.findByText('El tercero aún no ha designado una cuenta')).toBeInTheDocument();
   });
 
-  it('muestra la propuesta con «1 de 2» y quién aprobó; aprobar envía el POST', async () => {
+  it('muestra la propuesta con «van 1» y quién aprobó; aprobar envía el POST', async () => {
     permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
     const usuario = userEvent.setup();
     const designada = { ...CUENTA, estado: 'Aprobada', aprobadaEn: '2026-11-09T10:00:00Z' };
     const peticiones = montar(CON_PROPUESTA, (url, metodo) => (metodo === 'POST' && url.endsWith('/aprobar') ? { ...CON_PROPUESTA, actual: designada, propuesta: null, puedesAprobar: false } : null));
 
-    expect(await screen.findByText('1 de 2 aprobaciones: Carlos Cumplimiento')).toBeInTheDocument();
-    expect(screen.getByText(/personas distintas/)).toBeInTheDocument();
+    const progreso = await screen.findByText('Necesita 2 aprobaciones · van 1: Carlos Cumplimiento');
+    // El porqué de las dos personas va en el `title`, no en un aviso aparte.
+    expect(progreso).toHaveAttribute('title', 'La aprueban 2 personas distintas. Hasta entonces el vínculo no tiene cuenta designada.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('00123454321')).toBeInTheDocument();
 
     await usuario.click(screen.getByRole('button', { name: 'Aprobar' }));
@@ -143,8 +167,10 @@ describe('Cuenta bancaria designada del vínculo', () => {
 });
 
 /** La certificación de la cuenta cruzada con ella (CB-1): el número va enmascarado en el cruce, el completo solo aparece en los datos de la cuenta. */
-const campo = (campo: string, etiqueta: string, declarado: string, extraido: string, resultado: 'Coincide' | 'Discrepa', critico: boolean): CampoCruzadoDto => ({
-  campo,
+type Resultado = 'Coincide' | 'Discrepa' | 'NoVerificable';
+
+const campo = (codigo: string, etiqueta: string, declarado: string, extraido: string | null, resultado: Resultado, critico: boolean): CampoCruzadoDto => ({
+  campo: codigo,
   etiqueta,
   declarado,
   extraido,
@@ -153,17 +179,17 @@ const campo = (campo: string, etiqueta: string, declarado: string, extraido: str
   detalle: null,
 });
 
-const cruce = (campos: CampoCruzadoDto[]): CruceDeSeccionDto => ({
+const cruce = (campos: CampoCruzadoDto[], legible = true): CruceDeSeccionDto => ({
   documentoId: 'doc-1',
   versionDocumento: 2,
   tipoDocumento: 'CERTIFICACION_BANCARIA',
   nombreDocumento: 'Certificación bancaria · Bancolombia ****4321',
   confianza: 0.93,
-  legible: true,
+  legible,
   fecha: '2026-11-10T10:00:00Z',
   coincidencias: campos.filter((c) => c.resultado === 'Coincide').length,
   discrepancias: campos.filter((c) => c.resultado === 'Discrepa').length,
-  noVerificables: 0,
+  noVerificables: campos.filter((c) => c.resultado === 'NoVerificable').length,
   discrepanciaCritica: campos.some((c) => c.critico && c.resultado === 'Discrepa'),
   campos,
 });
@@ -179,23 +205,73 @@ const certificacion = (cambios: Partial<CertificacionDeCuentaDelVinculoDto>): Ce
   ...cambios,
 });
 
-describe('La certificación de la cuenta junto a la cuenta designada', () => {
-  it('muestra la versión que recibió la empresa y lo que la IA leyó frente a lo que declaró el tercero, con el número enmascarado', async () => {
+/** Los campos que lee la certificación de una cuenta: el número, el titular, su identificación y que sea el tercero, y el banco (evidencia). */
+const CAMPOS_QUE_COINCIDEN: CampoCruzadoDto[] = [
+  campo('numero', 'Número de la cuenta', '****4321', '****4321', 'Coincide', true),
+  campo('titular', 'Titular de la cuenta', 'Ferretería El Tornillo', 'FERRETERIA EL TORNILLO', 'Coincide', true),
+  campo('identificacion_titular', 'Identificación del titular', '900123456', '900123456', 'Coincide', true),
+  campo('titular_es_el_tercero', 'El titular es el tercero', 'Ferretería El Tornillo (900123456)', '900123456', 'Coincide', true),
+  campo('banco', 'Banco', 'Bancolombia', 'Bancolombia', 'Coincide', false),
+];
+
+/** La IA no leyó la identificación del titular: sin ella tampoco se puede decir que el titular sea el tercero (el cruce no trae ese campo). */
+const sinIdentificacion = (campos: CampoCruzadoDto[]) =>
+  campos
+    .filter((c) => c.campo !== 'titular_es_el_tercero')
+    .map((c) => (c.campo === 'identificacion_titular' ? campo('identificacion_titular', 'Identificación del titular', '900123456', null, 'NoVerificable', true) : c));
+
+describe('La certificación de la cuenta junto a la cuenta por aprobar', () => {
+  it('se resume en una línea: versión, fecha y lo crítico que coincide; la comparación queda plegada hasta pedirla', async () => {
     permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
-    const campos = [campo('numero', 'Número de la cuenta', '****4321', '****4321', 'Coincide', true), campo('titular', 'Titular de la cuenta', 'Ferretería El Tornillo', 'FERRETERIA EL TORNILLO', 'Coincide', true)];
-    montar({ ...CON_PROPUESTA, propuesta: { ...CUENTA, certificacion: certificacion({ cruce: cruce(campos) }) } });
+    const usuario = userEvent.setup();
+    montar({ ...CON_PROPUESTA, propuesta: { ...CUENTA, certificacion: certificacion({ cruce: cruce(CAMPOS_QUE_COINCIDEN) }) } });
 
     const region = await screen.findByRole('region', { name: 'Certificación bancaria de la cuenta' });
-    expect(region.querySelector('[data-estado="Aprobado"]')).toHaveTextContent('Coincide');
-    expect(region).toHaveTextContent('Versión 2 · subida el');
-    expect(within(region).getByRole('table', { name: /Cruce con Certificación bancaria/ })).toBeInTheDocument();
+    expect(region).toHaveTextContent('Certificación v2 · 10/11/2026 — Coincide: número, titular, identificación y titular = tercero');
+    // Ni chip de «Coincide» aparte, ni título, ni alertas: una sola línea.
+    expect(region.querySelector('[data-estado]')).toBeNull();
     expect(within(region).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(region).queryByRole('table')).not.toBeInTheDocument();
+
+    const ver = within(region).getByRole('button', { name: 'Ver comparación' });
+    expect(ver).toHaveAttribute('aria-expanded', 'false');
+    await usuario.click(ver);
+    expect(await within(region).findByRole('table', { name: /Cruce con Certificación bancaria/ })).toBeInTheDocument();
+    // La nota de evidencia viaja con la tabla, no suelta en la tarjeta.
+    expect(region).toHaveTextContent('Es evidencia para la revisión');
     // El número completo está en los datos de la cuenta (para cotejarlo), no en el cruce.
     expect(within(region).queryByText('00123454321')).not.toBeInTheDocument();
     expect(screen.getByText('00123454321')).toBeInTheDocument();
+
+    await usuario.click(within(region).getByRole('button', { name: 'Ocultar comparación' }));
+    await waitFor(() => expect(within(region).queryByRole('table')).not.toBeInTheDocument());
+    expect(region).not.toHaveTextContent('Es evidencia para la revisión');
   });
 
-  it('una diferencia en lo crítico va destacada en la propuesta y al aprobar, sin bloquear la aprobación', async () => {
+  it('si algo crítico quedó sin verificar lo dice en la misma línea, con tono de advertencia y sin abrir la comparación', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
+    const campos = sinIdentificacion(CAMPOS_QUE_COINCIDEN);
+    montar({ ...CON_PROPUESTA, propuesta: { ...CUENTA, certificacion: certificacion({ verificacion: 'NoVerificable', cruce: cruce(campos) }) } });
+
+    const region = await screen.findByRole('region', { name: 'Certificación bancaria de la cuenta' });
+    expect(region).toHaveTextContent('Certificación v2 · 10/11/2026 — Coincide: número y titular · Sin verificar: identificación');
+    expect(region.querySelector('svg.lucide-circle-alert')).not.toBeNull();
+    expect(within(region).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(region).queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('el banco que difiere (evidencia, no crítico) se dice aparte y no cambia el resultado', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
+    const campos = CAMPOS_QUE_COINCIDEN.map((c) => (c.campo === 'banco' ? campo('banco', 'Banco', 'Bancolombia', 'Davivienda', 'Discrepa', false) : c));
+    montar({ ...CON_PROPUESTA, propuesta: { ...CUENTA, certificacion: certificacion({ verificacion: 'Discrepa', cruce: cruce(campos) }) } });
+
+    const region = await screen.findByRole('region', { name: 'Certificación bancaria de la cuenta' });
+    expect(region).toHaveTextContent('Coincide: número, titular, identificación y titular = tercero · También difiere: banco');
+    expect(region.querySelector('svg.lucide-circle-check')).not.toBeNull();
+    expect(within(region).queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('una diferencia en lo crítico va en rojo, abre sola la comparación y no bloquea la aprobación', async () => {
     permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
     const usuario = userEvent.setup();
     const campos = [campo('numero', 'Número de la cuenta', '****4321', '****9999', 'Discrepa', true), campo('banco', 'Banco', 'Bancolombia', 'Bancolombia', 'Coincide', false)];
@@ -205,8 +281,11 @@ describe('La certificación de la cuenta junto a la cuenta designada', () => {
     );
 
     const region = await screen.findByRole('region', { name: 'Certificación bancaria de la cuenta' });
-    expect(within(region).getByText('No coincide')).toBeInTheDocument();
-    expect(within(region).getByRole('alert')).toHaveTextContent('La certificación no coincide con la cuenta en lo crítico: Número de la cuenta.');
+    // Lo mismo antes iba en tres lugares (alerta, chip y nota): ahora, una línea.
+    expect(within(region).getByRole('alert')).toHaveTextContent('Certificación v2 · 10/11/2026 — No coincide: número');
+    expect(region.querySelector('svg.lucide-circle-x')).not.toBeNull();
+    expect(region.querySelector('[data-estado]')).toBeNull();
+    expect(within(region).getByRole('button', { name: 'Ocultar comparación' })).toHaveAttribute('aria-expanded', 'true');
     expect(within(region).getByRole('row', { name: 'Número de la cuenta: Difiere' })).toBeInTheDocument();
 
     // Al aprobar, el diálogo repite la advertencia, pero no impide confirmar.
@@ -217,7 +296,17 @@ describe('La certificación de la cuenta junto a la cuenta designada', () => {
     await waitFor(() => expect(peticiones).toContainEqual({ url: '/api/v1/vinculos/v1/cuenta-designada/aprobar', metodo: 'POST', cuerpo: null }));
   });
 
-  it('sin la lectura de la empresa avisa que se coteja a mano y sin certificación propia dice que no hay con qué cotejar', async () => {
+  it('un documento que no se lee no verifica nada: advertencia, sin enumerar campos', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
+    const campos = CAMPOS_QUE_COINCIDEN.map((c) => ({ ...c, extraido: null, resultado: 'NoVerificable' as const }));
+    montar({ ...CON_PROPUESTA, propuesta: { ...CUENTA, certificacion: certificacion({ verificacion: 'NoSeLee', cruce: cruce(campos, false) }) } });
+
+    const region = await screen.findByRole('region', { name: 'Certificación bancaria de la cuenta' });
+    expect(region).toHaveTextContent('Certificación v2 · 10/11/2026 — No se lee con seguridad: nada se pudo verificar');
+    expect(region.querySelector('svg.lucide-circle-alert')).not.toBeNull();
+  });
+
+  it('sin la lectura de la empresa avisa que se coteja a mano, sin comparación que abrir', async () => {
     permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
     const usuario = userEvent.setup();
     montar({
@@ -226,14 +315,105 @@ describe('La certificación de la cuenta junto a la cuenta designada', () => {
       propuesta: { ...CUENTA, certificacion: certificacion({ verificacion: 'SinAnalisis', sinAnalisis: true }) },
     });
 
+    // La designada sin certificación propia conserva su aviso tal cual.
     expect(await screen.findByText(/no tiene certificación bancaria propia/)).toBeInTheDocument();
     const region = screen.getByRole('region', { name: 'Certificación bancaria de la cuenta' });
-    expect(within(region).getByText('Sin lectura')).toBeInTheDocument();
-    expect(region).toHaveTextContent('Tu empresa no recibió la lectura automática de la versión 2 de la certificación');
+    expect(region).toHaveTextContent('Certificación v2 · 10/11/2026 — Sin lectura automática: cotéjala a mano');
+    expect(region.querySelector('svg.lucide-circle-alert')).not.toBeNull();
+    expect(within(region).queryByRole('button', { name: /comparación/ })).not.toBeInTheDocument();
     expect(within(region).queryByRole('table')).not.toBeInTheDocument();
 
-    // La propuesta sin lectura no se destaca como discrepancia: el botón de aprobar sigue normal.
+    // La propuesta sin lectura no se destaca como discrepancia: el diálogo de aprobar no la advierte.
     await usuario.click(screen.getByRole('button', { name: 'Aprobar' }));
     expect(within(await screen.findByRole('dialog')).queryByText(/no coincide en lo crítico/)).not.toBeInTheDocument();
+  });
+
+  it('el botón de la comparación queda en la misma fila que el ícono y la frase, centrado', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer]);
+    montar({ ...CON_PROPUESTA, propuesta: { ...CUENTA, certificacion: certificacion({ cruce: cruce(CAMPOS_QUE_COINCIDEN) }) } });
+
+    const region = await screen.findByRole('region', { name: 'Certificación bancaria de la cuenta' });
+    const fila = within(region).getByRole('button', { name: 'Ver comparación' }).parentElement!;
+    expect(fila).toHaveStyle({ display: 'flex', flexDirection: 'row', alignItems: 'center' });
+    expect(fila).toContainElement(region.querySelector('svg.lucide-circle-check'));
+    expect(fila).toContainElement(within(region).getByText(/^Certificación v2/));
+  });
+});
+
+describe('Cuenta por aprobar: el encabezado y las aprobaciones', () => {
+  it('el estado y la fecha de la propuesta van en una sola línea, sin párrafo aparte ni sobretítulo', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
+    montar(CON_PROPUESTA);
+
+    const region = await screen.findByRole('region', { name: 'Por aprobar' });
+    const chip = region.querySelector('[data-estado="Propuesta"]');
+    expect(chip).toHaveTextContent('Por aprobar');
+    expect(chip?.parentElement).toHaveTextContent('Propuesta el 08/11/2026');
+    expect(screen.queryByText(/El tercero la propuso/)).not.toBeInTheDocument();
+    expect(within(region).queryByRole('heading')).not.toBeInTheDocument();
+  });
+
+  it('las aprobaciones van al lado de los botones, en la misma fila: «Necesita 2 aprobaciones · van 0»', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
+    montar({ ...CON_PROPUESTA, propuesta: { ...CUENTA, aprobaciones: [] }, actual: { ...CUENTA, cuentaId: 'c0', estado: 'Aprobada', aprobadaEn: '2026-11-01T10:00:00Z' } });
+
+    const progreso = await screen.findByText('Necesita 2 aprobaciones · van 0');
+    // Con una cuenta designada vigente, el porqué dice que sigue vigente la anterior (en el \`title\`).
+    expect(progreso).toHaveAttribute('title', 'La aprueban 2 personas distintas. Hasta entonces sigue vigente la cuenta designada anterior.');
+    const fila = progreso.parentElement!;
+    expect(within(fila).getByRole('button', { name: 'Aprobar' })).toBeInTheDocument();
+    expect(within(fila).getByRole('button', { name: 'Rechazar' })).toBeInTheDocument();
+    expect(fila).toHaveStyle({ alignItems: 'center' });
+    // Ya no hay aviso azul con el conteo.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/de 2 aprobaciones/)).not.toBeInTheDocument();
+  });
+
+  it('quien ya aprobó ve cuántas lleva y que falta otra persona, en esa misma línea y sin botones', async () => {
+    iniciarSesion('u-carlos');
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
+    montar({ ...CON_PROPUESTA, puedesAprobar: false });
+
+    const progreso = await screen.findByText('Necesita 2 aprobaciones · van 1: Carlos Cumplimiento');
+    const fila = progreso.parentElement!;
+    expect(within(fila).getByText('Ya la aprobaste; falta que la apruebe otra persona.')).toBeInTheDocument();
+    expect(within(fila).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('quien no puede aprobar igual ve el conteo, sin botones ni «Ya la aprobaste»', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer]);
+    montar({ ...CON_PROPUESTA, puedesAprobar: false });
+
+    expect(await screen.findByText('Necesita 2 aprobaciones · van 1: Carlos Cumplimiento')).toBeInTheDocument();
+    expect(screen.queryByText(/Ya la aprobaste/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Aprobar' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Cuenta designada: el mismo patrón', () => {
+  it('datos, la certificación en una línea y quién la aprobó, con un solo chip «Designada»', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosLeer, SCOPES.cuentasAprobar]);
+    const campos = sinIdentificacion(CAMPOS_QUE_COINCIDEN);
+    const designada: CuentaDesignadaDto = {
+      ...CUENTA,
+      estado: 'Aprobada',
+      aprobadaEn: '2026-11-09T15:30:00Z',
+      aprobaciones: [
+        { usuarioId: 'u-carlos', nombre: 'Carlos Cumplimiento', fecha: '2026-11-08T16:00:00Z' },
+        { usuarioId: 'u-diana', nombre: 'Diana Tesorería', fecha: '2026-11-09T15:30:00Z' },
+      ],
+      certificacion: certificacion({ verificacion: 'NoVerificable', cruce: cruce(campos) }),
+    };
+    montar({ actual: designada, propuesta: null, rechazada: null, aprobadoresRequeridos: 2, puedesAprobar: false });
+
+    const region = await screen.findByRole('region', { name: 'Designada' });
+    expect(region.querySelector('[data-estado="Aprobada"]')).toHaveTextContent('Designada');
+    expect(within(region).getByText('Bancolombia')).toBeInTheDocument();
+    const certificacionDeLaCuenta = within(region).getByRole('region', { name: 'Certificación bancaria de la cuenta' });
+    expect(certificacionDeLaCuenta).toHaveTextContent('Certificación v2 · 10/11/2026 — Coincide: número y titular · Sin verificar: identificación');
+    expect(within(certificacionDeLaCuenta).getByRole('button', { name: 'Ver comparación' })).toBeInTheDocument();
+    expect(region).toHaveTextContent('Aprobada por Carlos Cumplimiento y Diana Tesorería el 09/11/2026');
+    // Sin cuenta por aprobar, no hay conteo de aprobaciones.
+    expect(screen.queryByText(/Necesita/)).not.toBeInTheDocument();
   });
 });

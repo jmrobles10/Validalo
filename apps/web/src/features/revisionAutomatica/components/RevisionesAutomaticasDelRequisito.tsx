@@ -34,7 +34,7 @@ export function RevisionesAutomaticasDelRequisito({ expediente, requisito, areas
     <Box
       component="section"
       aria-label={t('revisionAutomatica.panel.titulo')}
-      sx={{ mt: 1, py: 1, px: 1.5, border: 1, borderColor: 'divider', borderRadius: (th) => `${String(th.radio.sm)}px`, bgcolor: 'superficie.nivel1' }}
+      sx={{ py: 1, px: 1.5, border: 1, borderColor: 'divider', borderRadius: (th) => `${String(th.radio.sm)}px`, bgcolor: 'superficie.nivel1' }}
     >
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.75 }}>
         <Sparkles size={14} strokeWidth={1.75} aria-hidden />

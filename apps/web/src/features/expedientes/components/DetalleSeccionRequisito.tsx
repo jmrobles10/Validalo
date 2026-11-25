@@ -21,6 +21,8 @@ export interface DetalleSeccionRequisitoProps {
   /** Empresa y tercero del expediente: con ellos se descarga el PDF de la declaración PEP de las personas de la sección. */
   empresaId?: string;
   terceroId?: string;
+  /** Los datos de la versión ya están en la misma pantalla («Lo que declaró el tercero» del sector): no se repiten aquí. */
+  sinDatos?: boolean;
 }
 
 /**
@@ -28,14 +30,14 @@ export interface DetalleSeccionRequisitoProps {
  * actualización lo que cambió frente a la versión aceptada (FM-28), el cruce con los documentos que la respaldan (F5), los
  * datos de la versión en solo lectura y sus soportes. Nada se calcula aquí: todo viene del expediente.
  */
-export function DetalleSeccionRequisito({ requisito, seccion, documentos, puedeVer, onVer, empresaId, terceroId }: DetalleSeccionRequisitoProps) {
+export function DetalleSeccionRequisito({ requisito, seccion, documentos, puedeVer, onVer, empresaId, terceroId, sinDatos = false }: DetalleSeccionRequisitoProps) {
   const { t } = useTranslation();
   const actual = requisito.versionActual?.n ?? null;
   const cubre = actual ?? seccion.versionEvaluada;
   const actualizacion = seccion.versionAceptada !== null && actual !== null && actual !== seccion.versionAceptada;
 
   return (
-    <Stack spacing={1.5} sx={{ mt: 1 }}>
+    <Stack spacing={1.5}>
       <Completitud seccion={seccion} actual={actual} />
       {seccion.sinSoporte && <SinSoporte sinSoporte={seccion.sinSoporte} />}
       {actualizacion && seccion.versionAceptada !== null && (
@@ -44,7 +46,7 @@ export function DetalleSeccionRequisito({ requisito, seccion, documentos, puedeV
         </SeccionFicha>
       )}
       {seccion.cruce && <CruceSeccion cruce={seccion.cruce} />}
-      {esObjeto(seccion.datos) && cubre !== null && (
+      {!sinDatos && esObjeto(seccion.datos) && cubre !== null && (
         <SeccionFicha titulo={t('fichaEmpresa.requisito.datos', { n: String(cubre) })}>
           <DatosDeSeccion datos={seccion.datos} empresaId={empresaId} terceroId={terceroId} seccion={seccion.seccion} version={cubre} />
         </SeccionFicha>

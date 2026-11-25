@@ -48,6 +48,8 @@ export * from './administradorInicialDto';
 export * from './agregarDominioSsoDto';
 export * from './ajusteDto';
 export * from './ambitoDocumento';
+export * from './antiguedadDeCertificacionDto';
+export * from './antiguedadDocumentoDto';
 export * from './anularVeredictoDto';
 export * from './apiKeyDto';
 export * from './aplicaMotivo';

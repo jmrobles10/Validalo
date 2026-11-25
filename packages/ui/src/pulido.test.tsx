@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { DosColumnas } from './disposicion';
 import { EsqueletoDetalle, EsqueletoFormulario, EsqueletoHistorial, EsqueletoTabla, EsqueletoTarjeta, EsqueletoTarjetas, OpcionesEnCarga } from './esqueletos';
 import { createValidaloTheme, type App } from './tema';
-import { RADIO } from './tokens';
+import { DENSIDAD, RADIO } from './tokens';
 
 /** Reglas visuales de toda la aplicación (UI-1…UI-6): lo que el tema y los esqueletos garantizan, y lo que ningún código debe volver a hacer. */
 const conTema = (nodo: ReactNode, app: App = 'web') => render(<ThemeProvider theme={createValidaloTheme('light', { app })}>{nodo}</ThemeProvider>);
@@ -60,17 +60,17 @@ describe('UI-1 · cargando = esqueleto', () => {
 });
 
 describe('UI-2 · botones compactos', () => {
-  it.each(['web', 'public'] as const)('el tamaño por omisión es medium en %s y large queda para la acción principal', (app) => {
+  it.each(['web', 'public'] as const)('el tamaño por omisión es small en %s: todos los botones, también los principales, son pequeños', (app) => {
     const tema = createValidaloTheme('light', { app });
-    expect(tema.components?.MuiButton?.defaultProps?.size).toBe('medium');
+    expect(tema.components?.MuiButton?.defaultProps?.size).toBe('small');
   });
 
-  it('en web el botón mide lo que el campo (36 px), el pequeño 30 y el grande 40', () => {
+  it('en web el pequeño (el de por omisión) mide lo que el campo (36 px), igual que el mediano; el grande, 40', () => {
     const estilos = createValidaloTheme('light', { app: 'web' }).components?.MuiButton?.styleOverrides as Record<string, Record<string, unknown>>;
-    expect([estilos.sizeSmall?.minHeight, estilos.sizeMedium?.minHeight, estilos.sizeLarge?.minHeight]).toEqual([30, 36, 40]);
+    expect([estilos.sizeSmall?.minHeight, estilos.sizeMedium?.minHeight, estilos.sizeLarge?.minHeight]).toEqual([DENSIDAD.controlMedio, DENSIDAD.controlMedio, 40]);
   });
 
-  it('en el tercero el botón mide 36 px (como su campo) en escritorio y 40 en el celular, y el área táctil de 44 se completa sin inflarlo', () => {
+  it('en el tercero el botón pequeño mide 36 px (lo que el campo) en escritorio y en el celular, y el área táctil de 44 se completa sin inflarlo', () => {
     const estilos = createValidaloTheme('light', { app: 'public' }).components?.MuiButton?.styleOverrides as Record<string, Record<string, unknown>>;
     const medio = estilos.sizeMedium as { minHeight: number; '@media (min-width:600px)': { minHeight: number } };
     expect(medio.minHeight).toBe(40);
@@ -79,14 +79,53 @@ describe('UI-2 · botones compactos', () => {
     expect([grande.minHeight, grande['@media (min-width:600px)'].minHeight]).toEqual([44, 40]);
     const raiz = estilos.root as Record<string, { '&::after': { height: number } }>;
     expect(raiz['@media (max-width:599.95px)']?.['&::after'].height).toBe(44);
-    // Ninguno de los tamaños fija 44 px de alto en escritorio.
-    const pequeno = estilos.sizeSmall as { '@media (min-width:600px)': { minHeight: number } };
-    expect(pequeno['@media (min-width:600px)'].minHeight).toBeLessThanOrEqual(36);
+    // El pequeño mide 36 en todos los anchos: ningún alto distinto en escritorio ni en el celular, y el área táctil de 44 no lo infla.
+    expect(estilos.sizeSmall?.minHeight).toBe(DENSIDAD.controlMedio);
+    const porAncho = Object.entries(estilos.sizeSmall ?? {}).filter(([clave]) => clave.startsWith('@media')).flatMap(([, estilo]) => Object.keys(estilo as object));
+    expect(porAncho.filter((propiedad) => propiedad === 'minHeight' || propiedad === 'padding' || propiedad === 'lineHeight')).toEqual([]);
   });
 
-  it('un botón sin tamaño se dibuja con el tamaño medium', () => {
+  /** El alto que dibuja un campo: relleno vertical + renglón del texto del `<input>` (el borde del `outlined` va fuera del flujo). */
+  const altoDelCampo = (entrada: HTMLElement) => {
+    const e = getComputedStyle(entrada);
+    return parseFloat(e.paddingTop) + parseFloat(e.paddingBottom) + parseFloat(e.lineHeight);
+  };
+
+  it.each(['web', 'public'] as const)('el botón pequeño y el campo pequeño miden lo mismo en %s (quedan alineados en una fila) y los dos siguen a DENSIDAD.controlMedio', (app) => {
+    conTema(
+      <>
+        <TextField label="Nombre" />
+        <Button variant="outlined">Guardar</Button>
+        <Button variant="contained">Enviar</Button>
+        <Button variant="text">Cancelar</Button>
+      </>,
+      app,
+    );
+    const campo = altoDelCampo(screen.getByRole('textbox'));
+    expect(campo).toBe(DENSIDAD.controlMedio);
+    for (const nombre of ['Guardar', 'Enviar', 'Cancelar']) {
+      expect(parseFloat(getComputedStyle(screen.getByRole('button', { name: nombre })).minHeight)).toBe(campo);
+    }
+    // Sin el mínimo, el botón `outlined` ya mide lo mismo: relleno + renglón de la variante `button` + los dos bordes de 1 px.
+    const boton = getComputedStyle(screen.getByRole('button', { name: 'Guardar' }));
+    expect(parseFloat(boton.paddingTop) + parseFloat(boton.paddingBottom) + parseFloat(boton.lineHeight) + 2).toBe(campo);
+  });
+
+  it.each(['web', 'public'] as const)('en el celular del tercero el campo (texto de 16 px) conserva el renglón de 20 px, así que botón y campo siguen en 36 en %s', (app) => {
+    const tema = createValidaloTheme('light', { app });
+    const entrada = tema.components?.MuiOutlinedInput?.styleOverrides?.input as Record<string, unknown>;
+    const movil = (entrada['@media (max-width:599.95px)'] ?? {}) as Record<string, unknown>;
+    expect(Object.keys(movil)).not.toContain('lineHeight');
+    expect(Object.keys(movil)).not.toContain('padding');
+    expect(entrada.lineHeight).toBe('20px');
+    expect(tema.typography.button.lineHeight).toBe('20px');
+    const botonMovil = (tema.typography.button as Record<string, unknown>)['@media (max-width:599.95px)'] as { lineHeight?: string } | undefined;
+    expect(botonMovil?.lineHeight ?? '20px').toBe('20px');
+  });
+
+  it('un botón sin tamaño se dibuja con el tamaño small', () => {
     conTema(<Button>Guardar</Button>, 'public');
-    expect(screen.getByRole('button', { name: 'Guardar' })).toHaveClass('MuiButton-sizeMedium');
+    expect(screen.getByRole('button', { name: 'Guardar' })).toHaveClass('MuiButton-sizeSmall');
   });
 });
 
@@ -184,9 +223,9 @@ describe('normas de código (UI-1, UI-2)', () => {
     expect(conSpinner).toEqual(['apps/web/src/shared/componentes.tsx']);
   });
 
-  it('ningún botón fuerza un alto de 44 o 48 px (el tamaño lo da el tema)', () => {
+  it('ningún botón fuerza un alto (30 a 48 px): el tamaño lo da el tema y el botón queda alineado con el campo', () => {
     const infractores = todos
-      .filter((f) => f.texto.split('\n').some((linea) => /<Button\b/.test(linea) && /minHeight:\s*4[48]\b/.test(linea)))
+      .filter((f) => f.texto.split('\n').some((linea) => /<Button\b/.test(linea) && /\b(?:min)?[hH]eight:\s*(?:3\d|4[0-8])\b/.test(linea)))
       .map((f) => f.ruta);
     expect(infractores).toEqual([]);
   });

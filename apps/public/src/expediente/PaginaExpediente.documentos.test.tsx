@@ -82,8 +82,30 @@ describe('Mi revisión con una empresa: los documentos que pide', () => {
 
     const titulo = await screen.findByRole('heading', { level: 1, name: 'Tu revisión con Constructora Norte' });
     expect(within(titulo.closest('main') ?? document.body).getByText('Te falta 1 documento. Súbelo para que Constructora Norte empiece a revisar.')).toBeInTheDocument();
-    expect(tarjeta('Certificado de existencia y representación legal').getByText('Aún no lo subes.')).toBeInTheDocument();
+    expect(tarjeta('Certificado de existencia y representación legal').getByText(/^Aún no lo subes · .+ de hasta \d+ MB/)).toBeInTheDocument();
     expect(tarjeta('Certificado de existencia y representación legal').getByRole('button', { name: 'Subir documento' })).toBeInTheDocument();
+  });
+
+  it('cada grupo dice cuántos requisitos tiene y cada requisito es una tarjeta propia (no un bloque con divisores)', async () => {
+    montar(
+      expediente({
+        estado: 'Abierto',
+        requisitosFaltantes: 2,
+        requisitos: [
+          documento('RUT', 'Registro Único Tributario', 'Cargado', 1),
+          documento('CAMARA', 'Certificado de existencia y representación legal', 'Pendiente', null),
+          documento('POLIZA', 'Póliza de cumplimiento', 'Pendiente', null),
+        ],
+      }),
+    );
+
+    await screen.findByRole('heading', { level: 1, name: 'Tu revisión con Constructora Norte' });
+    expect(screen.getByRole('heading', { level: 3, name: 'Te toca 2' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Lo revisa Constructora Norte 1' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: /^Listo/ })).not.toBeInTheDocument();
+    const lista = screen.getByRole('heading', { level: 3, name: 'Te toca 2' }).nextElementSibling as HTMLElement;
+    expect(within(lista).getAllByRole('listitem')).toHaveLength(2);
+    expect(getComputedStyle(lista).display).toBe('grid');
   });
 
   it('un documento eximido se ve «Eximido» y ya no se le pide subirlo; la revisión sigue en curso', async () => {

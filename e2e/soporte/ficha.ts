@@ -84,6 +84,7 @@ export interface DatosDePersona {
   numero: string;
   nombres: string;
   apellidos: string;
+  /** La participación: con el rol «Socio o accionista» es obligatoria; con otro rol, si se da, la persona «también es socio o accionista» con ese porcentaje. */
   porcentaje?: string;
 }
 
@@ -91,7 +92,7 @@ export interface DatosDePersona {
 export const REPRESENTANTE: DatosDePersona = { rol: 'Representante legal', numero: '1020304050', nombres: 'Marta Lucía', apellidos: 'Ríos Duarte' };
 export const SOCIO: DatosDePersona = { rol: 'Socio o accionista', numero: '79555111', nombres: 'Jorge Iván', apellidos: 'Castro Pinto', porcentaje: '100' };
 
-/** «Agregar persona» de la información legal: el diálogo con lo mínimo y «Listo»; la persona queda en la lista (se guarda con la sección). */
+/** «Agregar persona» de la información legal: el diálogo con lo obligatorio del rol y «Listo»; la persona queda en la lista (se guarda con la sección). */
 export async function agregarPersona(page: Page, datos: DatosDePersona): Promise<void> {
   await page.getByRole('button', { name: 'Agregar persona' }).click();
   const dialogo = page.getByRole('dialog', { name: 'Agregar persona' });
@@ -102,12 +103,31 @@ export async function agregarPersona(page: Page, datos: DatosDePersona): Promise
   await dialogo.getByRole('textbox', { name: 'Número de identificación' }).fill(datos.numero);
   await dialogo.getByRole('textbox', { name: 'Nombres', exact: true }).fill(datos.nombres);
   await dialogo.getByRole('textbox', { name: 'Apellidos', exact: true }).fill(datos.apellidos);
-  if (datos.porcentaje) await dialogo.getByRole('textbox', { name: 'Participación (%)' }).fill(datos.porcentaje);
+  // Quien no es socio responde si también lo es (obligatoria); con «Sí» aparece el porcentaje.
+  if (datos.rol !== 'Socio o accionista') {
+    await dialogo.getByRole('radiogroup', { name: '¿También es socio o accionista?' }).getByRole('radio', { name: datos.porcentaje ? 'Sí' : 'No' }).check();
+  }
+  if (datos.porcentaje) await dialogo.getByRole('textbox', { name: 'Porcentaje de participación (%)' }).fill(datos.porcentaje);
   await dialogo.getByRole('radiogroup', { name: '¿Es persona expuesta políticamente (PEP)?' }).getByRole('radio', { name: 'No' }).check();
   await dialogo.getByRole('radiogroup', { name: '¿Tiene vínculo con una persona expuesta políticamente?' }).getByRole('radio', { name: 'No' }).check();
   await dialogo.getByRole('button', { name: 'Listo' }).click();
   await expect(dialogo).toBeHidden();
   await expect(page.getByRole('list', { name: 'Personas relacionadas' }).getByRole('listitem', { name: `${datos.nombres} ${datos.apellidos}` })).toBeVisible();
+}
+
+/** Edita a una persona de la lista y responde que también es socio o accionista, con su porcentaje: la misma persona, con sus dos roles. */
+export async function hacerSocioTambien(page: Page, datos: DatosDePersona, porcentaje: string): Promise<void> {
+  const nombre = `${datos.nombres} ${datos.apellidos}`;
+  const tarjeta = page.getByRole('list', { name: 'Personas relacionadas' }).getByRole('listitem', { name: nombre });
+  await tarjeta.getByRole('button', { name: `Editar a ${nombre}` }).click();
+  const dialogo = page.getByRole('dialog', { name: 'Editar persona' });
+  await dialogo.getByRole('radiogroup', { name: '¿También es socio o accionista?' }).getByRole('radio', { name: 'Sí' }).check();
+  await dialogo.getByRole('textbox', { name: 'Porcentaje de participación (%)' }).fill(porcentaje);
+  await dialogo.getByRole('button', { name: 'Listo' }).click();
+  await expect(dialogo).toBeHidden();
+  // Sigue siendo UNA tarjeta, ahora con sus dos roles y la participación.
+  await expect(tarjeta).toContainText(`${datos.rol} · Socio o accionista`);
+  await expect(tarjeta).toContainText(`${porcentaje} %`);
 }
 
 /** Información financiera del último cierre (el año anterior): cifras que cuadran y sin moneda extranjera. Devuelve el año. */

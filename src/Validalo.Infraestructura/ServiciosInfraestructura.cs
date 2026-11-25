@@ -173,8 +173,12 @@ public static class ServiciosInfraestructura
         servicios.AgregarProcesoDelLider<Aplicacion.Vinculos.MigracionDeCertificacionPorCuentaAlArrancar>();
         // Liga por número de las certificaciones bancarias generales que la IA ya leyó (CB-8): corre una sola vez al arrancar, en el nodo líder.
         servicios.AgregarProcesoDelLider<Aplicacion.Vinculos.MigracionDeCertificacionPorNumeroAlArrancar>();
+        // Costo atribuido a las validaciones de IA que reutilizan un análisis de otra empresa (IA-15): el histórico se recalcula una sola vez al arrancar, en el nodo líder.
+        servicios.AgregarProcesoDelLider<Aplicacion.Ia.RecalculoDeReutilizadoDeIaAlArrancar>();
         // Migración de datos de las personas declaradas a mano a la ficha legal (PR-17): corre una sola vez al arrancar, en el nodo líder.
         servicios.AgregarProcesoDelLider<Aplicacion.Personas.MigracionDePersonasEnLaFichaAlArrancar>();
+        // Migración de las reglas de frescura de los tipos de documento a antigüedad máxima y revalidación (TD-10): corre una sola vez al arrancar, en el nodo líder.
+        servicios.AgregarProcesoDelLider<Aplicacion.Documentos.MigracionDeReglasDeFrescuraAlArrancar>();
         // Plan y límites por grupo (OD-14…OD-17): medición de uso, bloqueo suave, avisos al 80 % y al 100 %.
         servicios.AddSingleton<Aplicacion.Plataforma.MedidorDeLlamadasApi>();
         servicios.AddHostedService(proveedor => proveedor.GetRequiredService<Aplicacion.Plataforma.MedidorDeLlamadasApi>());
@@ -288,6 +292,8 @@ public static class ServiciosInfraestructura
         servicios.AgregarProcesoDelLider<ProgramadorDePlazosDeCargue>();
         // Vigencia periódica del vínculo y fin de los bloqueos con fecha (VV-1…VV-5): barrido periódico (Validalo:VigenciasDeVinculos:Intervalo).
         servicios.AgregarProcesoDelLider<Aplicacion.Vinculos.ProgramadorDeVigenciasDeVinculos>();
+        // Convierte en recálculo de vigencia las aprobaciones de documentos del expediente (TD-10): «revalidar cada N días» cuenta desde la aprobación.
+        servicios.AgregarProcesoDelLider<Aplicacion.Documentos.ProgramadorDeRecalculosDeVigencia>();
         // Reevaluación periódica de las evaluaciones del proveedor (CE-11): barrido periódico (Validalo:Reevaluaciones:Intervalo).
         servicios.AgregarProcesoDelLider<Aplicacion.Evaluaciones.ProgramadorDeReevaluaciones>();
         // Análisis de documentos con OpenAI y cupo por empresa (ADR-0012): cada empresa trae su llave; aquí no hay secretos.
@@ -444,6 +450,7 @@ public static class ServiciosInfraestructura
         opciones.PublishMessage<Aplicacion.Documentos.CalcularVigenciasDelDocumento>().ToLocalQueue(ColaVigencias).UseDurableInbox();
         opciones.PublishMessage<Aplicacion.Documentos.CalcularVigenciasDelVinculo>().ToLocalQueue(ColaVigencias).UseDurableInbox();
         opciones.PublishMessage<Aplicacion.Documentos.RecalcularVigenciasDelTipo>().ToLocalQueue(ColaVigencias).UseDurableInbox();
+        opciones.PublishMessage<Aplicacion.Documentos.RevisarRecalculosDeVigencia>().ToLocalQueue(ColaVigencias).UseDurableInbox();
         opciones.PublishMessage<Aplicacion.Documentos.EnviarAvisosDeVencimiento>().ToLocalQueue(ColaVigencias).UseDurableInbox();
         opciones.PublishMessage<Aplicacion.Documentos.VencerVersionDeDocumento>().ToLocalQueue(ColaVigencias).UseDurableInbox();
         opciones.PublishMessage<Aplicacion.Notificaciones.CorreoDeNotificacionPendiente>().ToLocalQueue(ColaCorreo).UseDurableInbox();

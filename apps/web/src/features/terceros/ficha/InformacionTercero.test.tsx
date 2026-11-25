@@ -1,6 +1,7 @@
 import { ThemeProvider } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { configurarCliente, reiniciarCliente, SCOPES, type FichaTerceroDto, type SeccionFichaDto, type VinculoDto } from '@validalo/api-client';
 import { createValidaloTheme } from '@validalo/ui';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -94,7 +95,7 @@ afterEach(() => {
 
 describe('Tercero 360: información del tercero', () => {
   it('muestra una tarjeta por sección con estado, versión, datos legibles y soportes', async () => {
-    permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer, SCOPES.documentosLeer]);
+    permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer, SCOPES.documentosLeer, SCOPES.documentosDescargar]);
     montar(ficha(SECCIONES));
 
     const bloque = await screen.findByRole('region', { name: 'Información del tercero' });
@@ -106,9 +107,11 @@ describe('Tercero 360: información del tercero', () => {
     expect(general).toHaveTextContent('Certificado ISOSí');
     expect(general).toHaveTextContent('Año de inicio2004');
     expect(within(general).getByRole('region', { name: 'Dirección por partes' })).toHaveTextContent('Tipo de víaCalle');
-    // El RUT del vínculo se abre en el vínculo; el otro soporte no lo puede ver la empresa.
-    expect(within(general).getByRole('link', { name: 'Ver el soporte RUT en el vínculo' })).toHaveAttribute('href', '/e/emp/vinculos/v1');
-    expect(general).toHaveTextContent('Soporte del tercero · versión 1');
+    // El RUT del vínculo se abre en el visor con «Ver»; el otro soporte no lo puede ver la empresa y la fila dice por qué.
+    expect(within(general).getByRole('button', { name: 'Ver RUT, versión 2' })).toHaveTextContent('Ver');
+    const noCompartido = within(general).getByText('Soporte del tercero · versión 1').closest('li');
+    expect(noCompartido).toHaveTextContent('El tercero no lo compartió con Constructora Norte, por eso no se puede abrir aquí.');
+    expect(within(noCompartido as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
 
     const legal = within(bloque).getByRole('region', { name: 'Información legal' });
     expect(legal).toHaveTextContent('Falta 1 dato');
@@ -149,7 +152,9 @@ describe('Tercero 360: información del tercero', () => {
 
     const general = await screen.findByRole('region', { name: 'Información general' });
     const validacion = within(general).getByRole('region', { name: 'Validación de la empresa' });
-    expect(validacion).toHaveTextContent('Proveedor: aceptada la versión 2 el 05/10/2026');
+    // La frase dice quién (la empresa activa, no el tipo de vínculo) y qué: aceptó la versión 2, pero hay otra pendiente.
+    expect(validacion).toHaveTextContent('Constructora Norte aceptó la versión 2 el 05/10/2026.');
+    expect(validacion).not.toHaveTextContent('Proveedor');
     expect(within(validacion).getByRole('link', { name: 'Ver el expediente VS-E-2026-000001' })).toHaveAttribute('href', '/e/emp/expedientes/x1');
     expect(validacion).toHaveTextContent('Versión nueva pendiente de revisión');
     const revalidacion = within(validacion).getByRole('link', { name: 'Ver la revalidación VS-E-2026-000007' });
@@ -157,7 +162,9 @@ describe('Tercero 360: información del tercero', () => {
     expect(revalidacion).toHaveTextContent('Revalidación VS-E-2026-000007: versión 3, plazo hasta el 24/11/2026');
 
     const sst = screen.getByRole('region', { name: 'Seguridad y salud en el trabajo' });
-    expect(within(sst).getByRole('region', { name: 'Validación de la empresa' })).toHaveTextContent('Proveedor: aún no la acepta');
+    expect(within(sst).getByRole('region', { name: 'Validación de la empresa' })).toHaveTextContent(
+      'Constructora Norte aún no acepta esta versión: no hay un expediente en curso que la pida.',
+    );
     expect(sst).not.toHaveTextContent('Versión nueva pendiente de revisión');
   });
 
@@ -165,5 +172,160 @@ describe('Tercero 360: información del tercero', () => {
     permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer]);
     montar(ficha([]));
     expect(await screen.findByText('El tercero aún no ha diligenciado su información.')).toBeInTheDocument();
+  });
+});
+
+describe('Tercero 360: lo que declaró el tercero, todo y en orden', () => {
+  const PERSONA = { tipo_identificacion: 'CC', numero: '1073250322', nombres: 'JOEL MATEO', apellidos: 'ROBLES ATUESTA' };
+  const LEGAL = seccion({
+    seccion: 'FICHA_LEGAL',
+    nombre: 'Información legal',
+    version: 1,
+    datos: {
+      personas: [
+        { ...PERSONA, rol: 'RepresentanteLegal', tipo_representacion: 'Principal', cargo: 'Gerente', pep: false, vinculo_pep: true, correo: 'joel@atlas.co', telefono: '3001112233', nacionalidad: 'CO', fecha_expedicion: '2010-03-04' },
+        { ...PERSONA, rol: 'Socio', porcentaje: 100, pep: false, vinculo_pep: true },
+        { tipo_identificacion: 'CC', numero: '52111222', nombres: 'Ana', apellidos: 'Gómez', rol: 'Suplente' },
+      ],
+    },
+    completitud: {
+      completa: false,
+      faltantes: [
+        { campo: 'personas[2].pep', regla: null, mensaje: 'Falta PEP' },
+        { campo: 'personas[2].vinculo_pep', regla: null, mensaje: 'Falta vínculo PEP' },
+      ],
+      reglaVersion: 1,
+    },
+  });
+
+  async function legal() {
+    permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer, SCOPES.documentosLeer]);
+    montar(ficha([LEGAL]));
+    return within(await screen.findByRole('region', { name: 'Información legal' }));
+  }
+
+  it('una persona, una tarjeta: el representante que también es socio son dos filas pero una sola tarjeta con sus dos roles', async () => {
+    const tarjeta = await legal();
+    expect(tarjeta.getAllByRole('listitem', { name: /JOEL MATEO ROBLES ATUESTA|Ana Gómez/ })).toHaveLength(2);
+    const joel = tarjeta.getByRole('listitem', { name: 'JOEL MATEO ROBLES ATUESTA · Representante legal · Socio o accionista' });
+    expect(joel).toHaveTextContent('CC 1073250322');
+    expect(within(joel).getByText('Representante legal')).toBeInTheDocument();
+    expect(within(joel).getByText('Socio o accionista')).toBeInTheDocument();
+    expect(tarjeta.getByText('2 personas')).toBeInTheDocument();
+  });
+
+  it('muestra TODO lo llenado en el orden del formulario; con dos roles rotula lo propio de cada uno', async () => {
+    const tarjeta = await legal();
+    const joel = tarjeta.getByRole('listitem', { name: /JOEL MATEO/ });
+    const etiquetas = within(joel).getAllByRole('term').map((t) => t.textContent);
+    expect(etiquetas).toEqual([
+      'Tipo de representación · Representante legal',
+      'Participación · Socio o accionista',
+      'Cargo · Representante legal',
+      'PEP',
+      'Vínculo con PEP',
+      'Expedición del documento',
+      'Nacionalidad',
+      'Correo electrónico',
+      'Teléfono',
+    ]);
+    expect(joel).toHaveTextContent('Participación · Socio o accionista100 %');
+    expect(joel).toHaveTextContent('Expedición del documento04/03/2010');
+    expect(joel).toHaveTextContent('Correo electrónicojoel@atlas.co');
+    // «No» en PEP es un dato normal; «Sí» en el vínculo con PEP se destaca como estado de advertencia.
+    expect(joel).toHaveTextContent('PEPNo');
+    expect(joel.querySelector('[data-estado="Observado"]')).toHaveTextContent('Sí');
+  });
+
+  it('lo obligatorio que falta (según la API) dice «Sin dato»; con un solo rol las etiquetas no llevan el rol', async () => {
+    const tarjeta = await legal();
+    const ana = tarjeta.getByRole('listitem', { name: 'Ana Gómez · Suplente' });
+    expect(within(ana).getAllByRole('term').map((t) => t.textContent)).toEqual(['PEP', 'Vínculo con PEP']);
+    expect(within(ana).getAllByText('Sin dato')).toHaveLength(2);
+  });
+
+  it('si la sección solo tiene personas no repite el título «Datos»', async () => {
+    const tarjeta = await legal();
+    expect(tarjeta.queryByRole('region', { name: 'Datos' })).not.toBeInTheDocument();
+    expect(tarjeta.getByRole('region', { name: 'Personas relacionadas' })).toBeInTheDocument();
+  });
+
+  it('en las demás secciones los datos salen en el orden del esquema (no el de la base de datos) y lo obligatorio vacío dice «Sin dato»', async () => {
+    permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer, SCOPES.documentosLeer]);
+    // Así los entrega jsonb: por largo de la clave y luego alfabético.
+    montar(
+      ficha([
+        seccion({
+          datos: { pais: 'CO', correo: 'a@b.co', ciudad: '11001', telefono: '3001112233', direccion: 'Calle 1', razon_social: 'Atlas S.A.S.', anio_inicio: 2004 },
+          completitud: {
+            completa: false,
+            faltantes: [
+              { campo: 'ciiu_principal', regla: null, mensaje: 'Falta la actividad' },
+              { campo: 'direccion_estructurada.placa', regla: null, mensaje: 'x' },
+            ],
+            reglaVersion: 1,
+          },
+        }),
+      ]),
+    );
+    const general = within(await screen.findByRole('region', { name: 'Información general' }));
+    expect(general.getAllByRole('term').map((t) => t.textContent)).toEqual(['Razón social', 'Correo electrónico', 'Teléfono', 'País', 'Ciudad (DANE)', 'Dirección', 'CIIU principal', 'Año de inicio']);
+    expect(general.getByText('Sin dato')).toBeInTheDocument();
+    expect(general.getByRole('region', { name: 'Datos' })).toBeInTheDocument();
+  });
+});
+
+describe('Tercero 360: la validación de la empresa, en una frase', () => {
+  it('dice quién la acepta y cómo; con varios vínculos de la misma empresa, una línea por vínculo con su tipo entre paréntesis', async () => {
+    permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer]);
+    const otro = { ...VINCULO, id: 'v2', tipoVinculo: { id: 'tv2', codigo: 'CONTRATISTA', nombre: 'Contratista' } };
+    const datos = ficha([
+      seccion({
+        aceptaciones: [
+          { vinculoId: 'v1', versionAceptada: 2, aceptadaEn: '2026-10-05T15:00:00Z', expedienteId: null, folio: null, versionNuevaPendiente: false, revalidacion: null },
+          { vinculoId: 'v2', versionAceptada: null, aceptadaEn: null, expedienteId: null, folio: null, versionNuevaPendiente: false, revalidacion: null },
+        ],
+      }),
+    ]);
+    montar({ ...datos, vinculos: [...datos.vinculos, { ...datos.vinculos[0]!, vinculo: otro }] });
+
+    const validacion = within(await screen.findByRole('region', { name: 'Validación de la empresa' }));
+    expect(validacion.getByText('Constructora Norte aceptó la versión 2 el 05/10/2026. (Proveedor)')).toBeInTheDocument();
+    expect(validacion.getByText('Constructora Norte aún no acepta esta versión: no hay un expediente en curso que la pida. (Contratista)')).toBeInTheDocument();
+  });
+});
+
+describe('Tercero 360: los soportes de la sección y su «Ver»', () => {
+  const GENERAL = SECCIONES[0]!;
+
+  it('«Ver» abre el documento compartido en el visor', async () => {
+    permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer, SCOPES.documentosLeer, SCOPES.documentosDescargar]);
+    montar(ficha([GENERAL]));
+    const general = within(await screen.findByRole('region', { name: 'Información general' }));
+
+    await userEvent.setup().click(general.getByRole('button', { name: 'Ver RUT, versión 2' }));
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent('RUT · Versión 2');
+  });
+
+  it('sin permiso para descargar la fila del documento dice por qué no se abre, en lugar de ofrecer un botón que no sirve', async () => {
+    permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer, SCOPES.documentosLeer]);
+    montar(ficha([GENERAL]));
+    const general = within(await screen.findByRole('region', { name: 'Información general' }));
+
+    const fila = general.getByText('RUT · versión 2').closest('li');
+    expect(fila).toHaveTextContent('Tu rol no puede descargar documentos, por eso no se puede abrir el archivo.');
+    expect(general.queryByRole('button', { name: /^Ver / })).not.toBeInTheDocument();
+  });
+
+  it('sin permiso para leer los documentos del vínculo, todos los soportes lo dicen', async () => {
+    permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer]);
+    const datos = ficha([GENERAL]);
+    montar({ ...datos, vinculos: [{ ...datos.vinculos[0]!, documentos: null }] });
+    const general = within(await screen.findByRole('region', { name: 'Información general' }));
+
+    const filas = general.getAllByText('Soporte del tercero · versión', { exact: false }).map((texto) => texto.closest('li'));
+    expect(filas).toHaveLength(2);
+    for (const fila of filas) expect(fila).toHaveTextContent('Tu rol no puede leer los documentos del vínculo, por eso no se puede abrir aquí.');
   });
 });

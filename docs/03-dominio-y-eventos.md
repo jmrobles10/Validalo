@@ -565,16 +565,18 @@ sequenceDiagram
 
 **Capa 1 — hecho del documento (compartido).** `FechaExpedicion?`, `FechaVencimientoDoc?`, `Periodo?`. El canónico declara `TieneVencimientoIntrinseco`, `TieneFechaExpedicion`, `EsPeriodico`, `PermiteRatificacion`.
 
-**Capa 2 — exigencia de frescura (jerarquía tenant → empresa → regla, B-4).** `ReglaFrescura { Ninguna | MaxDiasDesdeExpedicion(n) | PeriodoMinimo(regla) | MaxDiasDesdeAprobacion(n) }`, `DiasAviso[]` (`[30,15,5]`; `[60,30,7]` para pólizas y EEFF), `DiasGracia` (15; 0 para `CriticoDeCumplimiento`), `RetencionAnios`. Cada parámetro tiene **un solo nombre** y se resuelve así: `tipo_documento_tenant` (default) ← `tipo_documento_empresa` (override opcional de la razón social) ← `ReglaDeExigencia` del flujo (override). El resultado se congela en `Requisito.ConfiguracionEfectiva` al abrir o recalcular el expediente. Parámetros de la jerarquía: `reglaFrescura`, `diasAviso`, `diasGracia`, `nivelRevision`, `diasRevalidacion`, `politicaDesactualizada`, `aprobadoresRequeridos`, `porcentajeMuestreo`, `camposCuyoCambioExigeHumano`, `permiteRatificacion` (solo puede restringirse), `textoAyuda`, `plantillaVersionId`.
+**Capa 2 — frescura: dos reglas independientes y opcionales (jerarquía tenant → empresa → regla, B-4; TD-10).** `AntiguedadMaximaDias?` (condición de aceptación al subir: días entre la expedición y la carga; **no define la vigencia**) y `RevalidarCadaDias?` (vence a los N días de que la empresa **aprueba** la versión para el vínculo, o de que el tercero la ratifica), más la regla heredada `ReglaFrescura { Ninguna | PeriodoMinimo(regla) }` (`MaxDiasDesdeExpedicion(n)` y `MaxDiasDesdeAprobacion(n)` se leen traducidos a las dos reglas, TD-14), `DiasAviso[]` (`[30,15,5]`; `[60,30,7]` para pólizas y EEFF), `DiasGracia` (15; 0 para `CriticoDeCumplimiento`), `RetencionAnios`. Cada parámetro tiene **un solo nombre** y se resuelve así: `tipo_documento_tenant` (default) ← `tipo_documento_empresa` (override opcional de la razón social) ← `ReglaDeExigencia` del flujo (override). El resultado se congela en `Requisito.ConfiguracionEfectiva` al abrir o recalcular el expediente. Parámetros de la jerarquía: `reglaFrescura`, `antiguedadMaximaDias`, `revalidarCadaDias`, `diasAviso`, `diasGracia`, `nivelRevision`, `diasRevalidacion`, `politicaDesactualizada`, `aprobadoresRequeridos`, `porcentajeMuestreo`, `camposCuyoCambioExigeHumano`, `permiteRatificacion` (solo puede restringirse), `textoAyuda`, `plantillaVersionId`.
 
 ```
-VigenteDesde   = FechaExpedicion ?? FechaAprobacion
-candidatos     = { FechaVencimientoDoc, FechaExpedicion + MaxDias, FechaAprobacion + MaxDiasDesdeAprobacion, FinPeriodoPermitido }
-VigenteHasta   = mín(candidatos)   // null ⇒ no vence
-MotivoVigencia = VencimientoPropio | ReglaFrescura | DiasDesdeAprobacion | Periodo
+Base           = la más reciente entre FechaAprobacionDeLaEmpresa y FechaRatificacion   // nula antes de aprobarse
+PorRevalidar   = Base + RevalidarCadaDias                                               // nula sin Base o sin regla
+VigenteHasta   = mín(FechaVencimientoDoc, PorRevalidar)                                 // null ⇒ no vence
+MotivoVigencia = VencimientoPropio | Aprobacion | Ratificacion | SinVencimiento | PeriodoNoCalculado
 ```
 
-Una `ReglaFrescura` incumplida al aceptarse impide la aprobación humana sin `RequisitoEximido` y la automática: se observa al tercero. **Toda revalidación recalcula la vigencia desde los hechos de la versión aceptada** (P-7-5).
+La **aprobación** que cuenta es la del requisito en el expediente del vínculo (`RequisitoDeExpediente.AprobadoEn`: el último veredicto de aprobación vigente de sus áreas, derivado de los veredictos, sin evento propio). Quien cambia una aprobación deja, en la misma transacción del expediente, una marca `RecalculoDeVigenciaPendiente` por documento; el barrido `RevisarRecalculosDeVigencia` la borra y publica `CalcularVigenciasDelDocumento`, que lee la aprobación y registra `VigenciaDeVersionCalculada(…, AprobadaEn?, RevalidarCadaDias?)` si algo cambió. La **antigüedad máxima** (`AntiguedadDelDocumento`) no se guarda: se calcula al leer con la fecha de expedición que leyó la IA (`fechaExpedicion`), cotejada con la declarada, y la regla del tipo. Un hallazgo (`Excedida` o `SinFecha`) es un motivo del motor de revisión (`antiguedad-excedida`, `sin-fecha-de-expedicion`) y, con el nivel `Automatico` y como único motivo, el sistema emite un `VeredictoDeRequisitoEmitido(Observado, Sistema)` con el motivo base `frescura-incumplida` y el siguiente paso (`ResultadoDeRevision.Observada`).
+
+Una antigüedad incumplida al aceptarse impide la aprobación humana sin justificación (`justificacion-por-discrepancias`, o `RequisitoEximido`) y la automática: se observa al tercero (`Automatico`) o se sugiere revisar (`Asistido`). **Toda revalidación recalcula la vigencia desde los hechos de la versión aceptada** (P-7-5).
 
 **Vigencia del vínculo.** `PoliticaVigenciaVinculo { MinimoDeRequisitosCriticos | DiasFijosDesdeAprobacion(n) | Ambas }`. `VinculoPorVencer` desde `VigenteHasta − máx(DiasAviso)`; `VinculoVencido` en `VigenteHasta + DiasGracia`. Vencimiento de un requisito **no crítico** ⇒ `CertificadoMarcadoConPendientes` y el vínculo sigue `Activo` (P-7-3).
 
@@ -582,7 +584,7 @@ Una `ReglaFrescura` incumplida al aceptarse impide la aprobación humana sin `Re
 
 **Avisos consolidados al tercero.** Proyección `FrescuraDocumentoTercero(TerceroId, TipoCanonicoId, VersionActualId, PorEmpresa[(TenantId, EmpresaId, NombreEmpresa, VigenteHasta, EstadoAceptacion)], ProximoVencimiento, EmpresasAfectadas[], PermiteRatificacion)`. Una secuencia de avisos por documento; una versión nueva cubre a todas (§9). **Campañas** de renovación por tenant/tipo (P-7-4) programan `AvisoDocumento` masivo con ventana.
 
-**Renovación y ratificación.** `DocumentoPorVencerEnVinculo` → el tercero **ratifica** (condición única, I-14: el canónico y la configuración efectiva lo permiten, la versión es la actual y no tiene `FechaVencimientoDoc` pasada; la ratificación **reinicia la frescura** desde la fecha de ratificación; `RequisitoRatificado` renueva la vigencia **sin pasar por ningún área** y **nunca la emite el sistema**, A-7) o sube versión nueva → §9. Un crítico vencido ⇒ `Renovacion` (disparador en §6); al aprobarse ⇒ `VinculoRenovado` y emisión `-{n+1}` del certificado. La regla de frescura del RUT en la semilla es `MaxDiasDesdeExpedicion(365)` (fecha de generación del PDF) y es ratificable (Anexo A).
+**Renovación y ratificación.** `DocumentoPorVencerEnVinculo` → el tercero **ratifica** (condición única, I-14: el canónico y la configuración efectiva lo permiten, la versión es la actual y no tiene `FechaVencimientoDoc` pasada; la ratificación **reinicia el plazo de revalidación** desde la fecha de ratificación (si la renovación se aprueba después, cuenta esa aprobación); `RequisitoRatificado` renueva la vigencia **sin pasar por ningún área** y **nunca la emite el sistema**, A-7) o sube versión nueva → §9. Un crítico vencido ⇒ `Renovacion` (disparador en §6); al aprobarse ⇒ `VinculoRenovado` y emisión `-{n+1}` del certificado. Las reglas de frescura del RUT en la semilla son revalidar cada 365 días desde que la empresa lo aprueba (sin antigüedad máxima) y es ratificable (Anexo A).
 
 **Representante saliente (adición 3).** `CamposCriticosCambiados ∋ representanteLegal` en la Cámara ⇒ `CambioDeRelacionDetectado(Confianza)` en la bóveda; solo tras `RelacionConfirmada` (§4.5) ⇒ `ExpirarVerificacionesDeRepresentante` en cada vínculo: cédula aceptada del saliente `Desactualizada`, verificación `ListasRestrictivas` del saliente `Expirada`, requisito de cédula del entrante `Pendiente` (o `Cargado` si su bóveda ya la tiene).
 
@@ -604,7 +606,7 @@ La IA produce **hechos** una vez por versión (en `Documento`, **costo de plataf
 |---|---|
 | `Comparacion ∈ {Identica, SinCambios}` ∧ `FrescuraCumplida` ∧ `IdentidadCoincide` ∧ confianza ≥ umbral ∧ sin `SenalesManipulacion` | `Aprobado` |
 | `CambiosDetectados` solo fuera de `CamposCriticos ∪ CamposCuyoCambioExigeHumano` ∧ frescura ∧ identidad ∧ confianza | `Aprobado` (diff en evidencia) |
-| `FrescuraCumplida = false` | `Observado` al tercero con motivo `frescura-incumplida` y el siguiente paso |
+| `AntigüedadMáximaExcedida` o `SinFechaDeExpedicion` (único hallazgo, TD-10) | `Automatico`: `Observado` al tercero con motivo `frescura-incumplida` y el siguiente paso; `Asistido`: sugiere revisar. Si el tercero declaró una fecha que la IA no encontró: `NoVerificable`, lo decide una persona |
 | `IdentidadCoincide = false` | No llega aquí: la versión fue devuelta en la bóveda (con IA). Sin IA no se detecta y es el humano quien observa con `NoAdmitirEstaVersion` |
 | Cambio en campos críticos, `SenalesManipulacion`, confianza < umbral, formulario con soporte incoherente (P-3-4) | Sin veredicto ⇒ `ColaDeExcepciones` con evidencia |
 | Ratificación | **Nunca automática** (A-7): es una declaración del tercero. `Identica` no ocurre como versión nueva (dedupe por hash). |
@@ -854,32 +856,32 @@ No son eventos de agregados event-sourced: son **registros de auditoría** (`Reg
 
 | Código | Clase | Ámbito | Sensibilidad | Venc. intrínseco | Frescura por defecto | Ratificable | De persona relacionada | Campos clave | Campos críticos |
 |---|---|---|---|---|---|---|---|---|---|
-| `RUT` | Archivo | Global | Identidad | No | `MaxDiasDesdeExpedicion(365)` (fecha de generación del PDF) | Sí | — | NIT, razón social, actividad CIIU principal, responsabilidades, dirección, representante legal | NIT, razón social, representante legal |
-| `CAMARA_COMERCIO` | Archivo | Global | Identidad | No | `MaxDiasDesdeExpedicion(30)` | No | — | NIT, razón social, matrícula, representante legal, suplentes, objeto, capital, estado de matrícula, fecha de expedición | Representante legal, razón social, estado de matrícula |
-| `CERTIFICADO_RUC` (PA ≈ `RUT`) | Archivo | Global | Identidad | No | `MaxDiasDesdeExpedicion(365)` | Sí | — | RUC, DV, razón social, estado, actividad económica, dirección | RUC, razón social |
-| `REGISTRO_PUBLICO` (PA ≈ `CAMARA_COMERCIO`) | Archivo | Global | Identidad | No | `MaxDiasDesdeExpedicion(30)` | No | — | Razón social, folio, estado, representantes, fecha de expedición | Razón social, estado, representantes |
-| `CONSTANCIA_RNC` (DO ≈ `RUT`) | Archivo | Global | Identidad | No | `MaxDiasDesdeExpedicion(365)` | Sí | — | RNC, razón social, estado, actividad económica, régimen | RNC, razón social |
-| `REGISTRO_MERCANTIL` (DO ≈ `CAMARA_COMERCIO`) | Archivo | Global | Identidad | No | `MaxDiasDesdeExpedicion(30)` | No | — | Razón social, matrícula, estado, representantes, fecha de expedición | Razón social, estado, representantes |
+| `RUT` | Archivo | Global | Identidad | No | revalidar cada 365 días (sin antigüedad máxima) | Sí | — | NIT, razón social, actividad CIIU principal, responsabilidades, dirección, representante legal | NIT, razón social, representante legal |
+| `CAMARA_COMERCIO` | Archivo | Global | Identidad | No | antigüedad máxima 30 días · revalidar cada 365 | No | — | NIT, razón social, matrícula, representante legal, suplentes, objeto, capital, estado de matrícula, fecha de expedición | Representante legal, razón social, estado de matrícula |
+| `CERTIFICADO_RUC` (PA ≈ `RUT`) | Archivo | Global | Identidad | No | revalidar cada 365 días | Sí | — | RUC, DV, razón social, estado, actividad económica, dirección | RUC, razón social |
+| `REGISTRO_PUBLICO` (PA ≈ `CAMARA_COMERCIO`) | Archivo | Global | Identidad | No | antigüedad máxima 30 días · revalidar cada 365 | No | — | Razón social, folio, estado, representantes, fecha de expedición | Razón social, estado, representantes |
+| `CONSTANCIA_RNC` (DO ≈ `RUT`) | Archivo | Global | Identidad | No | revalidar cada 365 días | Sí | — | RNC, razón social, estado, actividad económica, régimen | RNC, razón social |
+| `REGISTRO_MERCANTIL` (DO ≈ `CAMARA_COMERCIO`) | Archivo | Global | Identidad | No | antigüedad máxima 30 días · revalidar cada 365 | No | — | Razón social, matrícula, estado, representantes, fecha de expedición | Razón social, estado, representantes |
 | `CEDULA` | Archivo | Global | Identidad | No | `Ninguna` | Sí | Sí (`RepresentanteLegal`, `Suplente`, `Socio`, `BeneficiarioFinal`, `MiembroDe`; o el propio tercero persona natural) | Número, nombres, fecha de expedición | Número, nombres |
 | `PASAPORTE` | Archivo | Global | Identidad | Sí (fecha de vencimiento) | — | No | Sí | Número, nombres, país, vencimiento | Número |
-| `CERTIFICADO_ANTECEDENTES` | Archivo | Global | Personal | No | `MaxDiasDesdeExpedicion(30)` | No | Sí (persona natural) | Número, nombre, resultado, fecha, entidad | Resultado |
+| `CERTIFICADO_ANTECEDENTES` | Archivo | Global | Personal | No | antigüedad máxima 30 días · revalidar cada 365 | No | Sí (persona natural) | Número, nombre, resultado, fecha, entidad | Resultado |
 | `ESTADOS_FINANCIEROS` | Archivo | Global | Financiera | No | `PeriodoMinimo(último año fiscal cerrado)` | No | — | Periodo, activos, pasivos, patrimonio, ingresos, firma contador/revisor | Periodo |
 | `DECLARACION_RENTA` | Archivo | Global | Financiera | No | `PeriodoMinimo(último año gravable)` | No | — | Año gravable, NIT, formulario | Año gravable |
-| `CERTIFICACION_BANCARIA` | Archivo | Global | Financiera | No | `MaxDiasDesdeExpedicion(90)` | No | — | Banco, tipo, número, titular, identificación del titular, fecha | Número, titular |
+| `CERTIFICACION_BANCARIA` | Archivo | Global | Financiera | No | antigüedad máxima 30 días · revalidar cada 365 | No | — | Banco, tipo, número, titular, identificación del titular, fecha | Número, titular |
 | `CUENTA_BANCARIA` | Formulario | Global | Financiera | No | `Ninguna` | Sí | — | Banco, tipo, número, titular, identificación del titular, moneda | Número, titular |
 | `DATOS_MAESTROS` | Formulario | Global | Identidad | No | `Ninguna` | Sí | — | Razón social, nombre comercial, dirección, ciudad, teléfono, correo, representantes (relaciones) | Razón social, representantes |
-| `INFO_TRIBUTARIA` | Formulario | Global | Financiera | No | `MaxDiasDesdeAprobacion(365)` | Sí | — | Régimen, responsabilidades, retenciones, gran contribuyente | Régimen |
-| `INFO_LEGAL` | Formulario | Global | Identidad | No | `MaxDiasDesdeAprobacion(365)` | Sí | — | Tipo societario, representantes, socios (relaciones), revisor fiscal | Representantes |
-| `BENEFICIARIO_FINAL` | Formulario | Global | Personal | No | `MaxDiasDesdeAprobacion(365)` | Sí | Sí (persona natural con ≥ 5 %) | Identificación, porcentaje, cadena de control | Identificación, porcentaje |
+| `INFO_TRIBUTARIA` | Formulario | Global | Financiera | No | revalidar cada 365 días | Sí | — | Régimen, responsabilidades, retenciones, gran contribuyente | Régimen |
+| `INFO_LEGAL` | Formulario | Global | Identidad | No | revalidar cada 365 días | Sí | — | Tipo societario, representantes, socios (relaciones), revisor fiscal | Representantes |
+| `BENEFICIARIO_FINAL` | Formulario | Global | Personal | No | revalidar cada 365 días | Sí | Sí (persona natural con ≥ 5 %) | Identificación, porcentaje, cadena de control | Identificación, porcentaje |
 | `SG_SST` | Archivo | Global | Identidad | Sí (vigencia anual) | — | No | — | Empresa, puntaje, fecha | Puntaje |
 | `HOJA_DE_VIDA` | Archivo | Global | Personal | No | `Ninguna` | Sí | — (el tercero es la persona) | Nombre, identificación | — |
 | `TITULO_ACADEMICO` | Archivo | Global | Personal | No | `Ninguna` | Sí | — | Institución, título, fecha | Título |
 | `POLIZA` | Archivo | PorVinculo | Financiera | Sí (fecha fin) | — | No | — | Aseguradora, número, tomador, asegurado/beneficiario, amparos, vigencia desde/hasta, valor | Beneficiario, vigencia, amparos |
 | `AUTORIZACION_TRATAMIENTO_DATOS` | Formulario (aceptación) | PorVinculo | Personal | No | `Ninguna` (cambia con el texto) | Sí | — | Firmante, fecha, versión del texto, empresa destinataria | Firmante |
 | `TERMINOS_Y_CONDICIONES` | Formulario (aceptación) | PorVinculo | — | No | `Ninguna` (cambia cuando la empresa publica T&C nuevos) | Sí | — | Versión aceptada | Versión |
-| `FORMULARIO_SARLAFT` | Formulario | PorVinculo | Personal | No | `MaxDiasDesdeAprobacion(365)` | No | — | Origen de fondos, referencia a `BENEFICIARIO_FINAL` vigente | Beneficiario final, PEP |
+| `FORMULARIO_SARLAFT` | Formulario | PorVinculo | Personal | No | revalidar cada 365 días | No | — | Origen de fondos, referencia a `BENEFICIARIO_FINAL` vigente | Beneficiario final, PEP |
 | `AFILIACION_SEGURIDAD_SOCIAL` | Archivo | PorVinculo | Personal | Sí (mes) | `PeriodoMinimo(mes en curso)` | No | — | Periodo, EPS/AFP/ARL, estado | Estado |
-| `PAZ_Y_SALVO` | Archivo | PorVinculo | — | No | `MaxDiasDesdeExpedicion(30)` | No | — | Emisor, fecha, concepto | — |
+| `PAZ_Y_SALVO` | Archivo | PorVinculo | — | No | antigüedad máxima 30 días · revalidar cada 365 | No | — | Emisor, fecha, concepto | — |
 | `FORMATO_VINCULACION` | Archivo | PorVinculo (plantilla de la empresa) | — | No | `Ninguna` | No | — | Versión de plantilla, firma | Versión de plantilla |
 
 Códigos **retirados** (no usar): `CERT_BANCARIA`, `INFO_BANCARIA`, `TRATAMIENTO_DATOS`, `INFO_GENERAL`, `CEDULA_REPRESENTANTE`, `POLIZA_RC` (es `POLIZA` con amparo RC), `INFO_FINANCIERA` (es `ESTADOS_FINANCIEROS`).

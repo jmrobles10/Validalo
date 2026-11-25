@@ -245,7 +245,7 @@ public class FichaPendientesTests
     private static readonly object CertificacionBuena = new
     {
         banco = "Bancolombia S.A.", tipoCuenta = "Cuenta de ahorros", numeroCuenta = "12345678901", titular = "ACEROS DEL NORTE SAS",
-        identificacionTitular = "900.373.913-4", estadoCuenta = "Activa"
+        identificacionTitular = "900.373.913-4"
     };
 
     [Fact]
@@ -264,27 +264,38 @@ public class FichaPendientesTests
     }
 
     [Fact]
-    public void Otro_numero_otro_titular_o_una_cuenta_inactiva_son_discrepancias_criticas()
+    public void Otro_numero_u_otro_titular_son_discrepancias_criticas()
     {
-        var otroNumero = CruceDeCuenta(new { numeroCuenta = "99999999999", titular = "Aceros del Norte SAS", identificacionTitular = "900373913", estadoCuenta = "Activa" });
+        var otroNumero = CruceDeCuenta(new { numeroCuenta = "99999999999", titular = "Aceros del Norte SAS", identificacionTitular = "900373913" });
         otroNumero.Campos.Single(c => c.Campo == "numero").Resultado.ShouldBe(ResultadoDeCruce.Discrepa);
         otroNumero.DiscrepanciaCritica.ShouldBeTrue();
 
         // La cuenta es de otra persona: la certificación no dice que el titular sea el tercero.
         var ajena = CruceDeCuenta(new
         {
-            numeroCuenta = "12345678901", titular = "Pedro Soto", identificacionTitular = "79123456", estadoCuenta = "Activa"
+            numeroCuenta = "12345678901", titular = "Pedro Soto", identificacionTitular = "79123456"
         }, Cuenta with { Titular = "Pedro Soto", IdentificacionTitular = "79123456" });
         ajena.Campos.Single(c => c.Campo == "identificacion_titular").Resultado.ShouldBe(ResultadoDeCruce.Coincide);
         var delTercero = ajena.Campos.Single(c => c.Campo == "titular_es_el_tercero");
         (delTercero.Resultado, delTercero.Critico).ShouldBe((ResultadoDeCruce.Discrepa, true));
+    }
 
+    [Fact]
+    public void El_estado_de_la_cuenta_ya_no_se_cruza_ni_influye_aunque_el_documento_lo_traiga_inactivo_CB_12()
+    {
+        // CB-12 (decisión del usuario, 2026-11-25): el cruce de la cuenta no trae el campo «estado_cuenta».
+        CruceDeCuenta(CertificacionBuena).Campos.Select(c => c.Campo).ShouldBe(
+            ["numero", "titular", "identificacion_titular", "titular_es_el_tercero", "banco", "tipo_cuenta"]);
+
+        // Un estado que antes discrepaba («Cuenta inactiva») ya no cambia nada: todo coincide y no hay discrepancia crítica.
         var inactiva = CruceDeCuenta(new
         {
-            numeroCuenta = "12345678901", titular = "Aceros del Norte SAS", identificacionTitular = "900373913", estadoCuenta = "Cuenta inactiva"
+            banco = "Bancolombia S.A.", tipoCuenta = "Cuenta de ahorros", numeroCuenta = "12345678901", titular = "ACEROS DEL NORTE SAS",
+            identificacionTitular = "900373913", estadoCuenta = "Cuenta inactiva"
         });
-        inactiva.Campos.Single(c => c.Campo == "estado_cuenta").Resultado.ShouldBe(ResultadoDeCruce.Discrepa);
-        inactiva.DiscrepanciaCritica.ShouldBeTrue();
+        inactiva.Campos.Select(c => c.Campo).ShouldNotContain("estado_cuenta");
+        inactiva.Campos.ShouldAllBe(c => c.Resultado == ResultadoDeCruce.Coincide);
+        inactiva.DiscrepanciaCritica.ShouldBeFalse();
     }
 
     [Fact]
@@ -293,7 +304,7 @@ public class FichaPendientesTests
         var cruce = CruceDeCuenta(new
         {
             banco = "Davivienda", tipoCuenta = "Corriente", numeroCuenta = "12345678901", titular = "Aceros del Norte SAS",
-            identificacionTitular = "900373913", estadoCuenta = "Activa"
+            identificacionTitular = "900373913"
         });
         cruce.Campos.Single(c => c.Campo == "banco").Resultado.ShouldBe(ResultadoDeCruce.Discrepa);
         cruce.Campos.Single(c => c.Campo == "tipo_cuenta").Resultado.ShouldBe(ResultadoDeCruce.Discrepa);
@@ -301,7 +312,7 @@ public class FichaPendientesTests
 
         var incompleta = CruceDeCuenta(new { banco = "Bancolombia" });
         incompleta.Campos.Single(c => c.Campo == "numero").Resultado.ShouldBe(ResultadoDeCruce.NoVerificable);
-        incompleta.Campos.Single(c => c.Campo == "estado_cuenta").Resultado.ShouldBe(ResultadoDeCruce.NoVerificable);
+        incompleta.Campos.Single(c => c.Campo == "identificacion_titular").Resultado.ShouldBe(ResultadoDeCruce.NoVerificable);
         incompleta.DiscrepanciaCritica.ShouldBeFalse();
 
         var ilegible = CruceDeCuenta(CertificacionBuena, legible: false);

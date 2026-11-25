@@ -1,50 +1,9 @@
 import { Box, ButtonBase, type SxProps, type Theme } from '@mui/material';
 import { Logo, sxComoLista } from '@validalo/ui';
-import {
-  BadgeCheck,
-  CalendarClock,
-  ChartColumn,
-  ClipboardCheck,
-  FileWarning,
-  History,
-  House,
-  Inbox,
-  Link2,
-  RefreshCw,
-  Scale,
-  Settings,
-  type LucideIcon,
-} from 'lucide-react';
+import { Settings, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router';
-
-/** Claves de las secciones de la web de empresa (`AppShell`): su nombre está en `nav.{clave}`. */
-export type ClavePestana = 'inicio' | 'bandeja' | 'excepciones' | 'revalidaciones' | 'evaluaciones' | 'vencimientos' | 'cumplimiento' | 'certificados' | 'vinculos' | 'informes' | 'auditoria';
-
-export interface Pestana {
-  clave: ClavePestana;
-  /** Ruta de la sección, relativa a `rutaBase`. */
-  ruta: string;
-  /** Rutas que marcan la sección como activa. */
-  prefijos: readonly string[];
-  /** Pendientes de la sección (texto, p. ej. «3» o «200+»): una insignia sobre el ícono. Sin pendientes, no se pasa. */
-  conteo?: string;
-}
-
-/** Ícono de cada sección de la web de empresa en el riel. */
-const ICONO_SECCION: Record<ClavePestana, LucideIcon> = {
-  inicio: House,
-  bandeja: Inbox,
-  excepciones: FileWarning,
-  revalidaciones: RefreshCw,
-  vencimientos: CalendarClock,
-  cumplimiento: Scale,
-  evaluaciones: ClipboardCheck,
-  certificados: BadgeCheck,
-  vinculos: Link2,
-  informes: ChartColumn,
-  auditoria: History,
-};
+import { ICONO_SECCION, type PropsNavegacion } from './navegacion';
 
 /** Ancho del riel (px): cabe el rótulo más largo («Revalidaciones») en una línea y el logotipo completo arriba. */
 const ANCHO_RIEL = 96;
@@ -57,17 +16,15 @@ interface ItemRiel {
   activo: boolean;
   /** Pendientes de la sección (texto: «3», «200+»): una insignia sobre el ícono. */
   conteo?: string;
-  onNavegar?: () => void;
 }
 
 /** Un ítem del riel: el ícono en una píldora (con el tinte del acento si es la sección activa) y su rótulo corto debajo. */
-function ElementoRiel({ texto, icono: Icono, destino, activo, conteo, onNavegar }: ItemRiel) {
+function ElementoRiel({ texto, icono: Icono, destino, activo, conteo }: ItemRiel) {
   const { t } = useTranslation();
   return (
     <ButtonBase
       component={RouterLink}
       to={destino}
-      onClick={onNavegar}
       aria-current={activo ? 'page' : undefined}
       aria-label={conteo ? t('nav.conConteo', { nombre: texto, conteo }) : undefined}
       sx={{
@@ -131,7 +88,7 @@ function ElementoRiel({ texto, icono: Icono, destino, activo, conteo, onNavegar 
 }
 
 /**
- * Menú principal de la web de empresa como riel lateral fijo (a la izquierda, todo el alto): el logo, una opción por
+ * Menú principal de la web de empresa en pantallas desde `sm` como riel lateral fijo (a la izquierda, todo el alto): el logo, una opción por
  * sección (ícono + rótulo corto) y, abajo, Configuración. Compacto para que las secciones quepan sin desplazamiento; si no
  * caben (pantallas muy bajas), la lista desplaza en vertical. La barra propia de cada sección (Configuración, la ficha
  * del vínculo) se abre a la derecha del riel, dentro del contenido.
@@ -142,19 +99,8 @@ export function RielNavegacion({
   activa,
   nombreDe,
   configuracion,
-  onNavegar,
   sx,
-}: {
-  pestanas: readonly Pestana[];
-  rutaBase: string;
-  activa: ClavePestana | null;
-  nombreDe: (clave: ClavePestana) => string;
-  /** Destino y estado de Configuración; sin él (sin permisos) no se muestra. */
-  configuracion?: { destino: string; activo: boolean };
-  /** Al elegir una opción (cierra el cajón en el celular). */
-  onNavegar?: () => void;
-  sx?: SxProps<Theme>;
-}) {
+}: PropsNavegacion & { sx?: SxProps<Theme> }) {
   const { t } = useTranslation();
   return (
     <Box
@@ -176,7 +122,7 @@ export function RielNavegacion({
       ]}
     >
       <Box sx={{ display: 'grid', placeItems: 'center', flex: 'none', height: (th) => th.densidad.cabeceraEmbebida, borderBottom: 1, borderColor: 'divider' }}>
-        <RouterLink to={`${rutaBase}/inicio`} onClick={onNavegar} style={{ display: 'inline-flex' }}>
+        <RouterLink to={`${rutaBase}/inicio`} style={{ display: 'inline-flex' }}>
           <Logo tamano={17} titulo={t('app.nombre')} />
         </RouterLink>
       </Box>
@@ -207,14 +153,13 @@ export function RielNavegacion({
               destino={`${rutaBase}/${p.ruta}`}
               activo={activa === p.clave}
               conteo={p.conteo}
-              onNavegar={onNavegar}
             />
           </Box>
         ))}
       </Box>
       {configuracion && (
         <Box sx={{ flex: 'none', px: 0.75, py: 1, borderTop: 1, borderColor: 'divider' }}>
-          <ElementoRiel clave="configuracion" texto={t('nav.configuracion')} icono={Settings} destino={configuracion.destino} activo={configuracion.activo} onNavegar={onNavegar} />
+          <ElementoRiel clave="configuracion" texto={t('nav.configuracion')} icono={Settings} destino={configuracion.destino} activo={configuracion.activo} />
         </Box>
       )}
     </Box>

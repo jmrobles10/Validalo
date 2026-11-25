@@ -1,7 +1,7 @@
 import { expect, test, type FrameLocator, type Page } from '@playwright/test';
 import { API } from '../soporte/api';
 import { abrirEmbebido } from '../soporte/embebido';
-import { abrirDesdeBandeja } from '../soporte/empresa';
+import { abrirDesdeBandeja, irASector } from '../soporte/empresa';
 import { capturarBloque, capturarDialogo, dialogoDeclaracion, diligenciarDeclaracion, guardarAutorizacion, TITULO_DECLARACION } from '../soporte/declaracion-pep';
 import { abrirSeccion, guardarSeccionCompleta, llenarContactoYDomicilio, publicarFlujoDeFicha, REPRESENTANTE } from '../soporte/ficha';
 import { escribirFecha } from '../soporte/fechas';
@@ -141,6 +141,7 @@ test('persona natural: «Sí» a PEP abre la declaración, no se guarda sin ella
   const sofia = await abrirEmbebido(paginaSofia, e, e.sofia, e.sur);
   await expect(async () => {
     await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
+    await irASector(sofia, 'Información general'); // la declaración está en «Lo que declaró el tercero» de su sector
     await expect(sofia.getByRole('region', { name: TITULO_DECLARACION })).toBeVisible({ timeout: 1500 });
   }).toPass({ timeout: 60_000 });
   const bloque = sofia.getByRole('region', { name: TITULO_DECLARACION });
@@ -179,7 +180,9 @@ test('persona jurídica: un socio PEP declara en su fila de la información lega
     await persona.getByRole('textbox', { name: 'Número de identificación' }).fill(numero);
     await persona.getByRole('textbox', { name: 'Nombres', exact: true }).fill(nombres);
     await persona.getByRole('textbox', { name: 'Apellidos', exact: true }).fill(apellidos);
-    if (porcentaje) await persona.getByRole('textbox', { name: 'Participación (%)' }).fill(porcentaje);
+    // Quien no es socio responde si también lo es (obligatoria); con «Sí» aparece el porcentaje.
+    if (rol !== 'Socio o accionista') await persona.getByRole('radiogroup', { name: '¿También es socio o accionista?' }).getByRole('radio', { name: porcentaje ? 'Sí' : 'No' }).check();
+    if (porcentaje) await persona.getByRole('textbox', { name: 'Porcentaje de participación (%)' }).fill(porcentaje);
     await persona.getByRole('radiogroup', { name: '¿Tiene vínculo con una persona expuesta políticamente?' }).getByRole('radio', { name: 'No' }).check();
     return persona;
   };
@@ -216,6 +219,7 @@ test('persona jurídica: un socio PEP declara en su fila de la información lega
   const sofia = await abrirEmbebido(paginaSofia, e, e.sofia, e.sur);
   await expect(async () => {
     await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
+    await irASector(sofia, 'Información legal'); // la de cada persona, en la tarjeta de la persona del sector legal
     await expect(sofia.getByRole('region', { name: TITULO_DECLARACION })).toBeVisible({ timeout: 1500 });
   }).toPass({ timeout: 60_000 });
   await expect(sofia.getByRole('region', { name: TITULO_DECLARACION })).toHaveCount(1);

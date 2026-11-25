@@ -20,4 +20,7 @@ export interface ConsumoDeIaGrupoDto {
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$ */
   valorAdicional: number | string;
   empresas: ConsumoDeIaEmpresaDto[];
+  validacionesReutilizadas?: number;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$ */
+  costoReutilizadoUsd?: number | string;
 }

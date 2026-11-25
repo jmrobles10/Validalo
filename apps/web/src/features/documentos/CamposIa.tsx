@@ -34,13 +34,28 @@ function Valor({ valor }: { valor: ValorIa }) {
 
 /**
  * Lo que leyó la IA, en la misma lista que `previas` (las filas que no cuentan para el límite, como «Legible» y «Tipo detectado»): con «Ver n datos más» si hay límite.
+ * Con `plegados` (hay un cruce que ya cuenta lo importante) solo quedan las `previas` y el resto va tras «Ver lo que leyó la IA».
  * Los valores largos (listas y objetos) ocupan todo el ancho; los cortos comparten fila de a dos si el contenedor es ancho.
  */
-export function CamposIa({ campos, titulo, limite, previas = [] }: { campos: readonly CampoIa[]; titulo: string; limite?: number; previas?: readonly FilaDeDato[] }) {
+export function CamposIa({
+  campos,
+  titulo,
+  limite,
+  previas = [],
+  plegados = false,
+}: {
+  campos: readonly CampoIa[];
+  titulo: string;
+  limite?: number;
+  previas?: readonly FilaDeDato[];
+  plegados?: boolean;
+}) {
   const { t } = useTranslation();
   const [todos, setTodos] = useState(false);
-  const visibles = limite && !todos ? campos.slice(0, limite) : campos;
+  const visibles = plegados ? (todos ? campos : []) : limite && !todos ? campos.slice(0, limite) : campos;
   const ocultos = campos.length - visibles.length;
+  const conBoton = plegados ? campos.length > 0 : limite !== undefined && campos.length > limite;
+  const textoDelBoton = todos ? (plegados ? t('ia.revision.ocultarLoLeido') : t('ia.revision.verMenos')) : plegados ? t('ia.revision.verLoLeido') : t('ia.revision.verTodos', { count: ocultos });
   const filas: FilaDeDato[] = [
     ...previas,
     ...visibles.map((campo) => ({ clave: campo.clave, etiqueta: campo.etiqueta, valor: <Valor valor={campo.valor} />, ancho: campo.valor.tipo !== 'texto' })),
@@ -49,9 +64,9 @@ export function CamposIa({ campos, titulo, limite, previas = [] }: { campos: rea
   return (
     <Box>
       <ListaDeDatos filas={filas} etiqueta={titulo} />
-      {limite !== undefined && campos.length > limite && (
-        <Button size="small" variant="text" onClick={() => setTodos((v) => !v)} sx={{ mt: 0.5, px: 0.5, minWidth: 0 }} aria-expanded={todos}>
-          {todos ? t('ia.revision.verMenos') : t('ia.revision.verTodos', { count: ocultos })}
+      {conBoton && (
+        <Button variant="text" onClick={() => setTodos((v) => !v)} sx={{ mt: 0.5, px: plegados ? 0 : 0.5, minWidth: 0 }} aria-expanded={todos}>
+          {textoDelBoton}
         </Button>
       )}
     </Box>

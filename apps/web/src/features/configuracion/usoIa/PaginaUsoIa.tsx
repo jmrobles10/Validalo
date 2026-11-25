@@ -1,6 +1,6 @@
 import { MenuItem, Stack, TextField } from '@mui/material';
 import { SCOPES } from '@validalo/api-client';
-import { EsqueletoTarjeta, EstadoVacio } from '@validalo/ui';
+import { EsqueletoKpis, EsqueletoTarjeta, EstadoVacio } from '@validalo/ui';
 import { Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -16,8 +16,9 @@ import { SerieDiaria } from './SerieDiaria';
 import { TarjetasUso } from './TarjetasUso';
 
 /**
- * «Plan y uso de IA» de la empresa activa (ADR-0012, IA-8): validaciones incluidas y adicionales del mes, análisis
- * pagados con su llave, costo real y tokens, y la serie por día. El mes va en la URL (`?mes=`; el actual no se escribe).
+ * «Plan y uso de IA» de la empresa activa (ADR-0012, IA-8): validaciones incluidas y adicionales del mes, llamadas a
+ * OpenAI con su llave, costo de IA y tokens de todas sus validaciones (lo de su llave más lo reutilizado de otra empresa,
+ * IA-15) y la serie por día. El mes va en la URL (`?mes=`; el actual no se escribe).
  * El aviso de cupo del backend enlaza aquí (`/e/{empresa}/uso-ia`).
  */
 export function PaginaUsoIa() {
@@ -60,24 +61,27 @@ export function PaginaUsoIa() {
           </TextField>
         }
       />
-      {consulta.isError && !datos ? (
-        <ErrorRecuperable mensaje={`${t('ia.uso.error')} ${mensajeDeError(consulta.error, t)}`} onReintentar={() => void consulta.refetch()} />
-      ) : !datos ? (
-        <Stack spacing={1.5} aria-busy>
-          <EsqueletoTarjeta alto={120} />
-          <EsqueletoTarjeta alto={180} />
-        </Stack>
-      ) : !tienePlanActivo(datos) ? (
-        <Tarjeta>
-          <EstadoVacio icono={Sparkles} titulo={t('ia.uso.sinPlanTitulo')} texto={t('ia.uso.sinPlan')} />
-        </Tarjeta>
-      ) : (
-        <Stack spacing={1.5} sx={{ opacity: consulta.isPlaceholderData ? 0.6 : 1, transition: 'opacity 120ms' }} aria-busy={consulta.isPlaceholderData || undefined}>
-          <TarjetasUso uso={datos} />
-          <SerieDiaria mes={datos.mes} porDia={datos.porDia} />
-        </Stack>
-      )}
-      <AyudaUsoIa />
+      {/* Mismo ritmo vertical que el Inicio: entre secciones 20 px (spacing 2.5, como los grupos de Indicadores) y 24 px hasta la ayuda (spacing 3, como los bloques de la página), todo con `gap` y no con márgenes: el acordeón expandido anula el suyo. */}
+      <Stack spacing={3} useFlexGap>
+        {consulta.isError && !datos ? (
+          <ErrorRecuperable mensaje={`${t('ia.uso.error')} ${mensajeDeError(consulta.error, t)}`} onReintentar={() => void consulta.refetch()} />
+        ) : !datos ? (
+          <Stack spacing={2.5} useFlexGap aria-busy>
+            <EsqueletoKpis cantidad={4} />
+            <EsqueletoTarjeta alto={110} />
+          </Stack>
+        ) : !tienePlanActivo(datos) ? (
+          <Tarjeta>
+            <EstadoVacio icono={Sparkles} titulo={t('ia.uso.sinPlanTitulo')} texto={t('ia.uso.sinPlan')} />
+          </Tarjeta>
+        ) : (
+          <Stack spacing={2.5} useFlexGap sx={{ opacity: consulta.isPlaceholderData ? 0.6 : 1, transition: 'opacity 120ms' }} aria-busy={consulta.isPlaceholderData || undefined}>
+            <TarjetasUso uso={datos} />
+            <SerieDiaria mes={datos.mes} porDia={datos.porDia} />
+          </Stack>
+        )}
+        <AyudaUsoIa />
+      </Stack>
     </>
   );
 }

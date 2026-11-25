@@ -1,4 +1,4 @@
-import { Box, ButtonBase, Divider, IconButton, Tooltip, Typography, type SxProps, type Theme } from '@mui/material';
+import { Box, ButtonBase, Divider, IconButton, Skeleton, Tooltip, Typography, type SxProps, type Theme } from '@mui/material';
 import { PanelLeftClose, PanelLeftOpen, type LucideIcon } from 'lucide-react';
 import type { ComponentProps, ElementType, MouseEvent, ReactNode, Ref } from 'react';
 import { sxComoLista } from './sx';
@@ -281,6 +281,51 @@ export function NavegacionLateral({
               {grupo.items.map((item) => (
                 <Box component="li" key={item.clave}>
                   <ElementoNavegacion item={item} enlace={enlace} colapsada={colapsada} onNavegar={onNavegar} alto={ALTO_ITEM[densidad]} />
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        ))}
+      </Box>
+    </PanelFlotante>
+  );
+}
+
+/**
+ * La `NavegacionLateral` mientras carga lo que la rodea: el mismo panel (mismo relleno, bordes, divisores entre grupos y alto de ítem) con la silueta de sus grupos, un título
+ * pequeño y, por ítem, la caja del ícono y una barra de texto. `grupos` dice cuántos ítems tiene cada grupo; el texto varía de ancho con la posición, sin azar. Es una región
+ * `status` ocupada con nombre accesible (no visible).
+ */
+export function EsqueletoNavegacionLateral({
+  etiqueta = 'Cargando',
+  grupos,
+  densidad = 'normal',
+  sx,
+  ...resto
+}: {
+  etiqueta?: string;
+  /** Cuántos ítems tiene cada grupo. */
+  grupos: readonly number[];
+  densidad?: 'normal' | 'compacta';
+  sx?: SxProps<Theme>;
+} & Omit<ComponentProps<'div'>, 'color' | 'children' | 'ref' | 'role' | 'aria-label'>) {
+  const alto = ALTO_ITEM[densidad];
+  return (
+    <PanelFlotante {...resto} role="status" aria-busy="true" aria-label={etiqueta} sx={[{ boxSizing: 'border-box', display: 'flex', flexDirection: 'column', width: ANCHO_EXPANDIDA, p: 1, overflow: 'hidden' }, ...sxComoLista(sx)]}>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        {grupos.map((cantidad, g) => (
+          <Box key={g}>
+            {g > 0 && <Divider sx={{ my: 1 }} />}
+            <Box sx={{ px: 1.25, pb: 0.5, height: 20, display: 'flex', alignItems: 'center' }}>
+              <Skeleton variant="rounded" width={56 + ((g * 3) % 3) * 12} height={9} />
+            </Box>
+            <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+              {Array.from({ length: cantidad }, (_, i) => (
+                <Box component="li" key={i} sx={{ display: 'flex', alignItems: 'center', height: alto }}>
+                  <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: 'none', width: 40, height: alto }}>
+                    <Skeleton variant="rounded" width={18} height={18} />
+                  </Box>
+                  <Skeleton variant="rounded" height={11} width={`${String(48 + ((g * 5 + i * 7) % 5) * 9)}%`} />
                 </Box>
               ))}
             </Box>

@@ -5,18 +5,29 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { esEstadoCuenta, numeroVisible, textoTipoCuenta } from './modelo';
 
-/** Sobretítulo de cada parte de la tarjeta («Designada», «Por aprobar»…) con el chip del estado de la cuenta. */
-export function SeccionCuenta({ titulo, cuenta, fecha, children }: { titulo: string; cuenta: CuentaDesignadaDto; fecha?: string | null; children: ReactNode }) {
+/** Cada parte de la tarjeta («Designada», «Por aprobar», «Última rechazada»): una región con su nombre y, arriba, una sola línea de encabezado. */
+export function SeccionCuenta({ titulo, encabezado, children }: { titulo: string; encabezado: ReactNode; children: ReactNode }) {
   return (
     <Stack component="section" aria-label={titulo} spacing={1}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Typography variant="overline" component="h3" sx={{ color: 'text.secondary' }}>
-          {titulo}
-        </Typography>
-        {esEstadoCuenta(cuenta.estado) && <ChipEstado estado={cuenta.estado} fecha={fecha ?? null} />}
+      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        {encabezado}
       </Stack>
       {children}
     </Stack>
+  );
+}
+
+/** El estado de la cuenta como chip (con `etiqueta` el texto de la sección, p. ej. «Por aprobar») y, en secundario, lo que lo acompaña («Propuesta el 08/11/2026»). */
+export function EncabezadoCuenta({ cuenta, etiqueta, nota }: { cuenta: CuentaDesignadaDto; etiqueta: string; nota?: string }) {
+  return (
+    <>
+      {esEstadoCuenta(cuenta.estado) && <ChipEstado estado={cuenta.estado} etiqueta={etiqueta} />}
+      {nota && (
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {nota}
+        </Typography>
+      )}
+    </>
   );
 }
 
@@ -54,7 +65,17 @@ export function DatosCuenta({ cuenta }: { cuenta: CuentaDesignadaDto }) {
 export function CuentaRechazada({ cuenta }: { cuenta: CuentaDesignadaDto }) {
   const { t } = useTranslation();
   return (
-    <SeccionCuenta titulo={t('cuentas.secciones.rechazada')} cuenta={cuenta}>
+    <SeccionCuenta
+      titulo={t('cuentas.secciones.rechazada')}
+      encabezado={
+        <>
+          <Typography variant="overline" component="h3" sx={{ color: 'text.secondary' }}>
+            {t('cuentas.secciones.rechazada')}
+          </Typography>
+          {esEstadoCuenta(cuenta.estado) && <ChipEstado estado={cuenta.estado} />}
+        </>
+      }
+    >
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
         {t('cuentas.rechazadaResumen', { banco: cuenta.banco, tipo: textoTipoCuenta(cuenta.tipoCuenta, t), numero: numeroVisible(cuenta) })}
       </Typography>

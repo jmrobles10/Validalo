@@ -24,7 +24,7 @@ function ValorJson({ valor, tachado = false }: { valor: unknown; tachado?: boole
         {largo && !completo ? `${texto.slice(0, LARGO_RECORTE)}…` : texto}
       </Typography>
       {largo && (
-        <Button variant="text" size="small" onClick={() => setCompleto((v) => !v)} sx={{ ml: 0.5, minWidth: 0, py: 0 }}>
+        <Button variant="text" size="small" onClick={() => setCompleto((v) => !v)} sx={{ ml: 0.5, minWidth: 0, minHeight: 0, py: 0 }}>
           {completo ? t('auditoria.detalle.verMenos') : t('auditoria.detalle.verMas')}
         </Button>
       )}

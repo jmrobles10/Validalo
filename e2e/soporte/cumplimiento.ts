@@ -2,7 +2,7 @@ import { expect, type Browser, type FrameLocator, type Page } from '@playwright/
 import { CLAVE_PLATAFORMA, llamar } from './api';
 import { pdf } from './archivos';
 import { abrirEmbebido } from './embebido';
-import { abrirDesdeBandeja, regionDeArea } from './empresa';
+import { abrirDesdeBandeja, irASector, regionDeArea } from './empresa';
 import { completarInvitacion } from './proveedor';
 import { invitar, nuevoTercero, type Escenario, type Invitacion, type Persona } from './semilla';
 
@@ -43,16 +43,18 @@ export async function personaEmbebida(browser: Browser, e: Escenario, quien: Per
   return abrirEmbebido(await (await browser.newContext()).newPage(), e, quien, e.norte, ruta);
 }
 
-/** Recarga el expediente (pasando por Vínculos) hasta que las listas muestren el estado esperado: la consulta es automática. */
+/** Recarga el expediente (pasando por Vínculos) hasta que las listas, en el sector «Oficial de cumplimiento» de la ficha, muestren el estado esperado: la consulta es automática. */
 export async function esperarListas(app: FrameLocator, tercero: string, area: string, estado: string): Promise<void> {
   await expect(async () => {
     await abrirDesdeBandeja(app, tercero, area);
+    await irASector(app, 'Oficial de cumplimiento');
     await expect(app.getByRole('region', { name: 'Listas restrictivas' })).toContainText(estado, { timeout: 1500 });
   }).toPass({ timeout: 45_000 });
 }
 
 /** La última área aprueba, pero el expediente sigue en revisión: falta una verificación bloqueante. */
 export async function aprobarUltimaArea(app: FrameLocator, area: string, falta: RegExp): Promise<void> {
+  await irASector(app, 'Aprobaciones');
   await regionDeArea(app, area).getByRole('button', { name: /^Aprobar área/ }).click();
   const dialogo = app.getByRole('dialog', { name: new RegExp(`^Aprobar ${area}`) });
   await dialogo.getByRole('button', { name: /^Aprobar/ }).last().click();

@@ -13,8 +13,10 @@ interface Props {
   empresa: string;
   /** `seccion`: una sección de la ficha en la renovación periódica del vínculo (VV-3); por omisión, un documento vencido. */
   tipo?: 'documento' | 'seccion';
-  /** Botón pequeño, sin sangría (Mi información y el wizard). */
+  /** Sin sangría (Mi información, el wizard y las tarjetas de la revisión); por omisión lleva la de un botón suelto bajo un texto. */
   compacto?: boolean;
+  /** Cómo se dibuja el botón: por omisión, de texto si es `compacto` y de borde si no; en la revisión, `contained` (la acción que le toca). */
+  variante?: 'text' | 'outlined' | 'contained';
   /** Texto del botón (por omisión el del tipo). */
   etiqueta?: string;
 }
@@ -24,7 +26,7 @@ interface Props {
  * tercero declara que no cambió y la empresa lo da por renovado sin volver a revisarlo. Si algo cambió, debe subir una versión
  * nueva (o actualizar su información).
  */
-export function ConfirmarRatificacion({ expedienteId, requisitoId, documento, empresa, tipo = 'documento', compacto = false, etiqueta }: Props) {
+export function ConfirmarRatificacion({ expedienteId, requisitoId, documento, empresa, tipo = 'documento', compacto = false, variante, etiqueta }: Props) {
   const { t } = useTranslation();
   const k = tipo === 'seccion' ? 'expediente.ratificar.seccion' : 'expediente.ratificar';
   const mostrar = useAvisos((s) => s.mostrar);
@@ -44,11 +46,10 @@ export function ConfirmarRatificacion({ expedienteId, requisitoId, documento, em
   return (
     <>
       <Button
-        variant="outlined"
-        size={compacto ? 'small' : 'medium'}
+        variant={variante ?? (compacto ? 'text' : 'outlined')}
         startIcon={<CheckCheck size={16} aria-hidden />}
         onClick={() => setAbierto(true)}
-        sx={compacto ? { minHeight: 36 } : { mt: 1, ml: 3.25 }}
+        sx={compacto ? undefined : { mt: 1, ml: 3.25 }}
       >
         {etiqueta ?? t(`${k}.boton`)}
       </Button>

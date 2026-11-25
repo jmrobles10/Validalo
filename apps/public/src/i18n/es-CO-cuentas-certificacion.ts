@@ -35,6 +35,8 @@ export const certificacionDeCuenta = {
     Devuelta: 'Sube de nuevo la certificación de esta cuenta.',
   },
   diferencia: '{{etiqueta}}: registraste {{declarado}} y la certificación dice {{extraido}}',
+  // La antigüedad máxima que exige una empresa (TD-10): el texto es el del expediente; con varias empresas con regla se nombra a la que lo pide.
+  antiguedadDeEmpresa: '{{empresa}} · {{texto}}',
   sinDato: 'sin dato',
   dialogo: {
     tituloSubir: 'Certificación de {{cuenta}}',

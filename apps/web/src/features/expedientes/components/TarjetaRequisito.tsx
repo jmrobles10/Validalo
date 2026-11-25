@@ -1,6 +1,6 @@
-import { Alert, Box, Button, Stack, Typography } from '@mui/material';
+import { Alert, Button, Stack, Typography } from '@mui/material';
 import type { AreaExpedienteDto, DocumentoVistaEmpresaDto, ExpedienteDto, HechosDto, RequisitoExpedienteDto } from '@validalo/api-client';
-import { ChipEstado, formatearFecha, textoDelPorQue } from '@validalo/ui';
+import { ChipEstado, formatearFecha, MarcoDeTarjetaDeEstado, textoDelPorQue } from '@validalo/ui';
 import { ClipboardList, FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { textoDelRequisito } from '../../personas/modelo';
@@ -10,12 +10,12 @@ import type { DocumentoEnVisor } from '../../documentos/VisorDocumento';
 import { ChipVigencia } from '../../documentos/VigenciaDocumento';
 import type { ContextoRevisor, DialogoExpediente } from '../reglas';
 import { documentoEnVisor, puedeEximir } from '../requisitos';
+import { aparienciaParaElRevisor } from '../requisitosAgrupados';
 import { AreasDelRequisito } from './AreaDelRequisito';
 import { avisoDelRequisito, soporteSinCruce } from './avisoDelRequisito';
 import { BotonVerVersion } from './BotonVerVersion';
 import { DetalleSeccionRequisito } from './DetalleSeccionRequisito';
-import { PieDelRequisito } from './PieDelRequisito';
-import { SoporteDeSecciones } from './SoporteDeSecciones';
+import { RevisionDelDocumento } from './RevisionDelDocumento';
 
 export interface TarjetaRequisitoProps {
   expediente: ExpedienteDto;
@@ -32,124 +32,143 @@ export interface TarjetaRequisitoProps {
   hechos?: HechosDto | null;
   /** Documentos compartidos con el vínculo: abren en el visor los soportes de una sección. */
   documentos?: readonly DocumentoVistaEmpresaDto[];
+  /** La tarjeta de la cuenta designada está en la misma pantalla y ya trae el cruce de la certificación con la cuenta: aquí queda su línea de resumen, sin la tabla. */
+  cuentasEnSuTarjeta?: boolean;
+  /** Los datos de una sección ya están en la misma pantalla («Lo que declaró el tercero» del sector): la tarjeta no los repite. */
+  datosAparte?: boolean;
+  /** Las áreas que lo revisan, con su avance. Sin ellas (un requisito que aún espera al tercero) todas dirían lo mismo: se dice una sola vez arriba del panel. */
+  conAreas?: boolean;
 }
 
 /**
- * Un documento (o sección de la información del tercero, F2) que pide el flujo: estado, versión vigente (con «Ver» en el visor si trae archivo), su vigencia, los
- * datos que declaró el tercero, la revisión automática, su pie (cuándo se leyó y qué respalda) y, por cada área que lo revisa, su
- * estado, sus veredictos sobre la versión y «Aprobar u observar» cuando le toca a quien mira (RQ-4). Una sección muestra
- * en su lugar la completitud para la empresa, los cambios, sus datos y sus soportes (DetalleSeccionRequisito).
+ * Un documento (o sección de la información del tercero, F2) que pide el flujo, como tarjeta propia (`MarcoDeTarjetaDeEstado`, el mismo marco del portal del tercero) con el tono
+ * del estado para quien revisa: el título con su estado y sus acciones (Ver, Eximir) en la cabecera, una línea con su versión y su vigencia, los datos que declaró el tercero, el
+ * bloque de la revisión automática (qué leyó la IA y cómo cruza con lo declarado) y, al pie, las áreas que lo revisan con su estado, sus veredictos sobre la versión y «Aprobar u
+ * observar» cuando le toca a quien mira (RQ-4). Una sección muestra en su lugar la completitud para la empresa, los cambios, sus datos y sus soportes (DetalleSeccionRequisito).
  */
-export function TarjetaRequisito({ expediente, requisito, areas, contexto, nombres, puedeVer, onVer, onAccion, decidirPorDocumento = false, hechos, documentos = [] }: TarjetaRequisitoProps) {
+export function TarjetaRequisito({
+  expediente,
+  requisito,
+  areas,
+  contexto,
+  nombres,
+  puedeVer,
+  onVer,
+  onAccion,
+  decidirPorDocumento = false,
+  hechos,
+  documentos = [],
+  cuentasEnSuTarjeta = false,
+  datosAparte = false,
+  conAreas = true,
+}: TarjetaRequisitoProps) {
   const { t } = useTranslation();
   const version = requisito.versionActual;
   const seccion = requisito.seccion ?? null;
   const visor = seccion ? null : documentoEnVisor(requisito, hechos);
-  const Icono = seccion ? ClipboardList : FileText;
-  const documento = requisito.tipoDocumento.nombre;
   const eximir = puedeEximir(expediente, requisito, contexto(null).scopes);
-
   const aviso = avisoDelRequisito(requisito, visor, t);
   const vigencia = visor?.vigencia ?? null;
-  // La lectura del archivo (no la de un formulario) para el pie: el aviso de «sin lectura» solo sale si de verdad no se leyó.
-  const lectura = visor && !visor.sinArchivo ? (visor.hechos?.ia ?? null) : null;
+  const persona = textoDelRequisito(requisito.persona, t);
+  const apariencia = aparienciaParaElRevisor(requisito);
 
   return (
-    <Box
-      component="li"
-      sx={{
-        listStyle: 'none',
-        py: 1.5,
-        '&:first-of-type': { pt: 0.5 },
-        '&:not(:first-of-type)': { borderTop: 1, borderColor: 'divider' },
-        ...(requisito.estado === 'Observado' && { pl: 1.25, boxShadow: (th) => `inset 3px 0 0 ${th.palette.warning.main}` }),
-      }}
-    >
-      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <Icono size={18} strokeWidth={1.75} aria-hidden style={{ flex: 'none', marginTop: 2, opacity: 0.7 }} />
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography variant="subtitle1" component="h4">
-            {documento}
-          </Typography>
-          {/* El documento de una persona relacionada (ADR-0010): de quién es, o que nadie cumple todavía el rol. */}
-          {textoDelRequisito(requisito.persona, t) && (
-            <Typography variant="subtitle2" component="p" data-persona-del-requisito="">
-              {textoDelRequisito(requisito.persona, t)}
+    <MarcoDeTarjetaDeEstado
+      icono={seccion ? ClipboardList : FileText}
+      tono={apariencia.tono}
+      resaltar={apariencia.resaltar}
+      tenue={apariencia.tenue}
+      titulo={requisito.tipoDocumento.nombre}
+      // El documento de una persona relacionada (ADR-0010): de quién es, o que nadie cumple todavía el rol.
+      persona={persona ? <span data-persona-del-requisito="">{persona}</span> : undefined}
+      meta={
+        <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          <span title={version ? t('expedientes.requisitos.hash', { hash: version.sha256 }) : undefined}>
+            {requisito.obligatorio ? t('expedientes.requisitos.obligatorio') : t('expedientes.requisitos.opcional')}
+            {version && ` · ${t('expedientes.requisitos.version', { n: String(version.n), fecha: formatearFecha(version.cargadaEn) })}`}
+            {visor?.sinArchivo && ` · ${t('expedientes.datosDeclarados.formulario')}`}
+          </span>
+          {vigencia && <ChipVigencia vigencia={vigencia} />}
+        </Stack>
+      }
+      chip={<ChipEstado estado={requisito.estado} />}
+      accionesDeCabecera={
+        <>
+          {/* Una versión de solo formulario no tiene archivo que ver: sus datos van abajo, en la misma tarjeta. */}
+          {visor && !visor.sinArchivo && <BotonVerVersion documento={visor} puedeVerArchivo={puedeVer} onVer={onVer} />}
+          {eximir && (
+            <Button variant="text" onClick={() => onAccion({ tipo: 'eximir', requisito })} sx={{ color: 'text.secondary' }}>
+              {t('expedientes.requisitos.eximirAccion')}
+            </Button>
+          )}
+        </>
+      }
+      cuerpo={
+        <>
+          {/* Un solo aviso, el más importante: retiro de la versión, discrepancia crítica, vencimiento o, en una franja sutil, archivo sin lectura automática. */}
+          {aviso && (
+            <Alert
+              severity={aviso.severidad}
+              sx={[{ typography: 'body2', py: 0 }, aviso.severidad === 'info' && { bgcolor: 'superficie.nivel2', color: 'text.secondary', '& .MuiAlert-icon': { color: 'text.secondary' } }]}
+            >
+              {aviso.texto}
+            </Alert>
+          )}
+          {/* Lo que el tercero declaró en la versión (un formulario); lo que dice la máquina del documento va en su propio bloque, más abajo. */}
+          {visor && <ResumenVersion datos={visor.datosDeclarados ?? []} limite={6} compacto />}
+          {/* La lectura del archivo (confianza, lo leído, cuándo y con qué modelo), lo que respalda y el resumen de su cruce: un bloque aparte, tintado como el encabezado de las tablas. */}
+          {!seccion && (
+            <RevisionDelDocumento
+              hechos={visor && !visor.sinArchivo ? visor.hechos : null}
+              tipoEsperado={visor?.tipoEsperado}
+              soporte={requisito.soporteDeSecciones}
+              antiguedad={version?.antiguedad}
+              sinCruce={soporteSinCruce(requisito, visor)}
+              cuentasEnSuTarjeta={cuentasEnSuTarjeta}
+            />
+          )}
+          {/* Lo que decidió la revisión automática en cada área (ADR-0012): sugerencia, aprobación del sistema o pase a una persona. */}
+          {!seccion && <RevisionesAutomaticasDelRequisito expediente={expediente} requisito={requisito} areas={areas} contexto={contexto} nombres={nombres} />}
+          {seccion && (
+            <DetalleSeccionRequisito
+              requisito={requisito}
+              seccion={seccion}
+              documentos={documentos}
+              puedeVer={puedeVer}
+              onVer={onVer}
+              empresaId={expediente.empresaId}
+              terceroId={expediente.tercero.id}
+              sinDatos={datosAparte}
+            />
+          )}
+          {!seccion && !version && requisito.estado === 'Pendiente' && <Typography sx={{ color: 'text.secondary' }}>{t('expedientes.requisitos.sinVersion')}</Typography>}
+          {requisito.reenvios > 0 && <Typography sx={{ color: 'text.secondary' }}>{t('expedientes.requisitos.versionesNuevas', { count: requisito.reenvios })}</Typography>}
+          {/* Lo que de la ficha del tercero hizo que se pida (EF-6), o que ya no aplica porque lo declarado cambió (EF-5). */}
+          {requisito.estado !== 'NoAplica' && (requisito.porQue?.length ?? 0) > 0 && (
+            <Typography sx={{ color: 'text.secondary' }} data-por-que="">
+              {t('expedientes.requisitos.porQue', { motivos: textoDelPorQue(requisito.porQue ?? []) })}
             </Typography>
           )}
-          <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 0.25 }}>
-            <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }} title={version ? t('expedientes.requisitos.hash', { hash: version.sha256 }) : undefined}>
-              {requisito.obligatorio ? t('expedientes.requisitos.obligatorio') : t('expedientes.requisitos.opcional')}
-              {version && ` · ${t('expedientes.requisitos.version', { n: String(version.n), fecha: formatearFecha(version.cargadaEn) })}`}
-              {visor?.sinArchivo && ` · ${t('expedientes.datosDeclarados.formulario')}`}
+          {requisito.estado === 'NoAplica' && (
+            <Typography sx={{ color: 'text.secondary' }} data-no-aplica="">
+              {t('expedientes.requisitos.noAplica')}
             </Typography>
-            {vigencia && <ChipVigencia vigencia={vigencia} />}
-          </Stack>
-        </Box>
-        <ChipEstado estado={requisito.estado} />
-        {/* Una versión de solo formulario no tiene archivo que ver: sus datos van abajo, en la misma tarjeta. */}
-        {visor && !visor.sinArchivo && <BotonVerVersion documento={visor} puedeVerArchivo={puedeVer} onVer={onVer} />}
-        {eximir && (
-          <Button size="small" variant="text" onClick={() => onAccion({ tipo: 'eximir', requisito })} sx={{ color: 'text.secondary' }}>
-            {t('expedientes.requisitos.eximirAccion')}
-          </Button>
-        )}
-      </Stack>
-
-      {/* Un solo aviso, el más importante: retiro de la versión, discrepancia crítica, vencimiento o archivo sin lectura automática. */}
-      {aviso && (
-        <Alert severity={aviso.severidad} sx={{ typography: 'body2', mt: 1, py: 0 }}>
-          {aviso.texto}
-        </Alert>
-      )}
-      {visor && (
-        <Box sx={{ mt: 1, '&:empty': { display: 'none' } }}>
-          <ResumenVersion datos={visor.datosDeclarados ?? []} vigencia={visor.vigencia} limite={6} hechos={visor.sinArchivo ? null : visor.hechos} tipoEsperado={visor.tipoEsperado} compacto />
-        </Box>
-      )}
-      {/* El pie del documento, en una línea: cuándo se leyó, qué respalda y, si no hay con qué cruzarlo, que se compare a mano. */}
-      {!seccion && <PieDelRequisito ia={lectura} soporte={requisito.soporteDeSecciones} sinCruce={soporteSinCruce(requisito, visor)} />}
-      {/* Lo que decidió la revisión automática en cada área (ADR-0012): sugerencia, aprobación del sistema o pase a una persona. */}
-      {!seccion && <RevisionesAutomaticasDelRequisito expediente={expediente} requisito={requisito} areas={areas} contexto={contexto} nombres={nombres} />}
-      {seccion && <DetalleSeccionRequisito requisito={requisito} seccion={seccion} documentos={documentos} puedeVer={puedeVer} onVer={onVer} empresaId={expediente.empresaId} terceroId={expediente.tercero.id} />}
-      {/* Un documento que respalda secciones de la ficha («Usar como soporte», F5): el resultado de su cruce con cada una. */}
-      {!seccion && requisito.soporteDeSecciones && (
-        <Box sx={{ mt: 1, '&:empty': { display: 'none' } }}>
-          <SoporteDeSecciones soporte={requisito.soporteDeSecciones} compacto />
-        </Box>
-      )}
-      {!seccion && !version && requisito.estado === 'Pendiente' && (
-        <Typography sx={{ color: 'text.secondary', mt: 1 }}>
-          {t('expedientes.requisitos.sinVersion')}
-        </Typography>
-      )}
-      {requisito.reenvios > 0 && (
-        <Typography sx={{ color: 'text.secondary', mt: 1 }}>
-          {t('expedientes.requisitos.versionesNuevas', { count: requisito.reenvios })}
-        </Typography>
-      )}
-      {/* Lo que de la ficha del tercero hizo que se pida (EF-6), o que ya no aplica porque lo declarado cambió (EF-5). */}
-      {requisito.estado !== 'NoAplica' && (requisito.porQue?.length ?? 0) > 0 && (
-        <Typography sx={{ color: 'text.secondary', mt: 1 }} data-por-que="">
-          {t('expedientes.requisitos.porQue', { motivos: textoDelPorQue(requisito.porQue ?? []) })}
-        </Typography>
-      )}
-      {requisito.estado === 'NoAplica' && (
-        <Typography sx={{ color: 'text.secondary', mt: 1 }} data-no-aplica="">
-          {t('expedientes.requisitos.noAplica')}
-        </Typography>
-      )}
-      {requisito.exencion && (
-        <Typography sx={{ mt: 1 }}>
-          {t('expedientes.requisitos.eximido', {
-            persona: nombres.get(requisito.exencion.por) ?? t('expedientes.requisitos.persona'),
-            fecha: formatearFecha(requisito.exencion.fecha),
-            justificacion: requisito.exencion.justificacion,
-          })}
-        </Typography>
-      )}
-
-      <AreasDelRequisito expediente={expediente} requisito={requisito} areas={areas} contexto={contexto} nombres={nombres} onAccion={onAccion} decidirPorDocumento={decidirPorDocumento} />
-    </Box>
+          )}
+          {requisito.exencion && (
+            <Typography>
+              {t('expedientes.requisitos.eximido', {
+                persona: nombres.get(requisito.exencion.por) ?? t('expedientes.requisitos.persona'),
+                fecha: formatearFecha(requisito.exencion.fecha),
+                justificacion: requisito.exencion.justificacion,
+              })}
+            </Typography>
+          )}
+        </>
+      }
+      // Las áreas que lo revisan y su avance, al pie de la tarjeta, separadas por un filete.
+      pie={
+        conAreas ? <AreasDelRequisito expediente={expediente} requisito={requisito} areas={areas} contexto={contexto} nombres={nombres} onAccion={onAccion} decidirPorDocumento={decidirPorDocumento} /> : undefined
+      }
+    />
   );
 }

@@ -22,4 +22,10 @@ export interface UsoIaDto {
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$ */
   costoUsd: number | string;
   porDia: UsoIaDiaDto[];
+  validacionesReutilizadas?: number;
+  tokensEntradaReutilizados?: number;
+  tokensEntradaEnCacheReutilizados?: number;
+  tokensSalidaReutilizados?: number;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$ */
+  costoReutilizadoUsd?: number | string;
 }

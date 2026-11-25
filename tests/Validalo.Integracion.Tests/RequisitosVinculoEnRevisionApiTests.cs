@@ -381,7 +381,7 @@ public sealed class RequisitosVinculoEnRevisionApiTests(ApiFixture fixture, ITes
         await ConfigRevisionAsync(asistido.Norte, new ActualizarRevisionAutomaticaDto("Asistido"));
         var (vinculoA, sesionA, inicialA) = await TerceroAceptaAsync(asistido.Norte, "PROVEEDOR");
         await SubirAsync(sesionA, "RUT", Pdf("RUT v1"));
-        await SubirAsync(sesionA, "CAMARA_COMERCIO", Pdf("Cámara v1"));
+        await SubirAsync(sesionA, "CAMARA_COMERCIO", CamaraReciente());
         var revisionA = await EsperarAsync(asistido.Norte, inicialA, x => x.Estado == "EnRevision" && x.Requisitos!.All(r => r.RevisionesAutomaticas is { Count: > 0 }));
         await AreaAsync<ExpedienteDto>(asistido, inicialA, asistido.Compras, asistido.Laura,
             new VeredictoDto("Aprobado", Versiones: new Dictionary<Guid, int> { [Requisito(revisionA, "RUT").Id] = 1 }));
@@ -404,7 +404,7 @@ public sealed class RequisitosVinculoEnRevisionApiTests(ApiFixture fixture, ITes
             AreasAutorizadas: [automatico.Compras.Id, automatico.Cumplimiento.Id]));
         var (vinculoB, sesionB, inicialB) = await TerceroAceptaAsync(automatico.Norte, "PROVEEDOR");
         await SubirAsync(sesionB, "RUT", Pdf("RUT v1"));
-        await SubirAsync(sesionB, "CAMARA_COMERCIO", Pdf("Cámara v1"));
+        await SubirAsync(sesionB, "CAMARA_COMERCIO", CamaraReciente());
         await EsperarAsync(automatico.Norte, inicialB, x => x.Estado == "Aprobado");
 
         await SubirAsync(sesionB, "RUT", Pdf("RUT v2"));

@@ -3,7 +3,7 @@ import { expect, test, type Browser, type FrameLocator, type Page } from '@playw
 import { pdf } from '../soporte/archivos';
 import { abrirEmbebido } from '../soporte/embebido';
 import { esperarCorreo } from '../soporte/correo';
-import { abrirDesdeBandeja, aprobarArea, conDiagnostico } from '../soporte/empresa';
+import { abrirDesdeBandeja, aprobarArea, conDiagnostico, irASector } from '../soporte/empresa';
 import { completarInvitacion, esperarEstadoDelTercero } from '../soporte/proveedor';
 import { crearEscenario, invitar, nuevoTercero, SST, type Escenario, type Invitacion } from '../soporte/semilla';
 
@@ -30,8 +30,9 @@ async function proveedorAprobado(page: Page, browser: Browser): Promise<{ e: Esc
   return { e, invitacion };
 }
 
-/** Página de verificación del certificado del vínculo (el enlace que trae el QR), abierta como cualquier persona. */
+/** Página de verificación del certificado del vínculo (el enlace que trae el QR), abierta como cualquier persona. El certificado vive en su sector de la ficha. */
 async function verificacion(browser: Browser, ana: FrameLocator): Promise<{ publica: Page; ruta: string }> {
+  await irASector(ana, 'Certificado');
   const enlace = ana.getByRole('link', { name: 'Página de verificación' });
   await expect(enlace).toBeVisible();
   const url = new URL((await enlace.getAttribute('href')) ?? '');

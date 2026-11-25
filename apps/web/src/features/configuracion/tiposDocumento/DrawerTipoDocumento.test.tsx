@@ -113,4 +113,40 @@ describe('Tipo de documento: crear y editar', () => {
     expect(await screen.findByText(/supera el límite general de 20 MB/)).toBeInTheDocument();
     expect(screen.getByText('Sin plantilla.')).toBeInTheDocument();
   });
+
+  it('la frescura son dos reglas opcionales: antigüedad máxima al subirlo y revalidar cada N días o meses desde que la empresa lo aprueba', async () => {
+    const usuario = userEvent.setup();
+    const { peticiones, onCerrar } = montar({ ...EXISTENTE, antiguedadMaximaDias: 30, revalidarCadaDias: 365 }, (url, metodo) =>
+      metodo === 'PUT' ? json(EXISTENTE) : json(url.includes('plantilla') ? { tipoDocumentoId: 'td1', vigente: null, historial: [] } : []),
+    );
+    // Se abre con lo configurado: 365 días se leen como 12 meses.
+    const antiguedad = screen.getByRole('textbox', { name: 'Antigüedad máxima al subirlo' });
+    const revalidar = screen.getByRole('textbox', { name: 'Revalidar cada' });
+    expect(antiguedad).toHaveValue('30');
+    expect(revalidar).toHaveValue('12');
+    expect(screen.getByRole('combobox', { name: 'Unidad' })).toHaveTextContent('meses');
+
+    // Se pide revalidar cada 90 días y se quita la antigüedad: el PUT manda 90 y 0 (quita la regla).
+    await usuario.clear(antiguedad);
+    await usuario.clear(revalidar);
+    await usuario.click(revalidar);
+    await usuario.paste('90');
+    await usuario.click(screen.getByRole('combobox', { name: 'Unidad' }));
+    await usuario.click(screen.getByRole('option', { name: 'días' }));
+    await usuario.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(onCerrar).toHaveBeenCalled());
+    expect(peticiones[0]?.cuerpo).toMatchObject({ antiguedadMaximaDias: 0, revalidarCadaDias: 90, reglaFrescura: { tipo: 'Ninguna' } });
+  });
+
+  it('un valor fuera de rango avisa y no deja guardar', async () => {
+    const usuario = userEvent.setup();
+    montar({ ...EXISTENTE, antiguedadMaximaDias: 30 }, () => json([]));
+    const antiguedad = screen.getByRole('textbox', { name: 'Antigüedad máxima al subirlo' });
+    await usuario.clear(antiguedad);
+    await usuario.click(antiguedad);
+    await usuario.paste('4000');
+    // El mensaje sale bajo el campo y también como lo que falta para poder guardar.
+    expect(await screen.findAllByText('La antigüedad máxima va de 1 a 3650 días.')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
+  });
 });

@@ -107,7 +107,7 @@ export function PasoCorreo({ correoInicial = '', alCodigo, alResultado }: PasoCo
           <BotonSso nombre={sso.nombre ?? ''} principal ocupado={ocupado} cargando={iniciarSso.isPending || iniciarSso.isSuccess} alPulsar={() => undefined} />
         ) : (
           <>
-            <Button type="submit" variant="contained" size="large" fullWidth disabled={ocupado} startIcon={pedirCodigo.isPending ? <IconoCarga /> : undefined}>
+            <Button type="submit" variant="contained" fullWidth disabled={ocupado} startIcon={pedirCodigo.isPending ? <IconoCarga /> : undefined}>
               {t('ingreso.continuar')}
             </Button>
             {sso && (

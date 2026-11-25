@@ -490,12 +490,20 @@ public sealed record DesignacionDeCuentaDto(Guid VinculoId, Guid EmpresaId, stri
 /// La certificación bancaria de una cuenta, como la ve su dueño (CB-1): el documento propio de la cuenta (su versión vigente, o la última devuelta si ninguna quedó vigente) y
 /// lo que la IA leyó frente a lo que el tercero declaró. <see cref="Verificacion"/>: <c>SinAnalisis</c> (aún no hay lectura: se lee cuando una empresa la recibe al designar la
 /// cuenta), <c>Coincide</c>, <c>Discrepa</c>, <c>NoVerificable</c> o <c>NoSeLee</c>. <see cref="Campos"/> trae el cruce campo por campo con el número siempre enmascarado;
-/// nunca la confianza, las alertas ni quién pagó el análisis. <see cref="DiscrepanciaCritica"/>: el número, el titular, el titular como el propio tercero o el estado de la
-/// cuenta no coinciden.
+/// nunca la confianza, las alertas ni quién pagó el análisis. <see cref="DiscrepanciaCritica"/>: el número, el titular, su identificación o el titular como el propio tercero
+/// no coinciden. <see cref="Antiguedad"/>: la antigüedad máxima (TD-10) que le exige cada empresa del tercero a la certificación, con su resultado frente a la
+/// versión visible (la misma evaluación del expediente; ver <see cref="AntiguedadDeCertificacionDto"/>); vacía si ninguna empresa la exige.
 /// </summary>
 public sealed record CertificacionDeCuentaDto(
     Guid DocumentoId, int Version, string Estado, DateTimeOffset CargadaEn, string NombreArchivo, string Verificacion, bool DiscrepanciaCritica,
-    IReadOnlyList<CampoCruzadoDto> Campos, string? MotivoDevolucion = null);
+    IReadOnlyList<CampoCruzadoDto> Campos, string? MotivoDevolucion = null, IReadOnlyList<AntiguedadDeCertificacionDto>? Antiguedad = null);
+
+/// <summary>
+/// La antigüedad máxima al subir (TD-10) que <see cref="Empresa"/> le exige a la certificación bancaria de una cuenta y cómo quedó la versión visible frente a ella
+/// (<see cref="AntiguedadDocumentoDto.Estado"/> <c>Cumple|Excedida|SinFecha|SinLectura</c>; <see cref="AntiguedadDocumentoDto.Mensaje"/> es lo que se le pide al tercero cuando no
+/// cumple). Es la que arma el expediente de esa empresa con su tipo «Certificación bancaria»: el tercero la ve también en «Mis cuentas», sin esperar a designar la cuenta.
+/// </summary>
+public sealed record AntiguedadDeCertificacionDto(Guid EmpresaId, string Empresa, AntiguedadDocumentoDto Antiguedad);
 
 /// <summary>
 /// Cuenta del tercero, siempre enmascarada, con las empresas a las que la designó y su certificación bancaria. <see cref="FaltaCertificacion"/>: la cuenta está activa y
@@ -523,8 +531,8 @@ public sealed record CuentaDesignadaDto(Guid CuentaId, string Banco, string Tipo
 /// <summary>
 /// La certificación de una cuenta como la ve la empresa del vínculo (CB-1): la versión que recibió, la lectura de IA que la empresa consumió cruzada con la cuenta (o
 /// <see cref="SinAnalisis"/>: la empresa no recibió esa lectura, revisión manual contra el documento) y el resumen en <see cref="Verificacion"/>
-/// (<c>SinAnalisis</c>, <c>Coincide</c>, <c>Discrepa</c>, <c>NoVerificable</c> o <c>NoSeLee</c>). <see cref="DiscrepanciaCritica"/>: el número, el titular, que el titular
-/// sea el tercero o el estado de la cuenta no coinciden; es evidencia que destaca quien aprueba, nada se bloquea solo.
+/// (<c>SinAnalisis</c>, <c>Coincide</c>, <c>Discrepa</c>, <c>NoVerificable</c> o <c>NoSeLee</c>). <see cref="DiscrepanciaCritica"/>: el número, el titular, su identificación o
+/// que el titular sea el tercero no coinciden; es evidencia que destaca quien aprueba, nada se bloquea solo.
 /// </summary>
 public sealed record CertificacionDeCuentaDelVinculoDto(
     Guid DocumentoId, int Version, DateTimeOffset CargadaEn, string Verificacion, bool SinAnalisis, bool DiscrepanciaCritica, CruceDeSeccionDto? Cruce);

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { llamar } from '../soporte/api';
 import { capturar } from '../soporte/capturas';
 import { abrirEmbebido } from '../soporte/embebido';
-import { abrirDesdeBandeja } from '../soporte/empresa';
+import { abrirDesdeBandeja, irASector } from '../soporte/empresa';
 import { dialogoDeclaracion, diligenciarDeclaracion, pngDeFirma, TITULO_DECLARACION } from '../soporte/declaracion-pep';
 import { abrirSeccion, guardarSeccionCompleta, llenarContactoYDomicilio, publicarFlujoDeFicha, REPRESENTANTE } from '../soporte/ficha';
 import { escribirFecha } from '../soporte/fechas';
@@ -105,6 +105,7 @@ test('persona natural: el botón «Descargar PDF» aparece solo con la declaraci
   const sofia = await abrirEmbebido(paginaSofia, e, e.sofia, e.sur);
   await expect(async () => {
     await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
+    await irASector(sofia, 'Información general'); // la declaración está en «Lo que declaró el tercero» de su sector
     await expect(sofia.getByRole('region', { name: TITULO_DECLARACION })).toBeVisible({ timeout: 1500 });
   }).toPass({ timeout: 60_000 });
   const deLaEmpresa = await descargar(paginaSofia, sofia.getByRole('button', { name: `Descargar el PDF de la declaración PEP de ${tercero.nombre}` }), 'declaracion-pep-de-la-empresa-logo-png');
@@ -131,7 +132,9 @@ test('persona jurídica: cada persona PEP con declaración guardada tiene su bot
     await persona.getByRole('textbox', { name: 'Número de identificación' }).fill(numero);
     await persona.getByRole('textbox', { name: 'Nombres', exact: true }).fill(nombres);
     await persona.getByRole('textbox', { name: 'Apellidos', exact: true }).fill(apellidos);
-    if (porcentaje) await persona.getByRole('textbox', { name: 'Participación (%)' }).fill(porcentaje);
+    // Quien no es socio responde si también lo es (obligatoria); con «Sí» aparece el porcentaje.
+    if (rol !== 'Socio o accionista') await persona.getByRole('radiogroup', { name: '¿También es socio o accionista?' }).getByRole('radio', { name: porcentaje ? 'Sí' : 'No' }).check();
+    if (porcentaje) await persona.getByRole('textbox', { name: 'Porcentaje de participación (%)' }).fill(porcentaje);
     await persona.getByRole('radiogroup', { name: '¿Tiene vínculo con una persona expuesta políticamente?' }).getByRole('radio', { name: 'No' }).check();
     return persona;
   };
@@ -169,6 +172,7 @@ test('persona jurídica: cada persona PEP con declaración guardada tiene su bot
   const sofia = await abrirEmbebido(paginaSofia, e, e.sofia, e.sur);
   await expect(async () => {
     await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
+    await irASector(sofia, 'Información legal'); // la de cada persona, en la tarjeta de la persona del sector legal
     await expect(sofia.getByRole('region', { name: TITULO_DECLARACION })).toBeVisible({ timeout: 1500 });
   }).toPass({ timeout: 60_000 });
   const deLaEmpresa = await descargar(paginaSofia, sofia.getByRole('button', { name: 'Descargar el PDF de la declaración PEP de Jorge Iván Castro Pinto' }), 'declaracion-pep-de-la-empresa-logo-svg');
@@ -211,6 +215,7 @@ test('persona natural: firma por apoderado con dos PEP relacionadas y el PDF de 
   const sofia = await abrirEmbebido(paginaSofia, e, e.sofia, e.sur);
   await expect(async () => {
     await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
+    await irASector(sofia, 'Información general'); // la declaración está en «Lo que declaró el tercero» de su sector
     await expect(sofia.getByRole('region', { name: TITULO_DECLARACION })).toBeVisible({ timeout: 1500 });
   }).toPass({ timeout: 60_000 });
   const bloque = sofia.getByRole('region', { name: TITULO_DECLARACION });

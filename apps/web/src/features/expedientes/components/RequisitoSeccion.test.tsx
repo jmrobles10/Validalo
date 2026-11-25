@@ -19,7 +19,7 @@ const CONTEXTO: ContextoRevisor = {
 const json = (cuerpo: unknown) => new Response(JSON.stringify(cuerpo), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
 /** El panel con un requisito de sección; los documentos del vínculo traen el RUT (doc d1, versión 2) como soporte. */
-function montar(requisito: RequisitoExpedienteDto, estado: ExpedienteDto['estado'] = 'EnRevision') {
+function montar(requisito: RequisitoExpedienteDto, estado: ExpedienteDto['estado'] = 'EnRevision', datosAparte = false) {
   configurarCliente({
     fetch: vi.fn((entrada: RequestInfo | URL) => {
       const url = entrada instanceof Request ? entrada.url : entrada.toString();
@@ -30,7 +30,7 @@ function montar(requisito: RequisitoExpedienteDto, estado: ExpedienteDto['estado
   render(
     <ThemeProvider theme={createValidaloTheme('light')}>
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <PanelRequisitos expediente={{ ...expediente(estado), requisitos: [requisito] }} contexto={() => CONTEXTO} nombres={new Map()} onAccion={() => undefined} />
+        <PanelRequisitos expediente={{ ...expediente(estado), requisitos: [requisito] }} contexto={() => CONTEXTO} nombres={new Map()} onAccion={() => undefined} datosAparte={datosAparte} />
       </QueryClientProvider>
     </ThemeProvider>,
   );
@@ -86,6 +86,15 @@ describe('Requisito de sección en el expediente (F2)', () => {
 
     await usuario.click(await tarjeta.findByRole('button', { name: 'Ver el soporte RUT, versión 2' }));
     expect(await screen.findByRole('dialog')).toHaveTextContent('RUT · Versión 2');
+  });
+
+  it('con «Lo que declaró el tercero» en la misma pantalla no repite los datos de la versión, pero deja la completitud y los soportes', () => {
+    const tarjeta = montar(requisitoSeccion({}, { soportes: [{ documentoId: 'd1', version: 2, tipoDocumento: 'RUT' }] }), 'EnRevision', true);
+
+    expect(tarjeta.getByText('Completa para la empresa')).toBeInTheDocument();
+    expect(tarjeta.queryByRole('region', { name: 'Datos de la versión 3' })).not.toBeInTheDocument();
+    expect(tarjeta.queryByText('Aceros del Norte S.A.S.')).not.toBeInTheDocument();
+    expect(tarjeta.getByRole('region', { name: 'Soportes' })).toBeInTheDocument();
   });
 
   it('actualización: compara contra la versión aceptada solo con lo que cambió, con filas de personas legibles', () => {

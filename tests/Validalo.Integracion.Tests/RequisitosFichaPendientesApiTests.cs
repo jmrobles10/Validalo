@@ -152,9 +152,9 @@ public sealed class RequisitosFichaPendientesApiTests(ApiFixture fixture, ITestO
     }
 
     /// <summary>Certificación bancaria con marcas que lee el analizador falso (como el simulado de la API).</summary>
-    private static byte[] CertificacionCon(string numeroCuenta, string identificacionTitular, string estado = "Activa") =>
+    private static byte[] CertificacionCon(string numeroCuenta, string identificacionTitular) =>
         Pdf($"Certificación [[banco=Bancolombia S.A.]][[tipoCuenta=Cuenta de ahorros]][[numeroCuenta={numeroCuenta}]][[titular=ACEROS DEL NORTE SAS]]" +
-            $"[[identificacionTitular={identificacionTitular}]][[estadoCuenta={estado}]]");
+            $"[[identificacionTitular={identificacionTitular}]]");
 
     [Fact]
     public async Task La_certificacion_de_cada_cuenta_la_respalda_y_su_cruce_va_enmascarado_y_pide_justificacion_si_discrepa()
@@ -191,7 +191,7 @@ public sealed class RequisitosFichaPendientesApiTests(ApiFixture fixture, ITestO
         cruce.Campos.Select(c => (c.Campo, c.Resultado)).ShouldBe(
         [
             ("numero", "Coincide"), ("titular", "Coincide"), ("identificacion_titular", "Coincide"), ("titular_es_el_tercero", "Coincide"),
-            ("estado_cuenta", "Coincide"), ("banco", "Coincide"), ("tipo_cuenta", "Coincide")
+            ("banco", "Coincide"), ("tipo_cuenta", "Coincide")
         ]);
         var numero = cruce.Campos.Single(c => c.Campo == "numero");
         (numero.Declarado, numero.Extraido, numero.Critico).ShouldBe(("****5678", "****5678", true));

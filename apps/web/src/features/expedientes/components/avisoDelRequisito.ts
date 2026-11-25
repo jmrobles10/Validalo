@@ -24,8 +24,8 @@ export function soporteSinCruce(requisito: RequisitoExpedienteDto, visor: Docume
 }
 
 /**
- * El aviso más importante del requisito (la tarjeta muestra uno solo): retiro, discrepancia crítica, vencimiento o archivo sin
- * lectura automática. El cruce sin con qué compararse no es un aviso: va en el pie de la tarjeta, en texto secundario.
+ * El aviso más importante del requisito (la tarjeta muestra uno solo): retiro, discrepancia crítica, antigüedad máxima del tipo excedida o sin una fecha de
+ * expedición verificable (TD-10: un hallazgo crítico), vencimiento o archivo sin lectura automática. El cruce sin con qué compararse no es un aviso: va en el pie de la tarjeta, en texto secundario.
  */
 export function avisoDelRequisito(requisito: RequisitoExpedienteDto, visor: DocumentoEnVisor | null, t: TFunction): Aviso | null {
   const version = requisito.versionActual;
@@ -33,6 +33,7 @@ export function avisoDelRequisito(requisito: RequisitoExpedienteDto, visor: Docu
     return { severidad: 'warning', texto: t('expedientes.requisitos.retiro', { retirada: String(requisito.retiro.numero), motivo: requisito.retiro.motivo, n: String(version.n) }) };
   }
   if (requisito.soporteDeSecciones?.discrepanciaCritica) return { severidad: 'error', texto: t('cruce.discrepanciaCritica') };
+  if (version?.antiguedad?.critico) return { severidad: 'error', texto: t('expedientes.requisitos.antiguedadCritica', { detalle: version.antiguedad.detalle }) };
   const vigencia = visor?.vigencia;
   const estado = vigencia ? estadoVigencia(vigencia) : null;
   if (vigencia && (estado === 'EnGracia' || estado === 'Vencida')) {

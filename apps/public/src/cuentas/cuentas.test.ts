@@ -1,6 +1,6 @@
-import type { CampoCruzadoDto, CertificacionDeCuentaDto, CuentaBancariaPublicaDto } from '@validalo/api-client';
+import type { AntiguedadDeCertificacionDto, AntiguedadDocumentoDto, CampoCruzadoDto, CertificacionDeCuentaDto, CuentaBancariaPublicaDto } from '@validalo/api-client';
 import { describe, expect, it } from 'vitest';
-import { camposQueNoCoinciden, camposSinVerificar, cuerpoRegistro, DATOS_VACIOS, destinoDeCertificacion, enmascararNumero, esDesignable, validarCuenta, verificacionDe } from './cuentas';
+import { avisosDeAntiguedad, camposQueNoCoinciden, camposSinVerificar, cuerpoRegistro, DATOS_VACIOS, destinoDeCertificacion, enmascararNumero, esDesignable, validarCuenta, verificacionDe } from './cuentas';
 
 const COMPLETOS = { ...DATOS_VACIOS, bancoCodigo: '1007', tipoCuenta: 'Ahorros', numero: '1234 5678', titular: 'Ana Pérez', identificacionTitular: '1020304050', moneda: 'COP' } as const;
 
@@ -130,9 +130,57 @@ describe('la certificación bancaria de cada cuenta (CB-1)', () => {
   it('lo que no coincide va primero lo crítico y lo que no se pudo verificar solo cuenta si es crítico', () => {
     const certificacion = {
       ...CERTIFICACION,
-      campos: [campo('banco', 'Discrepa', false), campo('numero', 'Discrepa', true), campo('titular', 'Coincide', true), campo('estado_cuenta', 'NoVerificable', true), campo('tipo_cuenta', 'NoVerificable', false)],
+      campos: [campo('banco', 'Discrepa', false), campo('numero', 'Discrepa', true), campo('titular', 'Coincide', true), campo('identificacion_titular', 'NoVerificable', true), campo('tipo_cuenta', 'NoVerificable', false)],
     };
     expect(camposQueNoCoinciden(certificacion).map((c) => c.campo)).toEqual(['numero', 'banco']);
-    expect(camposSinVerificar(certificacion).map((c) => c.campo)).toEqual(['estado_cuenta']);
+    expect(camposSinVerificar(certificacion).map((c) => c.campo)).toEqual(['identificacion_titular']);
+  });
+});
+
+describe('la antigüedad que exige cada empresa a la certificación (TD-10)', () => {
+  const MENSAJE = 'Sube el documento «Certificación bancaria» expedido hace menos de 30 días.';
+  const antiguedad = (cambios: Partial<AntiguedadDocumentoDto> = {}): AntiguedadDocumentoDto => ({
+    estado: 'Excedida',
+    maximoDias: 30,
+    fechaExpedicion: '2024-07-17',
+    dias: 861,
+    fuente: 'Ia',
+    fechaDeclarada: null,
+    difiereDeLaDeclarada: false,
+    critico: true,
+    detalle: 'Expedida el 17/07/2024: 861 días; el máximo es 30.',
+    mensaje: MENSAJE,
+    campo: null,
+    ...cambios,
+  });
+  const deEmpresa = (empresa: string, cambios: Partial<AntiguedadDocumentoDto> = {}): AntiguedadDeCertificacionDto => ({ empresaId: `id-${empresa}`, empresa, antiguedad: antiguedad(cambios) });
+  const con = (lista: AntiguedadDeCertificacionDto[] | null | undefined) => ({ antiguedad: lista });
+
+  it('con una sola empresa el aviso es el del expediente (detalle y qué hacer) y no la nombra', () => {
+    expect(avisosDeAntiguedad(con([deEmpresa('Sinco OK')]))).toEqual([
+      { empresa: 'Sinco OK', texto: `Expedida el 17/07/2024: 861 días; el máximo es 30. ${MENSAJE}`, estado: 'Excedida', nombrar: false },
+    ]);
+  });
+
+  it('con varias empresas nombra a cada una que no cumple y calla la que cumple o aún no tiene lectura', () => {
+    const avisos = avisosDeAntiguedad(
+      con([
+        deEmpresa('Sinco OK'),
+        deEmpresa('Constructora Sur', { estado: 'Cumple', maximoDias: 365, dias: 176, critico: false, detalle: 'Expedida el 01/06/2026: 176 días; el máximo es 365.', mensaje: null }),
+        deEmpresa('Constructora Este', { estado: 'SinLectura', critico: false, mensaje: null }),
+        deEmpresa('Constructora Oeste', { estado: 'SinFecha', mensaje: 'Sube el documento «Certificación bancaria» expedido hace menos de 60 días y que muestre su fecha de expedición.' }),
+      ]),
+    );
+    expect(avisos.map((a) => [a.empresa, a.estado, a.nombrar])).toEqual([
+      ['Sinco OK', 'Excedida', true],
+      ['Constructora Oeste', 'SinFecha', true],
+    ]);
+  });
+
+  it('sin reglas, sin lista o con todas cumplidas no hay nada que avisar', () => {
+    expect(avisosDeAntiguedad(con(null))).toEqual([]);
+    expect(avisosDeAntiguedad(con(undefined))).toEqual([]);
+    expect(avisosDeAntiguedad(con([]))).toEqual([]);
+    expect(avisosDeAntiguedad(con([deEmpresa('Sinco OK', { estado: 'Cumple', critico: false, mensaje: null })]))).toEqual([]);
   });
 });

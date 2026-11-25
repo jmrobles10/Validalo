@@ -53,6 +53,15 @@ export function enumerarFormatos(formatos: readonly string[]): string {
   return new Intl.ListFormat('es-CO', { type: 'disjunction' }).format(formatos.map((f) => ETIQUETAS[f] ?? f));
 }
 
+/**
+ * La antigüedad máxima que pide la empresa al subir el documento (TD-10), en palabras del tercero: «expedido hace menos de 30 días». Nula si no la pide.
+ * Va junto a las reglas del archivo («Solo PDF de hasta 5 MB y 10 páginas · expedido hace menos de 30 días»).
+ */
+export function textoAntiguedad(tipo: Pick<TipoDocumentoRequisitoDto, 'antiguedadMaximaDias'> | null | undefined, t: TFunction): string | null {
+  const dias = tipo?.antiguedadMaximaDias;
+  return dias && dias > 0 ? t('reglas.antiguedad', { count: dias }) : null;
+}
+
 /** Las reglas en palabras del tercero: «Solo PDF de hasta 5 MB y 10 páginas». Las páginas solo cuentan en un PDF. */
 export function textoReglas(reglas: ReglasArchivo, t: TFunction): string {
   const formatos = reglas.formatos.length === 1 ? t('reglas.solo', { formato: enumerarFormatos(reglas.formatos) }) : enumerarFormatos(reglas.formatos);

@@ -25,4 +25,7 @@ export interface ConsumoDeIaEmpresaDto {
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$ */
   valorAdicional: number | string;
   modelos: UsoPorModeloIaDto[];
+  validacionesReutilizadas?: number;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$ */
+  costoReutilizadoUsd?: number | string;
 }

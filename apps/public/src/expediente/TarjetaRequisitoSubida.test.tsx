@@ -87,6 +87,28 @@ describe('subir lo que pide una empresa desde su revisión', () => {
     expect(screen.queryByRole('button', { name: 'Llenar formulario' })).not.toBeInTheDocument();
   });
 
+  it('la acción es un botón pequeño relleno del color primario, con el ícono de lo que hace', () => {
+    montar(requisito());
+
+    const subir = screen.getByRole('button', { name: 'Subir documento' });
+    expect(subir).toHaveClass('MuiButton-contained', 'MuiButton-colorPrimary', 'MuiButton-sizeSmall');
+    expect(subir.querySelector('.MuiButton-startIcon svg.lucide-upload')).not.toBeNull();
+  });
+
+  it('reemplazar una versión vigente es la acción menos urgente: botón pequeño de borde, no relleno', () => {
+    montar(requisito({}, 'Cargado'));
+
+    const reemplazar = screen.getByRole('button', { name: 'Subir otra versión' });
+    expect(reemplazar).toHaveClass('MuiButton-outlined', 'MuiButton-sizeSmall');
+    expect(reemplazar).not.toHaveClass('MuiButton-contained');
+  });
+
+  it('una sola línea de metadatos une el estado de la versión con lo que admite el archivo', () => {
+    montar(requisito());
+
+    expect(screen.getByText(/^Aún no lo subes · .+ de hasta \d+ MB/)).toBeInTheDocument();
+  });
+
   it('en solo lectura (o sin vínculo) no hay acción de subir', () => {
     montar(requisito(), true);
 

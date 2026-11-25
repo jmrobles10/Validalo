@@ -84,20 +84,20 @@ recorrido(
     });
 
     // 5. Vigencia y avisos.
-    await panel.getByRole('combobox', { name: 'Vale' }).click();
-    await app.getByRole('option', { name: 'Días desde su expedición', exact: true }).click();
-    await panel.getByRole('textbox', { name: /^Días$/ }).fill('365');
+    await panel.getByRole('textbox', { name: 'Antigüedad máxima al subirlo' }).fill('30');
+    await panel.getByRole('textbox', { name: 'Revalidar cada' }).fill('12');
     await panel.getByRole('textbox', { name: 'Avisar antes de vencer (días)' }).fill('30, 15');
     await panel.getByRole('textbox', { name: 'Días de gracia' }).fill('10');
     await paso(page, {
       titulo: 'Define la vigencia y los avisos',
       explicacion:
-        'Indica cuánto tiempo sirve el documento: siempre, un número de días desde su expedición (la fecha que declara el proveedor), un número de días desde que lo entrega o un periodo mínimo. ' +
+        'La frescura son dos reglas independientes y opcionales. «Antigüedad máxima al subirlo» exige que el documento se haya expedido hace menos de ese número de días cuando el proveedor lo sube; si es más viejo o no trae su fecha de expedición, se le observa. ' +
+        '«Revalidar cada» dice cada cuánto se vuelve a pedir, contando desde que tu empresa lo aprueba, en días o en meses (12 meses son un año). ' +
         'Los días de aviso son los momentos antes del vencimiento en que Valídalo le escribe al proveedor para que lo renueve; los días de gracia son los que sigue valiendo después de vencer mientras lo renueva.',
       resaltar: panel.locator('section').filter({ has: app.getByRole('heading', { name: 'Vigencia y avisos', exact: true }) }),
       variantes: [
-        { cuando: 'La regla es «Siempre (no vence)»', entonces: 'No hay días ni avisos: el documento no pierde vigencia.' },
-        { cuando: 'La regla es «Días desde que se entrega»', entonces: 'La vigencia se cuenta desde el día en que el proveedor lo entrega, sin pedir fecha de expedición.' },
+        { cuando: 'Dejas vacía «Revalidar cada»', entonces: 'El documento no vence por revalidación: solo vence si declara su propia fecha de vencimiento.' },
+        { cuando: 'Dejas vacía «Antigüedad máxima al subirlo»', entonces: 'No se exige qué tan reciente sea el documento al subirlo.' },
       ],
       configuracion: { ajuste: 'Avisos de vencimiento y plantillas de correo de vencimiento', ruta: 'Configuración › Plantillas de correo (/plantillas)', efecto: 'Los avisos que se envían usan estas plantillas.' },
     });

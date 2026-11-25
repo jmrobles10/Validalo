@@ -4,6 +4,7 @@
  * Validalo.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { AntiguedadDeCertificacionDto } from './antiguedadDeCertificacionDto';
 import type { CampoCruzadoDto } from './campoCruzadoDto';
 
 export interface CertificacionDeCuentaDto {
@@ -17,4 +18,6 @@ export interface CertificacionDeCuentaDto {
   campos: CampoCruzadoDto[];
   /** @nullable */
   motivoDevolucion?: string | null;
+  /** @nullable */
+  antiguedad?: AntiguedadDeCertificacionDto[] | null;
 }

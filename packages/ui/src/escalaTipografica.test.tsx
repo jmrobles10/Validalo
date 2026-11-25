@@ -106,7 +106,7 @@ describe('escala tipografica · los componentes de MUI usan la escala (nada qued
           <MenuItem>Opción</MenuItem>
         </MenuList>
         <Button size="small">Pequeño</Button>
-        <Button>Mediano</Button>
+        <Button size="medium">Mediano</Button>
         <Button size="large">Grande</Button>
         <Tabs value={0}>
           <Tab label="Pestaña" />

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { pdf } from '../soporte/archivos';
 import { abrirEmbebido } from '../soporte/embebido';
-import { abrirDesdeBandeja, aprobarArea, regionDeArea } from '../soporte/empresa';
+import { abrirDesdeBandeja, aprobarArea, irASector, regionDeArea } from '../soporte/empresa';
 import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, subirVersionDesdeLaBoveda } from '../soporte/proveedor';
 import { activarIa, crearEscenario, invitar, nuevoTercero, publicarFlujoConFicha } from '../soporte/semilla';
 
@@ -64,9 +64,12 @@ test('el tercero sube un RUT nuevo, acepta la propuesta en el wizard y la empres
   const cruceInicial = sofia.getByRole('region', { name: 'Cruce con el documento' });
   await expect(async () => {
     await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
+    // El cruce de la general vive en su sector y lo que el RUT respalda, en el del RUT (Información tributaria).
+    await irASector(sofia, 'Información general');
     await expect(cruceInicial).toContainText('Confianza de la lectura', { timeout: 1500 });
   }).toPass({ timeout: 45_000 });
   await expect(cruceInicial.getByRole('table', { name: /^Cruce con Registro Único Tributario · versión 1/ })).toBeVisible();
+  await irASector(sofia, 'Información tributaria');
   await expect(sofia.getByRole('region', { name: 'Soporte de la información' })).toContainText('Información general (versión 1)');
   await aprobarArea(sofia, 'Revisión');
 
@@ -99,17 +102,30 @@ test('el tercero sube un RUT nuevo, acepta la propuesta en el wizard y la empres
   await expect(page.getByText('Guardaste Información general: está completa.')).toBeVisible();
 
   // La empresa ve UNA actualización (la que abrió el RUT) con el RUT y la general, y la general con su cruce contra el RUT nuevo.
+  // Cada documento está en su sector: la general en «Información general» y el RUT en «Información tributaria».
   await expect(async () => {
     await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
+    await irASector(sofia, 'Información general');
     await expect(sofia.getByRole('heading', { level: 4, name: 'Información general' })).toBeVisible({ timeout: 1500 });
+    await irASector(sofia, 'Información tributaria');
     await expect(sofia.getByRole('heading', { level: 4, name: RUT })).toBeVisible({ timeout: 1500 });
   }).toPass({ timeout: 45_000 });
+  await irASector(sofia, 'Aprobaciones');
   await expect(sofia.getByText('Actualización', { exact: true }).first()).toBeVisible();
+  await irASector(sofia, 'Información general');
   const cruce = sofia.getByRole('region', { name: 'Cruce con el documento' });
   await expect(cruce.getByRole('table', { name: /^Cruce con Registro Único Tributario · versión 2/ })).toBeVisible({ timeout: 30_000 });
   await expect(cruce.getByRole('row', { name: /^Dirección: Coincide/ })).toBeVisible();
+  // La versión 2 de la general se guardó con el RUT nuevo como soporte (la versión 1 se guardó sin soporte): como el flujo pide el RUT, está compartido con Sur y «Soportes» de lo
+  // que declaró el tercero lo abre en el visor con «Ver».
+  await sofia.getByRole('button', { name: 'Ver Registro Único Tributario, versión 2' }).click();
+  await expect(sofia.getByRole('dialog')).toContainText('Registro Único Tributario');
+  await paginaSofia.keyboard.press('Escape');
+  await expect(sofia.getByRole('dialog')).toHaveCount(0);
+  await irASector(sofia, 'Información tributaria');
   await expect(sofia.getByRole('region', { name: 'Soporte de la información' })).toContainText('Información general (versión 2)');
   await paginaSofia.screenshot({ path: 'test-results/ficha-f5-actualizacion.png', fullPage: true });
+  await irASector(sofia, 'Aprobaciones');
 
   // Sofía decide las dos de una vez: la actualización se aprueba y el vínculo sigue activo.
   await regionDeArea(sofia, 'Revisión').getByRole('button', { name: /^Aprobar área \(2 documentos\)/ }).click();
@@ -142,11 +158,14 @@ test('un RUT cuya razón social difiere de la general: la empresa no aprueba sin
   const sofia = await abrirEmbebido(paginaSofia, e, e.sofia, e.sur);
   await expect(async () => {
     await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
+    // El cruce de la general con el RUT está en el sector de la general.
+    await irASector(sofia, 'Información general');
     await expect(sofia.getByRole('region', { name: 'Cruce con el documento' }).getByRole('alert')).toContainText('Hay diferencias en campos críticos', { timeout: 1500 });
   }).toPass({ timeout: 45_000 });
   await paginaSofia.screenshot({ path: 'test-results/ficha-f5-critica.png', fullPage: true });
 
-  // «Aprobar área» pide la justificación: sin ella no se puede enviar; con ella el expediente se aprueba.
+  // «Aprobar área» (en «Aprobaciones») pide la justificación: sin ella no se puede enviar; con ella el expediente se aprueba.
+  await irASector(sofia, 'Aprobaciones');
   await regionDeArea(sofia, 'Revisión').getByRole('button', { name: /^Aprobar área/ }).click();
   const dialogo = sofia.getByRole('dialog', { name: /^Aprobar Revisión/ });
   await expect(dialogo.getByRole('alert')).toContainText('no tienen soporte');
@@ -155,5 +174,7 @@ test('un RUT cuya razón social difiere de la general: la empresa no aprueba sin
   await dialogo.getByRole('button', { name: /^Aprobar área/ }).click();
   await expect(dialogo).toBeHidden();
   await expect(sofia.getByText(/Todas las áreas aprobaron el /)).toBeVisible();
+  // La justificación queda escrita en el historial del expediente.
+  await irASector(sofia, 'Historial');
   await expect(sofia.getByText('La razón social cambió por fusión; verificado con la Cámara.').first()).toBeVisible();
 });

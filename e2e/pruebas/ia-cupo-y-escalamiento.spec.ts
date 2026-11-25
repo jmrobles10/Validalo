@@ -22,6 +22,11 @@ function rut(tercero: Tercero, marcas = '') {
   return pdf(`RUT ${tercero.nombre} [[nit=${tercero.identificacion.numero}]][[razonSocial=${tercero.nombre}]]${marcas}`);
 }
 
+/** `aaaa-mm-dd` de hoy en Bogotá (la zona horaria del grupo de las pruebas). */
+function hoy(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+}
+
 async function paginaDe(browser: Browser) {
   return (await browser.newContext()).newPage();
 }
@@ -31,9 +36,9 @@ function tarjetaDeDocumento(app: FrameLocator, documento: string) {
   return app.getByRole('listitem').filter({ has: app.getByRole('heading', { level: 4, name: documento, exact: true }) }).first();
 }
 
-/** La tarjeta de una cifra de «Plan y uso de IA» por su título. */
+/** La tarjeta de una cifra de «Plan y uso de IA» (el mismo grupo con nombre de las tarjetas del Inicio) por su título. */
 function cifra(app: FrameLocator, titulo: string) {
-  return app.getByRole('region', { name: titulo, exact: true });
+  return app.getByRole('group', { name: titulo, exact: true });
 }
 
 /** Va a Excepciones pasando antes por otra sección, para que la lista se monte de nuevo y se pida otra vez. */
@@ -131,8 +136,7 @@ test('al agotar el cupo de IA el documento nuevo cae a una persona de inmediato,
   const incluidas = cifra(ana, 'Validaciones incluidas');
   await expect(incluidas).toContainText('1 de 1');
   await expect(incluidas).toContainText('Agotaste las incluidas de este mes.');
-  await expect(incluidas.getByRole('progressbar', { name: /^1 de 1 validaciones incluidas usadas \(100\s?%\)$/ })).toHaveAttribute('data-nivel', 'agotado');
-  await expect(cifra(ana, 'Análisis pagados').getByText('1', { exact: true })).toBeVisible();
+  await expect(incluidas.getByRole('img', { name: /^1 de 1 validaciones incluidas usadas \(100\s?%\)$/ })).toBeVisible();
   await expect(ana.getByText('Al agotar las incluidas, los documentos nuevos pasan a revisión manual.')).toBeVisible();
   await capturar(paginaAna, 'ia-cupo-agotado');
 
@@ -162,7 +166,8 @@ test('un documento dudoso escala al modelo superior: la revisora ve la confianza
   const paginaTercero = await paginaDe(browser);
   await completarInvitacion(paginaTercero, await invitar(e, e.sur, tercero, 'CLIENTE'), [
     { nombre: RUT, archivo: rut(tercero, '[[confianza=0.55]]') },
-    { nombre: BANCARIA, archivo: pdf(`Certificacion bancaria ${tercero.nombre}`), cuenta: { titular: tercero.nombre } },
+    // La certificación bancaria pide una antigüedad máxima de 30 días (el catálogo, TD-10): la IA simulada debe «leer» que se expidió hoy, o el hallazgo crítico por falta de fecha pasaría la sugerencia a revisar.
+    { nombre: BANCARIA, archivo: pdf(`Certificacion bancaria ${tercero.nombre} [[fechaExpedicion=${hoy()}]]`), cuenta: { titular: tercero.nombre } },
   ]);
 
   const paginaSofia = await paginaDe(browser);
@@ -206,11 +211,10 @@ test('un documento dudoso escala al modelo superior: la revisora ve la confianza
     await ana.owner().page().reload();
     await expect(cifra(ana, 'Validaciones incluidas')).toContainText('2 de 20', { timeout: 1500 });
   }).toPass({ timeout: 45_000 });
-  await expect(cifra(ana, 'Análisis pagados')).toContainText('2');
-  // El simulado gasta 1.000 tokens de entrada y 300 de salida por llamada: 3 llamadas.
-  await expect(cifra(ana, 'Tokens')).toContainText('3.000');
-  await expect(cifra(ana, 'Tokens')).toContainText('900');
-  // Costo real: dos llamadas del modelo por omisión (US$ 0,00025 cada una) y una del superior (US$ 0,0025).
-  await expect(cifra(ana, 'Costo real')).toContainText(/0,0030/);
+  // El simulado gasta 1.000 tokens de entrada y 300 de salida por llamada: 3 llamadas (la entrada y la salida van en tarjetas separadas, sin sumarse).
+  await expect(cifra(ana, 'Tokens de entrada')).toContainText('3.000');
+  await expect(cifra(ana, 'Tokens de salida')).toContainText('900');
+  // Costo estimado de IA: dos llamadas del modelo por omisión (US$ 0,00025 cada una) y una del superior (US$ 0,0025).
+  await expect(cifra(ana, 'Costo estimado de IA')).toContainText(/≈\s?US\$\s0,0030/);
   await capturar(ana.owner().page(), 'ia-escalamiento-consumo');
 });

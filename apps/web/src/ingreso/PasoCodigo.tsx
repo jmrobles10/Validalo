@@ -106,7 +106,6 @@ export function PasoCodigo({ correo, desafio, expira, alResultado, alReenviar, a
         <Button
           type="submit"
           variant="contained"
-          size="large"
           fullWidth
           disabled={codigo.length !== 6 || verificar.isPending || terminado}
           startIcon={verificar.isPending ? <IconoCarga /> : undefined}

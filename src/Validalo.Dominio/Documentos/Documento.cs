@@ -154,8 +154,11 @@ public sealed class AnalisisDeIaDeVersion
     public DateTimeOffset Fecha { get; set; }
 }
 
-/// <summary>Vínculo con el que la versión actual está compartida y el tipo del tenant cuya regla define su vigencia.</summary>
-public sealed record DestinoDeVigencia(Guid TenantId, Guid EmpresaId, Guid VinculoId, TipoDocumentoTenant Tipo);
+/// <summary>
+/// Vínculo con el que la versión actual está compartida y el tipo del tenant cuya regla define su vigencia. <paramref name="AprobadaEn"/>: cuándo la empresa
+/// aprobó esa versión para el vínculo (TD-10); nula si aún no la aprobó.
+/// </summary>
+public sealed record DestinoDeVigencia(Guid TenantId, Guid EmpresaId, Guid VinculoId, TipoDocumentoTenant Tipo, DateTimeOffset? AprobadaEn = null);
 
 /// <summary>Versión visible para una empresa por su vínculo (<c>comparticion_version</c>); nunca se revoca (docs/02 §6).</summary>
 public sealed record Comparticion(int Numero, Guid TenantId, Guid EmpresaId, Guid VinculoId, OrigenComparticion Origen, DateTimeOffset Fecha);
@@ -252,6 +255,14 @@ public sealed class Documento
     public int? VersionActual { get; set; }
 
     public List<VersionDocumento> Versiones { get; set; } = [];
+
+    /// <summary>
+    /// La versión actual aún tiene una vigencia calculada con la regla anterior a TD-10 (desde la expedición o la carga: <see cref="BaseVigencia.FechaExpedicion"/>,
+    /// <see cref="BaseVigencia.FechaCarga"/>), base que ya no se calcula: hay que recalcularla (cuenta desde la aprobación de la empresa). Recalcular es idempotente.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool TieneVigenciaHeredada =>
+        Versiones.FirstOrDefault(v => v.Numero == VersionActual)?.Vigencias.Any(v => v.Base is BaseVigencia.FechaExpedicion or BaseVigencia.FechaCarga) ?? false;
 
     public List<Comparticion> Comparticiones { get; set; } = [];
 
@@ -455,9 +466,9 @@ public sealed class Documento
     }
 
     /// <summary>
-    /// Vigencias de la versión actual para cada vínculo con el que está compartida (TD-6), cada una con la regla del tipo
-    /// del tenant de ese vínculo: <c>MaxDiasDesdeExpedicion</c> desde <c>fecha_expedicion</c> declarada (o la carga),
-    /// acotada por <c>fecha_vencimiento</c> declarada (docs/02 §8.1). Solo emite lo que cambió (idempotente).
+    /// Vigencias de la versión actual para cada vínculo con el que está compartida (TD-6, TD-10), cada una con las reglas del tipo
+    /// del tenant de ese vínculo: <b>revalidar cada N días</b> desde que la empresa aprobó la versión (<see cref="DestinoDeVigencia.AprobadaEn"/>) o desde
+    /// que el tercero la ratificó, acotada por la <c>fecha_vencimiento</c> declarada (docs/02 §8.1). Solo emite lo que cambió (idempotente).
     /// </summary>
     public IReadOnlyList<VigenciaDeVersionCalculada> CalcularVigencias(IEnumerable<DestinoDeVigencia> destinos, DateTimeOffset ahora)
     {
@@ -473,13 +484,13 @@ public sealed class Documento
 
             var tipo = destino.Tipo;
             var previa = version.VigenciaPara(destino.VinculoId);
-            var calculo = CalculadoraDeVigencia.Calcular(tipo.ReglaFrescura, version.CargadaEn, version.Datos, previa?.RatificadaEn);
-            if (previa is not null && previa.VigenteHasta == calculo.VigenteHasta && previa.Base == calculo.Base &&
-                previa.DiasGracia == tipo.DiasGracia && previa.TipoDocumentoTenantId == tipo.Id && previa.DiasAviso.SequenceEqual(tipo.DiasAviso))
+            var calculo = CalculadoraDeVigencia.Calcular(tipo.Frescura, version.Datos, destino.AprobadaEn, previa?.RatificadaEn);
+            if (previa is not null && previa.VigenteHasta == calculo.VigenteHasta && previa.Base == calculo.Base && previa.AprobadaEn == destino.AprobadaEn &&
+                previa.RevalidarCadaDias == tipo.Frescura.RevalidarCadaDias && previa.DiasGracia == tipo.DiasGracia && previa.TipoDocumentoTenantId == tipo.Id && previa.DiasAviso.SequenceEqual(tipo.DiasAviso))
                 continue;
 
             eventos.Add(new VigenciaDeVersionCalculada(numero, destino.TenantId, destino.EmpresaId, destino.VinculoId, tipo.Id, calculo.VigenteHasta,
-                calculo.Base, [.. tipo.DiasAviso], tipo.DiasGracia, ahora));
+                calculo.Base, [.. tipo.DiasAviso], tipo.DiasGracia, ahora, destino.AprobadaEn, tipo.Frescura.RevalidarCadaDias));
         }
 
         return eventos;
@@ -793,6 +804,8 @@ public sealed class Documento
             DiasGracia = e.DiasGracia,
             CalculadaEn = e.Fecha,
             RatificadaEn = previa?.RatificadaEn,
+            AprobadaEn = e.AprobadaEn,
+            RevalidarCadaDias = e.RevalidarCadaDias,
             // Una vigencia recalculada solo conserva el vencimiento si su fin de gracia no cambió.
             VencidaEn = previa?.VencidaEn is { } vencida && previa.FinDeGracia == CalculadoraDeVigencia.FinDeGracia(e.VigenteHasta, e.DiasGracia)
                 ? vencida

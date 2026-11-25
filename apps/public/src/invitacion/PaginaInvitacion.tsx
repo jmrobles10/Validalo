@@ -161,7 +161,7 @@ export function PaginaInvitacion() {
           {t('invitacion.ayudaAceptar', { empresa })}
         </Typography>
         {aislada && <Alert severity="info">{t('accesoAislado.aviso.enInvitacion', { empresa })}</Alert>}
-        <Button type="submit" variant="contained" size="large" fullWidth disabled={aceptacion.isPending}>
+        <Button type="submit" variant="contained" fullWidth disabled={aceptacion.isPending}>
           {t('invitacion.aceptar')}
         </Button>
       </Stack>

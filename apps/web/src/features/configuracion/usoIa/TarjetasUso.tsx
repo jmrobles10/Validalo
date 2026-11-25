@@ -1,95 +1,137 @@
-import { Box, LinearProgress, Typography } from '@mui/material';
+import { Box, IconButton, Link, Tooltip, Typography } from '@mui/material';
 import type { UsoIaDto } from '@validalo/api-client';
-import type { ReactNode } from 'react';
+import { BarraMedida, GrillaKpi, SeccionPlana, TarjetaKpi, type TonoKpi } from '@validalo/ui';
+import { ArrowDownToLine, ArrowUpFromLine, CircleDollarSign, CirclePlus, Cpu, Gauge, Info, ListChecks } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Tarjeta } from '../../../shared/componentes';
-import { Cifra, GrupoCifras } from '../../inicio/Cifras';
-import { formatearConteo, formatearPorcentaje, formatearUsd, nivelDeUso, porcentajeUsado, type NivelUso } from './modelo';
+import { costoAtribuido, formatearConteo, formatearPorcentaje, formatearUsd, nivelDeUso, porcentajeUsado, tokensAtribuidos, URL_USO_OPENAI, type NivelUso } from './modelo';
 
-const COLOR_BARRA: Record<NivelUso, string> = { normal: 'acento.main', alerta: 'estado.advertencia.solido', agotado: 'estado.error.solido' };
+/** Barra y tarjeta de las incluidas: cian normal, ámbar desde el 80 %, roja al agotarse (con el borde y la cifra de alerta que el tablero da al tono rojo). */
+const TONO_INCLUIDAS: Record<NivelUso, TonoKpi> = { normal: 'cian', alerta: 'ambar', agotado: 'rojo' };
 
-/** Una cifra principal con su nota debajo, en una tarjeta (patrón KPI de Inicio). */
-function TarjetaKpi({ titulo, valor, nota, children }: { titulo: string; valor: string; nota?: ReactNode; children?: ReactNode }) {
-  return (
-    <Tarjeta titulo={titulo} etiqueta={titulo} nivel="h3">
-      <Typography variant="kpi" component="p" sx={{ m: 0, display: 'block' }}>
-        {valor}
-      </Typography>
-      {children}
-      {nota && (
-        <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 0.75 }}>
-          {nota}
-        </Typography>
-      )}
-    </Tarjeta>
-  );
-}
-
-/** Incluidas usadas con barra (ámbar desde el 80 %, roja al 100 %), adicionales, análisis pagados, costo y tokens. */
+/**
+ * Lo consumido en el mes con las mismas tarjetas de cifras del Inicio (`TarjetaKpi` en la rejilla del tablero, 3 → 2 → 1 columnas) en dos secciones: «Uso del mes» (validaciones
+ * incluidas con una barra fina, validaciones adicionales y costo de IA) y «Tokens» (entrada y salida en tarjetas separadas: no valen lo mismo y nunca se suman). Para la empresa el
+ * costo y los tokens son un solo total de todas sus validaciones (IA-15): de dónde salió cada análisis solo lo ve la consola de Plataforma. Devuelve las dos secciones sin
+ * separación propia: la da el contenedor de la página.
+ */
 export function TarjetasUso({ uso }: { uso: UsoIaDto }) {
   const { t } = useTranslation();
   const { plan } = uso;
+  const costo = costoAtribuido(uso);
+  const tokens = tokensAtribuidos(uso);
   const incluidas = plan.validacionesIncluidasMes;
   const porcentaje = porcentajeUsado(uso.incluidasConsumidas, incluidas);
   const nivel = nivelDeUso(porcentaje);
   const textoPorcentaje = formatearPorcentaje(porcentaje);
+  const usadas = formatearConteo(uso.incluidasConsumidas);
   const notaIncluidas =
     nivel === 'agotado'
       ? t('ia.uso.agotadas')
       : nivel === 'alerta'
         ? t('ia.uso.alerta', { porcentaje: textoPorcentaje })
         : t('ia.uso.quedan', { count: uso.incluidasRestantes });
+  const notaAdicionales = !plan.adicionalHabilitado
+    ? t('ia.uso.sinAdicionalAyuda')
+    : plan.topeAdicionalMes === null
+      ? t('ia.uso.sinTope')
+      : t('ia.uso.tope', { tope: formatearConteo(plan.topeAdicionalMes), restantes: formatearConteo(uso.adicionalesRestantes ?? 0) });
 
   return (
     <>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }, gap: 1.5 }}>
-        <TarjetaKpi
-          titulo={t('ia.uso.incluidas')}
-          valor={t('ia.uso.incluidasValor', { usadas: formatearConteo(uso.incluidasConsumidas), incluidas: formatearConteo(incluidas) })}
-          nota={notaIncluidas}
-        >
-          <LinearProgress
-            variant="determinate"
-            value={Math.min(100, porcentaje)}
-            aria-label={t('ia.uso.incluidasAccesible', {
-              usadas: formatearConteo(uso.incluidasConsumidas),
-              incluidas: formatearConteo(incluidas),
-              porcentaje: textoPorcentaje,
-            })}
-            data-nivel={nivel}
-            sx={{ mt: 1, height: 6, borderRadius: 3, '& .MuiLinearProgress-bar': { bgcolor: COLOR_BARRA[nivel], borderRadius: 3 } }}
-          />
-        </TarjetaKpi>
-        <TarjetaKpi
-          titulo={t('ia.uso.adicionales')}
-          valor={plan.adicionalHabilitado ? formatearConteo(uso.adicionalesConsumidas) : t('ia.uso.sinAdicional')}
-          nota={
-            !plan.adicionalHabilitado
-              ? t('ia.uso.sinAdicionalAyuda')
-              : plan.topeAdicionalMes === null
-                ? t('ia.uso.sinTope')
-                : t('ia.uso.tope', { tope: formatearConteo(plan.topeAdicionalMes), restantes: formatearConteo(uso.adicionalesRestantes ?? 0) })
-          }
-        />
-        <TarjetaKpi
-          titulo={t('ia.uso.pagados')}
-          valor={formatearConteo(uso.analisisPagados)}
-          nota={
-            <>
-              {t('ia.uso.pagadosAyuda')}
-              <Box component="span" sx={{ display: 'block' }}>
-                {t('ia.uso.llave', { valor: plan.llaveConfigurada ? t('ia.uso.si') : t('ia.uso.no') })}
-              </Box>
-            </>
-          }
-        />
-        <TarjetaKpi titulo={t('ia.uso.costo')} valor={formatearUsd(uso.costoUsd)} nota={t('ia.uso.costoAyuda')} />
+      <Box>
+        <SeccionPlana titulo={t('ia.uso.seccionUso')} icono={Gauge}>
+          <GrillaKpi columnas={3}>
+            <TarjetaKpi
+              icono={ListChecks}
+              tono={TONO_INCLUIDAS[nivel]}
+              titulo={t('ia.uso.incluidas')}
+              valor={t('ia.uso.incluidasValor', { usadas, incluidas: formatearConteo(incluidas) })}
+              detalle={notaIncluidas}
+              barra={
+                <BarraMedida
+                  valor={uso.incluidasConsumidas}
+                  maximo={incluidas}
+                  tono={TONO_INCLUIDAS[nivel]}
+                  etiqueta={t('ia.uso.incluidasAccesible', { usadas, incluidas: formatearConteo(incluidas), porcentaje: textoPorcentaje })}
+                />
+              }
+            />
+            <TarjetaKpi
+              icono={CirclePlus}
+              tono="violeta"
+              titulo={t('ia.uso.adicionales')}
+              // Sin adicional contratado no hay cifra que dar: el texto va más pequeño que un número.
+              valor={
+                plan.adicionalHabilitado ? (
+                  formatearConteo(uso.adicionalesConsumidas)
+                ) : (
+                  <Typography component="span" variant="subtitle1" sx={{ color: 'text.secondary' }}>
+                    {t('ia.uso.sinAdicional')}
+                  </Typography>
+                )
+              }
+              detalle={notaAdicionales}
+            />
+            <TarjetaKpi
+              icono={CircleDollarSign}
+              tono="verde"
+              etiqueta={t('ia.uso.costo')}
+              // El costo es una estimación (tokens por la tarifa que conocemos): el saldo y el límite reales están en la cuenta de OpenAI de la empresa.
+              titulo={
+                <>
+                  {t('ia.uso.costo')}
+                  <Tooltip title={t('ia.uso.costoLimite')} arrow>
+                    {/* Área de toque de 22 px sin cambiar el alto de la fila de la tarjeta (los márgenes negativos la devuelven a la del ícono). */}
+                    <IconButton size="small" sx={{ ml: 0.25, p: 0.5, my: -0.5, verticalAlign: 'middle', color: 'text.secondary' }}>
+                      <Info size={14} strokeWidth={1.75} aria-hidden />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              }
+              valor={`≈ ${formatearUsd(costo)}`}
+              detalle={
+                <>
+                  {t('ia.uso.costoAyuda')}
+                  <Box component="span" sx={{ display: 'block' }}>
+                    {t('ia.uso.llave', { valor: plan.llaveConfigurada ? t('ia.uso.si') : t('ia.uso.no') })}
+                    {plan.llaveConfigurada && (
+                      <>
+                        {' · '}
+                        <Link href={URL_USO_OPENAI} target="_blank" rel="noopener noreferrer" variant="caption">
+                          {t('ia.uso.verUsoOpenAi')}
+                        </Link>
+                      </>
+                    )}
+                  </Box>
+                </>
+              }
+            />
+          </GrillaKpi>
+        </SeccionPlana>
       </Box>
-      <GrupoCifras titulo={t('ia.uso.tokens')}>
-        <Cifra etiqueta={t('ia.uso.tokensEntrada')} valor={formatearConteo(uso.tokensEntrada)} />
-        <Cifra etiqueta={t('ia.uso.tokensCache')} valor={formatearConteo(uso.tokensEntradaEnCache)} />
-        <Cifra etiqueta={t('ia.uso.tokensSalida')} valor={formatearConteo(uso.tokensSalida)} />
-      </GrupoCifras>
+      <Box>
+        <SeccionPlana titulo={t('ia.uso.seccionTokens')} icono={Cpu}>
+          <GrillaKpi columnas={3}>
+            <TarjetaKpi
+              icono={ArrowDownToLine}
+              tono="cian"
+              titulo={t('ia.uso.tokensEntrada')}
+              valor={formatearConteo(tokens.entrada)}
+              detalle={
+                <>
+                  {t('ia.uso.tokensEntradaNota')}
+                  {tokens.enCache > 0 && (
+                    <Box component="span" sx={{ display: 'block' }}>
+                      {t('ia.uso.tokensCache', { valor: formatearConteo(tokens.enCache) })}
+                    </Box>
+                  )}
+                </>
+              }
+            />
+            <TarjetaKpi icono={ArrowUpFromLine} tono="violeta" titulo={t('ia.uso.tokensSalida')} valor={formatearConteo(tokens.salida)} detalle={t('ia.uso.tokensSalidaNota')} />
+          </GrillaKpi>
+        </SeccionPlana>
+      </Box>
     </>
   );
 }

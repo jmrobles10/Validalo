@@ -46,7 +46,6 @@ export function PaginaFicha() {
       component={RouterLink}
       to={enlaceSeccion(siguiente, siguiente === 'FICHA_FINANCIERA' ? periodoPorOmision(estado) : null)}
       variant="contained"
-      size="large"
       endIcon={<ArrowRight size={18} aria-hidden />}
       sx={{ width: { xs: '100%', sm: 'auto' } }}
     >

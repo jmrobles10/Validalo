@@ -39,4 +39,8 @@ export interface TipoDocumentoTenantDto {
   reglasEfectivas?: null | ReglasArchivoDto;
   plantilla?: null | PlantillaVersionDto;
   cargaSoportada?: boolean;
+  /** @nullable */
+  antiguedadMaximaDias?: number | null;
+  /** @nullable */
+  revalidarCadaDias?: number | null;
 }

@@ -112,7 +112,9 @@ public static partial class UsoIaEndpoints
     /// <summary>
     /// Plan resumido (sin la llave) y uso del mes <c>mes</c> (<c>yyyy-MM</c>; por defecto el actual en la zona horaria del
     /// tenant): validaciones incluidas y adicionales consumidas y restantes, análisis pagados con su llave, tokens, costo
-    /// real en dólares y serie por día. 422 <c>mes-invalido</c>.
+    /// estimado en dólares y serie por día. Aparte, lo reutilizado (IA-15): las validaciones que usaron un análisis que pagó otra
+    /// empresa y el costo y los tokens de ese análisis atribuidos a esta empresa; el costo de IA de todas sus validaciones es el
+    /// propio más el reutilizado. 422 <c>mes-invalido</c>.
     /// </summary>
     [WolverineGet("/api/v1/ia/uso")]
     [Authorize(Policy = Permisos.ConfiguracionLeer)]
@@ -147,8 +149,9 @@ public static partial class UsoIaEndpoints
             [
                 .. uso.PorDia.OrderBy(d => d.Key, StringComparer.Ordinal)
                     .Select(d => new UsoIaDiaDto(DateOnly.ParseExact(d.Key, "yyyy-MM-dd", CultureInfo.InvariantCulture), d.Value.Incluidas,
-                        d.Value.Adicionales, d.Value.AnalisisPagados, d.Value.TokensEntrada, d.Value.TokensSalida, d.Value.CostoUsd))
-            ]);
+                        d.Value.Adicionales, d.Value.AnalisisPagados, d.Value.TokensEntrada, d.Value.TokensSalida, d.Value.CostoUsd, d.Value.Reutilizadas,
+                        d.Value.TokensEntradaReutilizados, d.Value.TokensSalidaReutilizados, d.Value.CostoReutilizadoUsd))
+            ], uso.ValidacionesReutilizadas, uso.TokensEntradaReutilizados, uso.TokensEntradaEnCacheReutilizados, uso.TokensSalidaReutilizados, uso.CostoReutilizadoUsd);
     }
 
     [GeneratedRegex(@"^\d{4}-(0[1-9]|1[0-2])$")]

@@ -24,7 +24,20 @@ const CONSUMO: ConsumoDeIaDto = {
   periodo: PERIODO,
   moneda: 'COP',
   precioPorValidacionAdicional: 1500,
-  totales: { grupos: 2, empresas: 3, incluidasConsumidas: 420, adicionalesConsumidas: 30, analisisPagados: 450, tokensEntrada: 2_500_000, tokensSalida: 120_000, costoUsd: 18.4321, valorAdicional: 45000 },
+  totales: {
+    grupos: 2,
+    empresas: 3,
+    incluidasConsumidas: 420,
+    adicionalesConsumidas: 30,
+    analisisPagados: 450,
+    tokensEntrada: 2_500_000,
+    tokensSalida: 120_000,
+    costoUsd: 18.4321,
+    valorAdicional: 45000,
+    // IA-15: lo reutilizado es informativo; el costo REAL de arriba no lo incluye (ya está en la empresa que pagó la llamada).
+    validacionesReutilizadas: 12,
+    costoReutilizadoUsd: 0.45,
+  },
   grupos: [
     {
       grupoId: 'g1',
@@ -37,6 +50,8 @@ const CONSUMO: ConsumoDeIaDto = {
       tokensSalida: 90_000,
       costoUsd: 13.5,
       valorAdicional: 45000,
+      validacionesReutilizadas: 12,
+      costoReutilizadoUsd: 0.45,
       empresas: [
         {
           empresaId: 'e1',
@@ -54,6 +69,8 @@ const CONSUMO: ConsumoDeIaDto = {
           precioPropio: true,
           valorAdicional: 45000,
           modelos: [{ modelo: 'gpt-6-luna', llamadas: 330, tokensEntrada: 1_800_000, tokensEntradaEnCache: 0, tokensSalida: 90_000, costoUsd: 13.5 }],
+          validacionesReutilizadas: 12,
+          costoReutilizadoUsd: 0.45,
         },
       ],
     },
@@ -104,6 +121,28 @@ describe('Uso de IA por cliente (PI-12)', () => {
     expect(within(tabla).getByText('Grupo Andino')).toBeInTheDocument();
     expect(within(tabla).getByText('Grupo Sur')).toBeInTheDocument();
     expect(screen.getByText('Eso es todo: 2 grupos.')).toBeInTheDocument();
+  });
+
+  it('conserva el costo estimado sin doble conteo y muestra lo reutilizado aparte, solo como dato informativo', async () => {
+    const { usuario } = montar();
+    await screen.findByText('2 grupos · 3 empresas');
+
+    // El costo del proveedor es el estimado de lo que se pagó (18,4321), no 18,4321 + 0,45.
+    const costo = screen.getByText('Costo estimado del proveedor').closest('div')!;
+    expect(within(costo).getByText(/^US\$\s18,4321$/)).toBeInTheDocument();
+    const reutilizado = screen.getByText('Reutilizado de la red (informativo)').closest('div')!;
+    expect(within(reutilizado).getByText(/US\$\s0,45 · 12 validaciones/)).toBeInTheDocument();
+    expect(screen.queryByText(/18,8821/)).not.toBeInTheDocument();
+
+    // La tabla tiene su columna aparte, y la nota explica por qué no suma.
+    const tabla = screen.getByRole('table', { name: 'Uso de IA' });
+    expect(within(tabla).getByRole('columnheader', { name: 'Costo estimado (USD)' })).toBeInTheDocument();
+    expect(within(tabla).getByRole('columnheader', { name: 'Reutilizado (USD)' })).toBeInTheDocument();
+    expect(within(tabla).getAllByText(/US\$\s0,45/)).toHaveLength(1); // el grupo con consumo reutilizado; el otro grupo muestra «—»
+    expect(screen.getByText(/es solo informativo y no se suma al costo/)).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole('button', { name: 'Ver la empresa de Grupo Andino' }));
+    expect(await within(tabla).findAllByText(/US\$\s0,45/)).toHaveLength(2); // grupo y empresa
   });
 
   it('pide el mes actual por omisión y deja elegir otro', async () => {

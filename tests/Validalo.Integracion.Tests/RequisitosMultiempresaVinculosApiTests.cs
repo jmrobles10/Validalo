@@ -152,12 +152,12 @@ public sealed class RequisitosMultiempresaVinculosApiTests(ApiFixture fixture, I
         }
     }
 
-    /// <summary>La frescura del RUT de la empresa: sus días desde la carga (el RUT no declara fecha de expedición).</summary>
+    /// <summary>La revalidación del RUT de la empresa: cada cuántos días vence desde que la empresa lo aprueba (TD-10); sin antigüedad máxima.</summary>
     private async Task FijarFrescuraDelRutAsync(Empresa empresa, int dias)
     {
         var rut = (await ApiAsync<List<TipoDocumentoTenantDto>>("GET", "/api/v1/tipos-documento", Admin(empresa), null, 200)).Single(t => t.Codigo == "RUT");
         await ApiAsync<TipoDocumentoTenantDto>("PUT", $"/api/v1/tipos-documento/{rut.Id}", Admin(empresa),
-            new ActualizarTipoDocumentoDto(ReglaFrescura: new ReglaFrescuraDto("MaxDiasDesdeExpedicion", dias), DiasAviso: [], DiasGracia: 0), 200);
+            new ActualizarTipoDocumentoDto(AntiguedadMaximaDias: 0, RevalidarCadaDias: dias, DiasAviso: [], DiasGracia: 0), 200);
     }
 
     [Fact]
@@ -184,10 +184,17 @@ public sealed class RequisitosMultiempresaVinculosApiTests(ApiFixture fixture, I
         var compartidoB = aceptadaB.Compartidos.ShouldHaveSingleItem();
         (compartidoB.Tipo, compartidoB.DocumentoId, compartidoB.Version).ShouldBe(("RUT", rut.DocumentoId, 1)); // el mismo documento y versión que ya tiene A
 
-        // Cada grupo ve la vigencia de su regla sobre la misma versión del RUT: 30 días desde la carga para A, 365 para B.
+        // Cada grupo ve la vigencia de su regla sobre la misma versión del RUT, contada desde que lo aprueba: 30 días para A, 365 para B.
         var hoy = Hoy();
-        var expedienteA = await EsperarAsync(grupoA, await AbiertoEnAsync(grupoA, enA.Id), x => Requisito(x, "RUT").VersionActual?.Vigencia?.VigenteHasta is not null);
-        var expedienteB = await EsperarAsync(grupoB, await AbiertoEnAsync(grupoB, enB.Id), x => Requisito(x, "RUT").VersionActual?.Vigencia?.VigenteHasta is not null);
+        var abiertoA = await AbiertoEnAsync(grupoA, enA.Id);
+        var abiertoB = await AbiertoEnAsync(grupoB, enB.Id);
+        // Antes de aprobar, ninguno tiene fecha de vencimiento: la regla de cada grupo cuenta desde su aprobación.
+        var sinAprobarA = await EsperarAsync(grupoA, abiertoA, x => x.Estado == "EnRevision" && Requisito(x, "RUT").VersionActual is not null);
+        Requisito(sinAprobarA, "RUT").VersionActual!.Vigencia!.VigenteHasta.ShouldBeNull();
+        await AprobarComoAdministradorAsync(grupoA, abiertoA);
+        await AprobarComoAdministradorAsync(grupoB, abiertoB);
+        var expedienteA = await EsperarAsync(grupoA, abiertoA, x => Requisito(x, "RUT").VersionActual?.Vigencia?.VigenteHasta is not null);
+        var expedienteB = await EsperarAsync(grupoB, abiertoB, x => Requisito(x, "RUT").VersionActual?.Vigencia?.VigenteHasta is not null);
         Requisito(expedienteA, "RUT").VersionActual!.Vigencia!.VigenteHasta.ShouldBe(hoy.AddDays(30));
         Requisito(expedienteB, "RUT").VersionActual!.Vigencia!.VigenteHasta.ShouldBe(hoy.AddDays(365));
         Requisito(expedienteB, "RUT").VersionActual!.DocumentoId.ShouldBe(Requisito(expedienteA, "RUT").VersionActual!.DocumentoId);

@@ -11,7 +11,7 @@ export const ESTADOS_VENCIMIENTO = ['Vigente', 'PorVencer', 'EnGracia', 'Vencida
 export type EstadoVencimiento = (typeof ESTADOS_VENCIMIENTO)[number];
 
 /** De dónde sale la fecha de vencimiento (`BaseVigencia` del dominio). */
-export const BASES_VENCIMIENTO = ['FechaExpedicion', 'FechaCarga', 'VencimientoPropio', 'Ratificacion', 'SinVencimiento', 'PeriodoNoCalculado'] as const;
+export const BASES_VENCIMIENTO = ['Aprobacion', 'FechaExpedicion', 'FechaCarga', 'VencimientoPropio', 'Ratificacion', 'SinVencimiento', 'PeriodoNoCalculado'] as const;
 export type BaseVencimiento = (typeof BASES_VENCIMIENTO)[number];
 
 /** Máximo de documentos por recordatorio (`VencimientosEndpoints.MaximoPorRecordatorio`). */

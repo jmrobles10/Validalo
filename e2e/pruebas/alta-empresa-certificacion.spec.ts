@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { asercion, CLAVE_PLATAFORMA, clavesDeSistema, llamar, nitAleatorio } from '../soporte/api';
 import { pdf } from '../soporte/archivos';
 import { abrirEmbebidoCon, sesionDeUsuario } from '../soporte/embebido';
-import { abrirDesdeBandeja, aprobarArea } from '../soporte/empresa';
+import { abrirDesdeBandeja, aprobarArea, irASector } from '../soporte/empresa';
 import { abrirConsolaDePlataforma } from '../soporte/plataforma';
 import { aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento } from '../soporte/proveedor';
 import { ORIGEN_SISTEMA, type Invitacion } from '../soporte/semilla';
@@ -150,7 +150,8 @@ test('una empresa creada desde la consola certifica a su primer proveedor: invit
     sesion: () => sesionDeUsuario(llave, delegado()),
   });
   await expect(detalle.getByRole('heading', { level: 1, name: proveedor })).toBeVisible();
-  await expect(detalle.getByText(/^Activo$/).first()).toBeVisible();
+  // El estado del vínculo, en el chip del encabezado (su texto lleva además, para lectores de pantalla, desde cuándo).
+  await expect(detalle.locator('[data-estado="Activo"]').first()).toBeVisible();
   const publica = await (await browser.newContext()).newPage();
   await publica.goto(await enlaceDeVerificacion(detalle));
   await expect(publica.getByRole('heading', { level: 2, name: 'Este certificado está vigente' })).toBeVisible();
@@ -162,6 +163,7 @@ test('una empresa creada desde la consola certifica a su primer proveedor: invit
 
 /** La dirección de la página de verificación que ofrece el vínculo (la del QR del certificado), sin el origen del iframe. */
 async function enlaceDeVerificacion(detalle: FrameLocator): Promise<string> {
+  await irASector(detalle, 'Certificado');
   const enlace = detalle.getByRole('link', { name: 'Página de verificación' });
   await expect(enlace).toBeVisible();
   const url = new URL((await enlace.getAttribute('href')) ?? '');

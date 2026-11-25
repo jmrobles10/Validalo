@@ -57,10 +57,10 @@ test('el proveedor designa su cuenta para Norte y queda designada cuando la apru
   const tarjetaOlga = tarjetaDeLaFicha(olga, 'Cuenta bancaria designada');
   await expect(tarjetaOlga).toContainText('Por aprobar');
   await expect(tarjetaOlga).toContainText('03112345678');
-  await expect(tarjetaOlga).toContainText('0 de 2 aprobaciones');
+  await expect(tarjetaOlga).toContainText('Necesita 2 aprobaciones · van 0');
   await tarjetaOlga.getByRole('button', { name: 'Aprobar' }).click();
   await olga.getByRole('dialog').getByRole('button', { name: 'Aprobar' }).click();
-  await expect(tarjetaOlga).toContainText('1 de 2 aprobaciones: Olga Oficial');
+  await expect(tarjetaOlga).toContainText('Necesita 2 aprobaciones · van 1: Olga Oficial');
   await expect(tarjetaOlga).toContainText('Ya la aprobaste; falta que la apruebe otra persona.');
 
   // Ana (administradora) completa las dos: queda designada.

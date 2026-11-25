@@ -6,7 +6,12 @@ namespace Validalo.Contratos;
 
 // ---------- Catálogo canónico y tipos del tenant ----------
 
-/// <summary><see cref="Tipo"/>: <c>Ninguna</c>, <c>MaxDiasDesdeExpedicion</c>, <c>PeriodoMinimo</c> o <c>MaxDiasDesdeAprobacion</c>.</summary>
+/// <summary>
+/// Regla de frescura <b>heredada</b> (una sola por tipo). Desde TD-10 el tipo tiene dos reglas independientes (<c>antiguedadMaximaDias</c> y
+/// <c>revalidarCadaDias</c>); aquí solo vive <c>PeriodoMinimo</c> y las otras se aceptan al guardar y se traducen: <c>MaxDiasDesdeAprobacion(n)</c> ⇒ revalidar
+/// cada <c>n</c> días; <c>MaxDiasDesdeExpedicion(n)</c> ⇒ antigüedad máxima de <c>n</c> días y revalidar cada <c>n</c>. <see cref="Tipo"/>: <c>Ninguna</c>,
+/// <c>MaxDiasDesdeExpedicion</c>, <c>PeriodoMinimo</c> o <c>MaxDiasDesdeAprobacion</c>.
+/// </summary>
 public sealed record ReglaFrescuraDto(string Tipo, int? Dias = null, string? Regla = null);
 
 /// <summary>
@@ -22,7 +27,8 @@ public sealed record TipoDocumentoCanonicoDto(
     bool TieneFechaExpedicion, bool EsPeriodico, string? Periodicidad, bool PermiteRatificacion, bool DePersonaRelacionada,
     IReadOnlyList<string> CamposClave, IReadOnlyList<string> CamposCriticos, string Sensibilidad, ReglaFrescuraDto? ReglaFrescuraSugerida,
     int RetencionAniosSugerida, bool CargaSoportada, IReadOnlyList<string>? FormatosPermitidos = null, int? TamanoMaximoMb = null,
-    int? PaginasMaximas = null, IReadOnlyList<string>? Paises = null, string? EquivalenteA = null);
+    int? PaginasMaximas = null, IReadOnlyList<string>? Paises = null, string? EquivalenteA = null, int? AntiguedadMaximaSugeridaDias = null,
+    int? RevalidarCadaSugeridoDias = null);
 
 /// <summary>
 /// Campo que llena el tercero (TD-4). <see cref="Clave"/> snake_case única; <see cref="Tipo"/>:
@@ -45,36 +51,45 @@ public sealed record ReglasArchivoDto(IReadOnlyList<string> Formatos, long Taman
 /// los del canónico o todos), <see cref="TamanoMaximoMb"/> y <see cref="PaginasMaximas"/> (nulos = los globales; nunca por
 /// encima del global ni del canónico), <see cref="Modo"/> <c>Archivo|Formulario|ArchivoYFormulario</c> y
 /// <see cref="Campos"/> (un tipo con campos es siempre <c>PorVinculo</c>).
+/// <para>
+/// Frescura (TD-10), dos reglas independientes y opcionales: <see cref="AntiguedadMaximaDias"/> (el documento debe haberse expedido hace no más de esos
+/// días al subirlo; no define la vigencia) y <see cref="RevalidarCadaDias"/> (vence y se pide de nuevo a esos días de que la empresa lo aprueba). Sin ninguna
+/// de las dos ni <see cref="ReglaFrescura"/>, las que sugiere el canónico. <see cref="ReglaFrescura"/> (heredada) se acepta y se traduce a las dos.
+/// 422 <c>antiguedad-invalida</c> y <c>revalidacion-invalida</c> fuera de 1 a 3650 días.
+/// </para>
 /// </remarks>
 public sealed record CrearTipoDocumentoDto(
     string Codigo, string? Nombre, string? TipoCanonico, string? Ambito = null, ReglaFrescuraDto? ReglaFrescura = null,
     IReadOnlyList<int>? DiasAviso = null, int? DiasGracia = null, int? DiasRevalidacion = null, string? TextoAyuda = null,
     IReadOnlyList<string>? FormatosPermitidos = null, int? TamanoMaximoMb = null, int? PaginasMaximas = null, string? Modo = null,
-    IReadOnlyList<CampoFormularioDto>? Campos = null);
+    IReadOnlyList<CampoFormularioDto>? Campos = null, int? AntiguedadMaximaDias = null, int? RevalidarCadaDias = null);
 
 /// <summary>
 /// Código y canónico son inmutables; los campos nulos conservan su valor. <see cref="TamanoMaximoMb"/> o
 /// <see cref="PaginasMaximas"/> en 0 vuelven al límite global; <c>formatosPermitidos: []</c> vuelve a los del canónico;
-/// <c>campos: []</c> los quita (solo con <c>modo: Archivo</c>).
+/// <c>campos: []</c> los quita (solo con <c>modo: Archivo</c>). <see cref="AntiguedadMaximaDias"/> y <see cref="RevalidarCadaDias"/> (TD-10) en 0 quitan la
+/// regla; nulos la conservan; <see cref="ReglaFrescura"/> (heredada) reemplaza las dos, traducida.
 /// </summary>
 public sealed record ActualizarTipoDocumentoDto(
     string? Nombre = null, string? Ambito = null, ReglaFrescuraDto? ReglaFrescura = null, IReadOnlyList<int>? DiasAviso = null,
     int? DiasGracia = null, int? DiasRevalidacion = null, string? TextoAyuda = null, bool? Activo = null,
     IReadOnlyList<string>? FormatosPermitidos = null, int? TamanoMaximoMb = null, int? PaginasMaximas = null, string? Modo = null,
-    IReadOnlyList<CampoFormularioDto>? Campos = null);
+    IReadOnlyList<CampoFormularioDto>? Campos = null, int? AntiguedadMaximaDias = null, int? RevalidarCadaDias = null);
 
 /// <summary>
 /// Tipo del tenant (B-4) con sus reglas: lo configurado (<see cref="FormatosPermitidos"/>, <see cref="TamanoMaximoMb"/>,
 /// <see cref="PaginasMaximas"/>, <see cref="Modo"/>, <see cref="Campos"/>), lo efectivo para el tercero
 /// (<see cref="ReglasEfectivas"/>), la plantilla vigente y si el tercero puede entregarlo (<see cref="CargaSoportada"/>).
-/// Frescura, avisos y gracia calculan la vigencia de cada versión (TD-6).
+/// Frescura (TD-10): <see cref="AntiguedadMaximaDias"/> (condición de aceptación al subir, desde la expedición) y <see cref="RevalidarCadaDias"/> (vence a esos
+/// días de que la empresa lo aprueba; con los avisos y la gracia calcula la vigencia, TD-6). <see cref="ReglaFrescura"/> (heredada) solo trae
+/// <c>PeriodoMinimo</c> o <c>Ninguna</c>; <see cref="DiasRevalidacion"/> es el plazo para resolver una revalidación abierta, no la frecuencia.
 /// </summary>
 public sealed record TipoDocumentoTenantDto(
     Guid Id, string Codigo, string Nombre, string? TipoCanonico, int? VersionCanonico, string Ambito, string Clase, string? TextoAyuda,
     ReglaFrescuraDto ReglaFrescura, IReadOnlyList<int> DiasAviso, int DiasGracia, int DiasRevalidacion, bool Activo, DateTimeOffset CreadoEn,
     IReadOnlyList<string>? FormatosPermitidos = null, int? TamanoMaximoMb = null, int? PaginasMaximas = null, string Modo = "Archivo",
     IReadOnlyList<CampoFormularioDto>? Campos = null, ReglasArchivoDto? ReglasEfectivas = null, PlantillaVersionDto? Plantilla = null,
-    bool CargaSoportada = true);
+    bool CargaSoportada = true, int? AntiguedadMaximaDias = null, int? RevalidarCadaDias = null);
 
 // ---------- Plantilla descargable del tipo (TD-5) ----------
 
@@ -154,14 +169,31 @@ public sealed record HechosIaDto(
 public sealed record DatoDeclaradoDto(string Clave, string Etiqueta, string Tipo, string Valor);
 
 /// <summary>
-/// Vigencia de una versión para una empresa (TD-6). <see cref="Base"/>: <c>FechaExpedicion|FechaCarga|VencimientoPropio|
-/// SinVencimiento|PeriodoNoCalculado</c>. <see cref="Estado"/>: <c>Vigente|PorVencer|EnGracia|Vencida|SinVencimiento</c>
-/// (hoy, en UTC). <see cref="FinDeGracia"/> = <see cref="VigenteHasta"/> + <see cref="DiasGracia"/>; al día siguiente la
-/// versión queda <c>Vencida</c> para esa empresa (<see cref="VencidaEn"/>).
+/// Vigencia de una versión para una empresa (TD-6, TD-10). <see cref="Base"/> (de dónde sale la fecha): <c>Aprobacion</c> (revalidar cada N días desde
+/// que la empresa la aprobó), <c>Ratificacion</c> (desde que el tercero la ratificó), <c>VencimientoPropio</c> (la <c>fecha_vencimiento</c> del documento),
+/// <c>SinVencimiento</c> o <c>PeriodoNoCalculado</c>; <c>FechaExpedicion</c> y <c>FechaCarga</c> solo en vigencias registradas con la regla anterior.
+/// Antes de que la empresa apruebe la versión no hay fecha por revalidación (<see cref="VigenteHasta"/> nula si no declaró vencimiento propio).
+/// <see cref="Estado"/>: <c>Vigente|PorVencer|EnGracia|Vencida|SinVencimiento</c> (hoy, en UTC). <see cref="FinDeGracia"/> = <see cref="VigenteHasta"/> +
+/// <see cref="DiasGracia"/>; al día siguiente la versión queda <c>Vencida</c> para esa empresa (<see cref="VencidaEn"/>). <see cref="AprobadaEn"/>: cuándo la
+/// empresa aprobó la versión para el vínculo (nulo mientras no). <see cref="RevalidarCadaDias"/>: la regla del tipo con la que se calculó («revalidar cada N días»);
+/// con ella y sin fecha, el portal dice que vence N días después de que la empresa lo apruebe.
 /// </summary>
 public sealed record VigenciaDto(
     DateOnly? VigenteHasta, string Base, string Estado, IReadOnlyList<int> DiasAviso, int DiasGracia, DateOnly? FinDeGracia,
-    DateTimeOffset? VencidaEn);
+    DateTimeOffset? VencidaEn, DateTimeOffset? AprobadaEn = null, int? RevalidarCadaDias = null);
+
+/// <summary>
+/// Antigüedad de un documento frente a la regla de su tipo (TD-10, <c>antiguedadMaximaDias</c>): el documento debe haberse expedido hace no más de
+/// <see cref="MaximoDias"/> días contados hasta la fecha de carga de la versión. La fecha de expedición es la que <b>leyó la IA</b> del documento (la
+/// declarada por el tercero se coteja: <see cref="DifiereDeLaDeclarada"/>); si la IA no la encontró no se puede verificar aunque el tercero la haya declarado.
+/// <see cref="Estado"/>: <c>Cumple</c>, <c>Excedida</c> (supera el máximo), <c>SinFecha</c> (se leyó y no trae una fecha verificable) o <c>SinLectura</c> (aún no
+/// hay lectura). <see cref="Critico"/>: <c>Excedida</c> o <c>SinFecha</c>; nunca se aprueba solo y aprobarlo exige justificación. <see cref="Mensaje"/>: lo que se
+/// le pide al tercero cuando no cumple. <see cref="Campo"/>: la fila de cotejo para el revisor («Antigüedad del documento», <c>Coincide|Discrepa|NoVerificable</c>,
+/// crítico); nula sin lectura. <see cref="Fuente"/>: <c>Ia</c> o <c>Declarada</c> (solo en un tipo que no se lee).
+/// </summary>
+public sealed record AntiguedadDocumentoDto(
+    string Estado, int MaximoDias, DateOnly? FechaExpedicion, int? Dias, string? Fuente, DateOnly? FechaDeclarada, bool DifiereDeLaDeclarada, bool Critico,
+    string Detalle, string? Mensaje, CampoCruzadoDto? Campo);
 
 /// <summary>
 /// <see cref="Estado"/> agrega <c>Vencida</c> (venció para todas las empresas con vigencia). <see cref="DatosDeclarados"/>:

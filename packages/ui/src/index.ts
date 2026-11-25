@@ -27,6 +27,7 @@ export * from './disposicion';
 export * from './tarjetas';
 export * from './barras';
 export * from './marco';
+export * from './marcoDeTarjetaDeEstado';
 export * from './AvisoCambiosNuevos';
 export * from './EditorDeContactos';
 export * from './descargas';

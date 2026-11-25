@@ -75,7 +75,7 @@ public sealed class RequisitosRevisionAutomaticaApiTests(ApiFixture fixture, ITe
         var (vinculo, sesion, expedienteId) = await TerceroAceptaAsync(e.Norte, "PROVEEDOR");
 
         await SubirAsync(sesion, "RUT", Pdf("RUT"));
-        await SubirAsync(sesion, "CAMARA_COMERCIO", Pdf("Cámara"));
+        await SubirAsync(sesion, "CAMARA_COMERCIO", CamaraReciente());
 
         // La IA analiza, la empresa recibe el análisis y el procesador decide: aprueba lo que no tiene excepciones.
         var aprobado = await EsperarAsync(e.Norte, expedienteId, x => x.Estado == "Aprobado");
@@ -110,7 +110,7 @@ public sealed class RequisitosRevisionAutomaticaApiTests(ApiFixture fixture, ITe
             TiposAutorizados: ["RUT", "CAMARA_COMERCIO"], AreasAutorizadas: [e.Compras.Id, e.Cumplimiento.Id]));
         var (_, sesion, expedienteId) = await TerceroAceptaAsync(e.Norte, "PROVEEDOR");
         await SubirAsync(sesion, "RUT", Pdf("RUT"));
-        await SubirAsync(sesion, "CAMARA_COMERCIO", Pdf("Cámara"));
+        await SubirAsync(sesion, "CAMARA_COMERCIO", CamaraReciente());
 
         // Nada se aprueba solo: tres excepciones (RUT en dos áreas y la Cámara), con su motivo, a la espera de una persona.
         var pendientes = await EsperarExcepcionesAsync(e.Norte, 3);
@@ -213,7 +213,7 @@ public sealed class RequisitosRevisionAutomaticaApiTests(ApiFixture fixture, ITe
         {
             var (_, sesion, id) = await TerceroAceptaAsync(e.Norte, "CLIENTE");
             await SubirAsync(sesion, "RUT", Pdf("RUT"));
-            await SubirAsync(sesion, "CAMARA_COMERCIO", Pdf("Cámara"));
+            await SubirAsync(sesion, "CAMARA_COMERCIO", CamaraReciente());
             return (id, await EsperarAsync(e.Norte, id, x => RevisionDe(x, "RUT", "COMPRAS")?.Resultado == "AprobadaConMuestreo" &&
                                                            RevisionDe(x, "CAMARA_COMERCIO", "CUMPLIMIENTO") is not null));
         }
@@ -274,7 +274,7 @@ public sealed class RequisitosRevisionAutomaticaApiTests(ApiFixture fixture, ITe
         await ConfigRevisionAsync(e.Norte, new ActualizarRevisionAutomaticaDto("Asistido"));
         var (_, sesion, expedienteId) = await TerceroAceptaAsync(e.Norte, "PROVEEDOR");
         await SubirAsync(sesion, "RUT", Pdf("RUT"));
-        await SubirAsync(sesion, "CAMARA_COMERCIO", Pdf("Cámara"));
+        await SubirAsync(sesion, "CAMARA_COMERCIO", CamaraReciente());
 
         var sugerido = await EsperarAsync(e.Norte, expedienteId, x => x.Requisitos!.All(r => r.RevisionesAutomaticas is { Count: > 0 }));
         foreach (var (codigo, area) in new[] { ("RUT", "COMPRAS"), ("RUT", "CUMPLIMIENTO"), ("CAMARA_COMERCIO", "CUMPLIMIENTO") })
@@ -293,7 +293,7 @@ public sealed class RequisitosRevisionAutomaticaApiTests(ApiFixture fixture, ITe
         await PlanIaAsync(e.Norte, new ActualizarPlanIaEmpresaDto(50, false, Activo: false));
         var (_, otraSesion, otroExpediente) = await TerceroAceptaAsync(e.Norte, "PROVEEDOR");
         await SubirAsync(otraSesion, "RUT", Pdf("RUT"));
-        await SubirAsync(otraSesion, "CAMARA_COMERCIO", Pdf("Cámara"));
+        await SubirAsync(otraSesion, "CAMARA_COMERCIO", CamaraReciente());
         var sinAnalisis = await EsperarAsync(e.Norte, otroExpediente, x => RevisionDe(x, "CAMARA_COMERCIO", "CUMPLIMIENTO") is not null);
         RevisionDe(sinAnalisis, "CAMARA_COMERCIO", "CUMPLIMIENTO")!.ShouldSatisfyAllConditions(r => r.Sugerencia.ShouldBe("Revisar"),
             r => r.Motivos.Single().Codigo.ShouldBe("sin-analisis-ia"), r => r.Confianza.ShouldBeNull());
@@ -313,7 +313,7 @@ public sealed class RequisitosRevisionAutomaticaApiTests(ApiFixture fixture, ITe
             TiposAutorizados: ["RUT", "CAMARA_COMERCIO"], AreasAutorizadas: [e.Compras.Id]));
         var (_, sesion, expedienteId) = await TerceroAceptaAsync(e.Norte, "CLIENTE");
         await SubirAsync(sesion, "RUT", Pdf("RUT"));
-        await SubirAsync(sesion, "CAMARA_COMERCIO", Pdf("Cámara"));
+        await SubirAsync(sesion, "CAMARA_COMERCIO", CamaraReciente());
 
         // Se espera la decisión de Compras sobre cada documento, no «alguna revisión»: la Cámara también la ve Cumplimiento, que no está autorizada
         // y se anota «SinAlcance» en la primera pasada sin esperar el análisis; con «alguna revisión» la espera terminaba antes de que Compras decidiera

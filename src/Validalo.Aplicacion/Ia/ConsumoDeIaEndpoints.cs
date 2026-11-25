@@ -18,7 +18,8 @@ namespace Validalo.Aplicacion.Ia;
 /// <summary>
 /// Medición del uso de IA por cliente para cobrar el adicional (PI-12): por grupo y empresa y por mes, las validaciones incluidas y adicionales consumidas, los análisis
 /// que pagó la llave de la empresa con sus tokens, modelo y costo, y el valor de lo adicional con el precio configurable (el de la empresa o, si no tiene, la tarifa
-/// general). Solo Plataforma; se ve en la consola y se exporta a Excel o CSV.
+/// general). Solo Plataforma; se ve en la consola y se exporta a Excel o CSV. El costo es el ESTIMADO de lo que facturó OpenAI (tokens por la tarifa conocida de cada modelo; puede diferir del cobro de OpenAI) y se cuenta una sola vez, sin doble conteo: lo reutilizado (IA-15, las
+/// validaciones que usaron un análisis que pagó otra empresa y el costo atribuido de ese análisis) va aparte, solo como dato informativo, y nunca se suma a ese costo.
 /// </summary>
 public static partial class ConsumoDeIaEndpoints
 {
@@ -42,7 +43,8 @@ public static partial class ConsumoDeIaEndpoints
         var (tarifa, grupos) = await CalcularAsync(sesiones, mes, grupoId, q, ct);
 
         var totales = new ConsumoDeIaTotalesDto(grupos.Count, grupos.Sum(g => g.Empresas.Count), grupos.Sum(g => g.IncluidasConsumidas), grupos.Sum(g => g.AdicionalesConsumidas),
-            grupos.Sum(g => g.AnalisisPagados), grupos.Sum(g => g.TokensEntrada), grupos.Sum(g => g.TokensSalida), grupos.Sum(g => g.CostoUsd), grupos.Sum(g => g.ValorAdicional));
+            grupos.Sum(g => g.AnalisisPagados), grupos.Sum(g => g.TokensEntrada), grupos.Sum(g => g.TokensSalida), grupos.Sum(g => g.CostoUsd), grupos.Sum(g => g.ValorAdicional),
+            grupos.Sum(g => g.ValidacionesReutilizadas), grupos.Sum(g => g.CostoReutilizadoUsd));
         return new ConsumoDeIaDto(mes, tarifa.Moneda, tarifa.PrecioPorValidacionAdicional, totales, [.. grupos.Skip(desde).Take(tamano)],
             grupos.Count > desde + tamano ? Peticiones.EscribirDesplazamiento(desde + tamano) : null);
     }
@@ -66,13 +68,14 @@ public static partial class ConsumoDeIaEndpoints
         [
             "Grupo", "Identificador del grupo", "Empresa", "Periodo", "Validaciones incluidas en el plan", "Incluidas consumidas", "Adicionales consumidas", "Adicional habilitado",
             "Precio por adicional", "Moneda", "Valor de lo adicional", "Precio propio", "Análisis pagados con su llave", "Tokens de entrada", "Tokens de entrada en caché",
-            "Tokens de salida", "Costo real (USD)"
+            "Tokens de salida", "Costo estimado (USD)", "Validaciones con análisis reutilizado", "Costo reutilizado atribuido (USD, informativo: no suma al estimado)"
         ];
         IReadOnlyList<object?> Fila((ConsumoDeIaGrupoDto Grupo, ConsumoDeIaEmpresaDto Empresa) x) =>
         [
             x.Grupo.Grupo, x.Grupo.Slug, x.Empresa.Empresa, mes, x.Empresa.ValidacionesIncluidasMes, x.Empresa.IncluidasConsumidas, x.Empresa.AdicionalesConsumidas,
             x.Empresa.AdicionalHabilitado ? "Sí" : "No", x.Empresa.PrecioAdicional, tarifa.Moneda, x.Empresa.ValorAdicional, x.Empresa.PrecioPropio ? "Sí" : "No",
-            x.Empresa.AnalisisPagados, x.Empresa.TokensEntrada, x.Empresa.TokensEntradaEnCache, x.Empresa.TokensSalida, x.Empresa.CostoUsd
+            x.Empresa.AnalisisPagados, x.Empresa.TokensEntrada, x.Empresa.TokensEntradaEnCache, x.Empresa.TokensSalida, x.Empresa.CostoUsd, x.Empresa.ValidacionesReutilizadas,
+            x.Empresa.CostoReutilizadoUsd
         ];
 
         var nombre = $"consumo-ia-{mes}";
@@ -91,7 +94,7 @@ public static partial class ConsumoDeIaEndpoints
         ]));
         var bytes = HojaDeCalculo.CrearLibro(
             new Hoja("Por empresa", encabezado, empresas.Select(Fila)),
-            new Hoja("Por modelo", ["Grupo", "Identificador del grupo", "Empresa", "Periodo", "Modelo", "Llamadas", "Tokens de entrada", "Tokens de entrada en caché", "Tokens de salida", "Costo real (USD)"],
+            new Hoja("Por modelo", ["Grupo", "Identificador del grupo", "Empresa", "Periodo", "Modelo", "Llamadas", "Tokens de entrada", "Tokens de entrada en caché", "Tokens de salida", "Costo estimado (USD)"],
                 porModelo));
         return Results.File(bytes, HojaDeCalculo.TipoContenido, nombre + ".xlsx");
     }
@@ -165,11 +168,13 @@ public static partial class ConsumoDeIaEndpoints
                     plan?.AdicionalHabilitado ?? false, uso?.AnalisisPagados ?? 0, uso?.TokensEntrada ?? 0, uso?.TokensEntradaEnCache ?? 0, uso?.TokensSalida ?? 0,
                     uso?.CostoUsd ?? 0m, precio, plan?.PrecioAdicional is not null, TarifaDeIa.ValorDe(adicionales, precio),
                     [.. (uso?.PorModelo ?? []).OrderBy(m => m.Key, StringComparer.Ordinal)
-                        .Select(m => new UsoPorModeloIaDto(m.Key, m.Value.Llamadas, m.Value.TokensEntrada, m.Value.TokensEntradaEnCache, m.Value.TokensSalida, m.Value.CostoUsd))]));
+                        .Select(m => new UsoPorModeloIaDto(m.Key, m.Value.Llamadas, m.Value.TokensEntrada, m.Value.TokensEntradaEnCache, m.Value.TokensSalida, m.Value.CostoUsd))],
+                    uso?.ValidacionesReutilizadas ?? 0, uso?.CostoReutilizadoUsd ?? 0m));
             }
 
             grupos.Add(new ConsumoDeIaGrupoDto(tenant.Id, tenant.Nombre, tenant.Slug, filas.Sum(f => f.IncluidasConsumidas), filas.Sum(f => f.AdicionalesConsumidas),
-                filas.Sum(f => f.AnalisisPagados), filas.Sum(f => f.TokensEntrada), filas.Sum(f => f.TokensSalida), filas.Sum(f => f.CostoUsd), filas.Sum(f => f.ValorAdicional), filas));
+                filas.Sum(f => f.AnalisisPagados), filas.Sum(f => f.TokensEntrada), filas.Sum(f => f.TokensSalida), filas.Sum(f => f.CostoUsd), filas.Sum(f => f.ValorAdicional), filas,
+                filas.Sum(f => f.ValidacionesReutilizadas), filas.Sum(f => f.CostoReutilizadoUsd)));
         }
 
         return (tarifa, grupos);

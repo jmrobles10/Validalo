@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { pdf } from '../soporte/archivos';
-import { abrirDesdeBandeja, aprobarArea } from '../soporte/empresa';
+import { abrirDesdeBandeja, aprobarArea, irASector } from '../soporte/empresa';
 import { captura, enRevision, esperarListas, pedirVerificaciones, personaEmbebida } from '../soporte/cumplimiento';
 import { esperarEstadoDelTercero } from '../soporte/proveedor';
 import { crearEscenario } from '../soporte/semilla';
@@ -102,11 +102,17 @@ test('tras confirmar una coincidencia el oficial rechaza por cumplimiento: es de
   await dialogo.getByRole('button', { name: 'Rechazar expediente' }).click();
   await expect(dialogo).toBeHidden();
 
-  // El expediente dice quién lo rechazó y el historial también.
+  // El expediente dice quién lo rechazó (en «Aprobaciones», donde viven los avisos del expediente) y el historial también.
+  await irASector(olga, 'Aprobaciones');
   const aviso = olga.getByRole('alert').filter({ hasText: 'Cumplimiento lo rechazó el' });
   await expect(aviso).toContainText('Cumplimiento lo rechazó el');
   await expect(aviso).toContainText('Coincidencia confirmada con OFAC: no se puede vincular.');
   await expect(olga.getByText('Rechazado por Cumplimiento').first()).toBeVisible();
+  await irASector(olga, 'Historial');
+  await expect(olga.getByText('Rechazado por Cumplimiento').first()).toBeVisible();
+  // Ya no se ofrece rechazar otra vez (se espera a ver las listas para que el cero no sea de una pantalla sin cargar).
+  await irASector(olga, 'Oficial de cumplimiento');
+  await expect(olga.getByRole('region', { name: 'Listas restrictivas' })).toBeVisible();
   await expect(olga.getByRole('button', { name: 'Rechazar por cumplimiento' })).toHaveCount(0);
   await esperarEstadoDelTercero(page, 'Rechazado');
 });

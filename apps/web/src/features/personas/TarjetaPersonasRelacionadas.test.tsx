@@ -82,19 +82,53 @@ describe('personas relacionadas del vínculo', () => {
     permisos.scopes = new Set([SCOPES.documentosLeer]);
     const urls = montar([
       persona(),
-      persona({ relacionId: 'r2', personaId: 'p2', nombre: 'Ana Gómez', tipo: 'Socio', principal: false, participacion: '35.5', cargo: 'Presidente', documentos: [] }),
+      persona({ relacionId: 'r2', personaId: 'p2', identificacion: { pais: 'CO', tipo: 'CC', numero: '52111222' }, nombre: 'Ana Gómez', tipo: 'Socio', principal: false, participacion: '35.5', cargo: 'Presidente', documentos: [] }),
     ]);
 
     const juan = await screen.findByRole('listitem', { name: 'Juan Pérez' });
-    expect(juan).toHaveTextContent('CC 1020304050 · Representante legal');
+    expect(juan).toHaveTextContent('CC 1020304050');
+    expect(within(juan).getByText('Representante legal')).toBeInTheDocument();
     expect(within(juan).getByText('Principal')).toBeInTheDocument();
     expect(juan).toHaveTextContent('Cédula de ciudadanía');
     expect(juan).toHaveTextContent('Versión 1');
     expect(juan).toHaveTextContent('1 versión compartida');
     const ana = screen.getByRole('listitem', { name: 'Ana Gómez' });
-    expect(ana).toHaveTextContent('Socio o accionista · 35,5 % de participación · Cargo: Presidente');
+    expect(ana).toHaveTextContent('CC 52111222 · Cargo: Presidente');
+    expect(within(ana).getByText('Socio o accionista · 35,5 %')).toBeInTheDocument();
     expect(ana).toHaveTextContent('Aún no se comparte ningún documento de esta persona con el vínculo.');
     expect(urls.some((u) => u.includes('/api/v1/vinculos/v1/personas-relacionadas'))).toBe(true);
+  });
+
+  it('una persona con dos relaciones (representante legal y socio) es UNA tarjeta: sus dos roles como chips, «Principal» una vez y su cédula una sola vez', async () => {
+    permisos.scopes = new Set([SCOPES.documentosLeer]);
+    montar([
+      persona({ relacionId: 'r1', nombre: 'JOEL MATEO ROBLES ATUESTA', tipo: 'RepresentanteLegal', principal: true }),
+      persona({ relacionId: 'r2', nombre: 'JOEL MATEO ROBLES ATUESTA', tipo: 'Socio', principal: true, participacion: '100' }),
+    ]);
+
+    const joel = await screen.findByRole('listitem', { name: 'JOEL MATEO ROBLES ATUESTA' });
+    expect(screen.getAllByRole('listitem', { name: 'JOEL MATEO ROBLES ATUESTA' })).toHaveLength(1);
+    expect(within(joel).getByText('Representante legal')).toBeInTheDocument();
+    expect(within(joel).getByText('Socio o accionista · 100 %')).toBeInTheDocument();
+    expect(within(joel).getAllByText('Principal')).toHaveLength(1);
+    // La cédula, que se compartió por las dos relaciones, sale una vez (y con su única versión compartida).
+    expect(within(joel).getAllByText('Cédula de ciudadanía')).toHaveLength(1);
+    expect(within(joel).getAllByText('1 versión compartida')).toHaveLength(1);
+    expect(joel).toHaveTextContent('CC 1020304050');
+  });
+
+  it('si las relaciones comparten versiones distintas del mismo documento, salen juntas en una sola fila', async () => {
+    permisos.scopes = new Set([SCOPES.documentosLeer]);
+    const conVersion = (n: number) =>
+      [{ ...persona().documentos[0]!, versionesCompartidas: [{ n, sha256: 'abc', cargadaEn: '2026-11-05T10:00:00Z', estado: 'Actual' }] }] as unknown as PersonaDelVinculoDto['documentos'];
+    montar([
+      persona({ relacionId: 'r1', documentos: conVersion(1) }),
+      persona({ relacionId: 'r2', tipo: 'Socio', principal: false, participacion: '60', documentos: conVersion(2) }),
+    ]);
+
+    const juan = await screen.findByRole('listitem', { name: 'Juan Pérez' });
+    expect(within(juan).getAllByText('Cédula de ciudadanía')).toHaveLength(1);
+    expect(within(juan).getByText('2 versiones compartidas')).toBeInTheDocument();
   });
 
   it('sin personas dice que el flujo no pide documentos de personas relacionadas', async () => {

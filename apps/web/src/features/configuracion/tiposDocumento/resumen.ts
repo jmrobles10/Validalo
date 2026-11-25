@@ -1,6 +1,6 @@
 import type { TipoDocumentoTenantDto } from '@validalo/api-client';
 import type { TFunction } from 'i18next';
-import { megas, nombreDeFormato } from './modelo';
+import { megas, nombreDeFormato, plazoParaEditar } from './modelo';
 
 /** Lista en español: «PDF», «PDF o JPG», «PDF, JPG o PNG». */
 export function enumerar(partes: readonly string[]): string {
@@ -27,17 +27,21 @@ export function resumenTipo(tipo: Pick<TipoDocumentoTenantDto, 'modo' | 'reglasE
   return partes.join(' · ');
 }
 
-/** Regla de vigencia en palabras: «No vence», «Vale 30 días desde su expedición». */
-export function resumenVigencia(tipo: Pick<TipoDocumentoTenantDto, 'reglaFrescura'>, t: TFunction): string {
-  const { tipo: regla, dias, regla: periodo } = tipo.reglaFrescura;
-  switch (regla) {
-    case 'MaxDiasDesdeExpedicion':
-      return t('tiposDocumento.vigencia.resumen.expedicion', { count: dias ?? 0 });
-    case 'MaxDiasDesdeAprobacion':
-      return t('tiposDocumento.vigencia.resumen.carga', { count: dias ?? 0 });
-    case 'PeriodoMinimo':
-      return t('tiposDocumento.vigencia.resumen.periodo', { periodo: periodo ?? '—' });
-    default:
-      return t('tiposDocumento.vigencia.resumen.ninguna');
-  }
+/** Un plazo en días, como se dice: «1 año» (365), «6 meses» (183), «30 días». */
+export function plazoEnPalabras(dias: number, t: TFunction): string {
+  if (dias >= 365 && dias % 365 === 0) return t('tiposDocumento.vigencia.plazo.anios', { count: dias / 365 });
+  const { valor, unidad } = plazoParaEditar(dias);
+  return unidad === 'meses' ? t('tiposDocumento.vigencia.plazo.meses', { count: Number(valor) }) : t('tiposDocumento.vigencia.plazo.dias', { count: dias });
+}
+
+/**
+ * Las dos reglas de frescura en palabras (TD-10): «Expedido hace menos de 30 días · Se revalida cada 1 año desde que lo apruebas». Cada una es opcional;
+ * sin ninguna (ni periodo), «No vence».
+ */
+export function resumenVigencia(tipo: Pick<TipoDocumentoTenantDto, 'reglaFrescura' | 'antiguedadMaximaDias' | 'revalidarCadaDias'>, t: TFunction): string {
+  const partes: string[] = [];
+  if (tipo.antiguedadMaximaDias) partes.push(t('tiposDocumento.vigencia.resumen.antiguedad', { count: tipo.antiguedadMaximaDias }));
+  if (tipo.revalidarCadaDias) partes.push(t('tiposDocumento.vigencia.resumen.revalidar', { plazo: plazoEnPalabras(tipo.revalidarCadaDias, t) }));
+  if (tipo.reglaFrescura.tipo === 'PeriodoMinimo') partes.push(t('tiposDocumento.vigencia.resumen.periodo', { periodo: tipo.reglaFrescura.regla ?? '—' }));
+  return partes.length > 0 ? partes.join(' · ') : t('tiposDocumento.vigencia.resumen.ninguna');
 }

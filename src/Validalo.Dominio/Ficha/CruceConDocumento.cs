@@ -354,8 +354,9 @@ public static class CruceConDocumento
 
     /// <summary>
     /// Cruza una cuenta bancaria del tercero con lo que dice su certificación bancaria (docs/14 §6, fila «Bancaria»): el número debe
-    /// ser exacto, el titular debe ser el tercero y la cuenta debe estar activa (críticos); el banco y el tipo de cuenta son evidencia.
-    /// El número completo solo existe en memoria: en el resultado va <b>siempre enmascarado</b> (CB-2). Función pura.
+    /// ser exacto, el titular y su identificación deben coincidir y el titular debe ser el tercero (críticos); el banco y el tipo de cuenta son
+    /// evidencia. El estado de la cuenta ya no se valida (CB-12). El número completo solo existe en memoria: en el resultado va
+    /// <b>siempre enmascarado</b> (CB-2). Función pura.
     /// </summary>
     public static CruceDeSeccion CruzarCuenta(DatosDeCuentaParaCruce cuenta, string terceroNombre, string terceroIdentificacion, Guid documentoId,
         int versionDocumento, IReadOnlyDictionary<string, JsonElement> extraidos, decimal confianza, bool legible, DateTimeOffset fecha)
@@ -389,12 +390,6 @@ public static class CruceConDocumento
                 esDelTercero ? null : "La cuenta que certifica el banco no es del tercero."));
         }
 
-        var estado = LecturaDeHechos.Texto(extraidos, "estadoCuenta");
-        var activa = estado is null ? (bool?)null : EstaActiva(estado);
-        campos.Add(new CampoCruzado("estado_cuenta", "Estado de la cuenta", "Activa", estado,
-            activa switch { null => ResultadoDeCruce.NoVerificable, true => ResultadoDeCruce.Coincide, false => ResultadoDeCruce.Discrepa }, true,
-            activa == false ? "La cuenta no está activa." : null));
-
         AgregarBanco(campos, cuenta.Banco, LecturaDeHechos.Texto(extraidos, "banco"));
         AgregarTipoDeCuenta(campos, cuenta.TipoCuenta, LecturaDeHechos.Texto(extraidos, "tipoCuenta"));
 
@@ -426,13 +421,6 @@ public static class CruceConDocumento
 
         return x.Length > 0 && y.Length > 0 && (x == y || (y.Length == x.Length + 1 && y.StartsWith(x, StringComparison.Ordinal)) ||
                                               (x.Length == y.Length + 1 && x.StartsWith(y, StringComparison.Ordinal)));
-    }
-
-    private static bool EstaActiva(string estado)
-    {
-        var texto = Normalizacion.Texto(estado);
-        return texto.Contains("ACTIV", StringComparison.Ordinal) &&
-               !new[] { "INACTIV", "CANCEL", "CERRAD", "BLOQUE", "EMBARG" }.Any(m => texto.Contains(m, StringComparison.Ordinal));
     }
 
     /// <summary>El banco: el nombre más corto está en el más largo («Bancolombia» y «Bancolombia S.A.»). Evidencia, no crítico.</summary>

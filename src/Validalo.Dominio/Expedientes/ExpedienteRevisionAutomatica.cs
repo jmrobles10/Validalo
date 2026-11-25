@@ -83,6 +83,11 @@ public sealed partial class Expediente
     /// <summary>Revisor que figura en los veredictos que emite la revisión automática.</summary>
     public const string RevisorAutomatico = "revision-automatica";
 
+    /// <summary>Motivo base con el que el sistema observa un documento que no cumple la antigüedad máxima de su tipo (docs/03 §13).</summary>
+    public const string MotivoFrescuraIncumplida = "frescura-incumplida";
+
+    private const string TextoFrescuraIncumplida = "El documento no cumple la antigüedad máxima exigida.";
+
     /// <summary>En revisión con algún documento y área de la etapa activa sin registro de la revisión automática para su versión actual.</summary>
     public bool PorRevisarAutomaticamente { get; set; }
 
@@ -136,11 +141,15 @@ public sealed partial class Expediente
             foreach (var propuesta in validas)
             {
                 var decision = propuesta.Decision;
-                Guid? veredictoId = decision.Aprueba ? Guid.CreateVersion7() : null;
+                Guid? veredictoId = decision.Aprueba || decision.Observa ? Guid.CreateVersion7() : null;
                 s.Emitir(new RevisionAutomaticaRegistrada(propuesta.RequisitoId, propuesta.AreaId, propuesta.SobreVersion, nivel, decision.Resultado,
                     decision.Sugerencia, [.. decision.Motivos], decision.Confianza, veredictoId, ahora));
-                if (veredictoId is { } id)
-                    s.Emitir(new VeredictoDeRequisitoEmitido(id, propuesta.RequisitoId, propuesta.AreaId, Veredicto.Aprobado, OrigenVeredicto.Sistema,
+                if (veredictoId is { } id && decision.Observa)
+                    // El sistema observa el documento al tercero (antigüedad máxima del tipo, TD-10): motivo base `frescura-incumplida` y el siguiente paso.
+                    s.Emitir(new VeredictoDeRequisitoEmitido(id, propuesta.RequisitoId, propuesta.AreaId, Veredicto.Observado, OrigenVeredicto.Sistema,
+                        RevisorAutomatico, propuesta.SobreVersion, [new MotivoAplicado(MotivoFrescuraIncumplida, TextoFrescuraIncumplida)], decision.ObservacionAlTercero, null, ahora));
+                else if (veredictoId is { } aprobado)
+                    s.Emitir(new VeredictoDeRequisitoEmitido(aprobado, propuesta.RequisitoId, propuesta.AreaId, Veredicto.Aprobado, OrigenVeredicto.Sistema,
                         RevisorAutomatico, propuesta.SobreVersion, [], null, JustificacionAutomatica(decision), ahora));
             }
         }, ahora);

@@ -17,7 +17,9 @@ public sealed partial class TiposDocumentoApiTests
         var enviado = await TerceroAsync<ConfirmacionCargaDto>("POST", "/public/v1/boveda/formularios", e.Sesion.AccessToken,
             Formulario(e, ("fecha_expedicion", hoy.AddDays(-20).ToString("yyyy-MM-dd")), ("origen", "Nacional")), 200);
         var documentoId = enviado.Version.DocumentoId;
-        (await EsperarEventoAsync<VigenciaDeVersionCalculada>(documentoId)).VigenteHasta.ShouldBe(hoy.AddDays(10));
+        // Aprobada hace 20 días y revalidar cada 30: vence en 10 días (TD-10).
+        await AprobarAsync(e, diasAtras: 20);
+        (await EsperarEventoAsync<VigenciaDeVersionCalculada>(documentoId, c => c.VigenteHasta is not null)).VigenteHasta.ShouldBe(hoy.AddDays(10));
 
         // Vence en 10 días (avisa a 5): entra en el horizonte de 30 y no en el de 5.
         var fila = (await ApiAsync<List<VencimientoDto>>("GET", "/api/v1/vencimientos?dias=30", Admin(e.Empresa), null, 200)).ShouldHaveSingleItem();
@@ -27,7 +29,7 @@ public sealed partial class TiposDocumentoApiTests
         fila.VigenteHasta.ShouldBe(hoy.AddDays(10));
         fila.DiasRestantes.ShouldBe(10);
         fila.Estado.ShouldBe("Vigente");
-        fila.Base.ShouldBe("FechaExpedicion");
+        fila.Base.ShouldBe("Aprobacion");
         fila.FinDeGracia.ShouldBe(hoy.AddDays(12));
         fila.PermiteRatificar.ShouldBeFalse();
         fila.UltimoRecordatorio.ShouldBeNull();

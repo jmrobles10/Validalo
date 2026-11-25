@@ -59,7 +59,7 @@ export function FormularioDeRecuperacion({ desafio, alResultado, alCancelar }: P
           fullWidth
           slotProps={{ htmlInput: { autoComplete: 'off', autoCapitalize: 'characters', spellCheck: false, maxLength: 11, style: { fontFamily: 'monospace', letterSpacing: 1 } } }}
         />
-        <Button type="submit" variant="contained" size="large" fullWidth disabled={!completo || usar.isPending} startIcon={usar.isPending ? <IconoCarga /> : undefined}>
+        <Button type="submit" variant="contained" fullWidth disabled={!completo || usar.isPending} startIcon={usar.isPending ? <IconoCarga /> : undefined}>
           {t('ingreso.recuperacion.usar')}
         </Button>
         <Button variant="text" size="small" onClick={alCancelar} disabled={usar.isPending} sx={{ alignSelf: 'center' }}>

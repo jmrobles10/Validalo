@@ -21,6 +21,8 @@ interface Props {
   mensaje: (ruta: string) => string | null;
   hayEnRuta?: (prefijo: string) => boolean;
   deshabilitado?: boolean;
+  /** La pregunta lleva el asterisco del tema (es obligatoria). */
+  requerido?: boolean;
   /** Con esto, una declaración ya guardada ofrece «Descargar PDF» (la general del tercero; las personas de la legal lo tienen en su tarjeta). */
   descarga?: { seccion: string };
 }
@@ -33,7 +35,7 @@ type Apertura = 'respuesta' | 'boton';
  * no): al responder «Sí» se abre el diálogo; «No» conserva la declaración como inactiva y al volver a «Sí» abre precargada. Con «Sí»
  * muestra si la declaración está firmada o falta, y no se puede guardar la sección sin ella (lo exige el servidor).
  */
-export function PreguntaPep({ etiqueta, pep, declaracion, origen, onCambiar, mensaje, hayEnRuta, deshabilitado = false, descarga }: Props) {
+export function PreguntaPep({ etiqueta, pep, declaracion, origen, onCambiar, mensaje, hayEnRuta, deshabilitado = false, requerido = false, descarga }: Props) {
   const { t } = useTranslation();
   const [apertura, setApertura] = useState<Apertura | null>(null);
   const [faltas, setFaltas] = useState<FaltaBasico[]>([]);
@@ -66,7 +68,7 @@ export function PreguntaPep({ etiqueta, pep, declaracion, origen, onCambiar, men
 
   return (
     <Stack spacing={1}>
-      <CampoSiNo etiqueta={etiqueta} valor={pep} onCambiar={responder} mensaje={mensaje('pep')} deshabilitado={deshabilitado} />
+      <CampoSiNo etiqueta={etiqueta} valor={pep} onCambiar={responder} mensaje={mensaje('pep')} deshabilitado={deshabilitado} requerido={requerido} />
       {faltas.length > 0 && (
         <Alert severity="warning">
           {t('ficha.pep.faltaBasico.titulo', { campos: faltas.map((f) => t(`ficha.pep.faltaBasico.${f}`)).join(', ') })}

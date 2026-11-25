@@ -127,7 +127,7 @@ export function PaginaEnlace() {
             {t('enlace.otpIntentos', { count: restantes })}
           </Alert>
         )}
-        <Button type="submit" variant="contained" size="large" fullWidth disabled={codigo.length !== 6 || verificacion.isPending}>
+        <Button type="submit" variant="contained" fullWidth disabled={codigo.length !== 6 || verificacion.isPending}>
           {t('enlace.otpVerificar')}
         </Button>
         <Typography sx={{ color: 'text.secondary' }}>

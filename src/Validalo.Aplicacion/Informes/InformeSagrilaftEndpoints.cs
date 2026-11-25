@@ -150,12 +150,12 @@ public static class InformeSagrilaftEndpoints
             }
 
             var datos = generales.GetValueOrDefault(tercero.Id);
-            var delTercero = personas.GetValueOrDefault(tercero.Id) ?? [];
+            var delTercero = ResumirPersonas(personas.GetValueOrDefault(tercero.Id) ?? []);
             filas.Add(new FilaTerceroSagrilafDto(vinculo.Id, tercero.Id, ultimo.Folio, tercero.Nombre, tercero.Identificacion.Tipo, tercero.Identificacion.Numero,
                 tercero.TipoPersona.ToString(), ultimo.TipoVinculoNombre, datos?.Pais ?? tercero.Identificacion.Pais, datos?.Ciudad, datos?.Correo ?? vinculo.CorreoTercero,
                 datos?.CiiuPrincipal, vinculo.Estado.ToString(), listas?.RegistradaEn, listas?.Proveedor, estadoListas,
                 listas?.Coincidencias.Count(x => !x.Resuelta) ?? 0, estudio?.Fecha, estudio?.Por, estudio?.Datos.NivelRiesgo, estudio?.Datos.DebidaDiligencia.ToString(),
-                estudio?.Datos.Concepto.ToString(), estudio?.Datos.ConflictoDeInteres, proxima, dias, estadoDd, delTercero.Count, delTercero.Count(p => p.EsPep), delTercero.Count(p => p.EsPep && !p.DeclaracionPep)));
+                estudio?.Datos.Concepto.ToString(), estudio?.Datos.ConflictoDeInteres, proxima, dias, estadoDd, delTercero.Personas, delTercero.Pep, delTercero.PepSinDeclaracion));
         }
 
         var riesgo = filas.Where(f => f.NivelRiesgo is not null).GroupBy(f => f.NivelRiesgo!.Value).OrderBy(g => g.Key).Select(g => new RiesgoDto(g.Key, g.Count())).ToList();
@@ -195,6 +195,19 @@ public static class InformeSagrilaftEndpoints
         var abiertas = expedientes.Where(e => e.PendienteDeCumplimiento).ToList();
         return new TiemposDeCumplimientoDto(duraciones.Count == 0 ? null : Math.Round((decimal)duraciones.Average(), 1), duraciones.Count, abiertas.Count,
             abiertas.Count(e => (ahora - e.AbiertoEn).TotalDays > 7));
+    }
+
+    /// <summary>Las cifras de personas de la fila de un tercero: cuántas hay, cuántas son PEP y a cuántas de ellas les falta la declaración.</summary>
+    public sealed record ResumenDePersonas(int Personas, int Pep, int PepSinDeclaracion);
+
+    /// <summary>
+    /// Cuenta <b>personas</b>, no filas: quien es representante legal y además socio tiene una fila por rol en la información legal (PS-1) y cuenta una sola vez.
+    /// Es PEP si alguna de sus filas lo dice, y le falta la declaración si ninguna de las filas PEP la trae. Las filas sin número no se juntan con otras.
+    /// </summary>
+    public static ResumenDePersonas ResumirPersonas(IReadOnlyList<PersonaInformeDto> filas)
+    {
+        var personas = filas.GroupBy(p => string.IsNullOrWhiteSpace(p.Identificacion) ? $"#{p.Indice}" : $"{p.TipoIdentificacion.Trim().ToUpperInvariant()}|{p.Identificacion.Trim().ToUpperInvariant()}").ToList();
+        return new ResumenDePersonas(personas.Count, personas.Count(g => g.Any(p => p.EsPep)), personas.Count(g => g.Any(p => p.EsPep) && !g.Any(p => p.EsPep && p.DeclaracionPep)));
     }
 
     internal static async Task<Dictionary<Guid, IReadOnlyList<PersonaInformeDto>>> PersonasDeLosTercerosAsync(IQuerySession boveda, Guid[] terceroIds, CancellationToken ct)

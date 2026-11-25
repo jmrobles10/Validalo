@@ -1,6 +1,7 @@
 import { enRevision, pedirVerificaciones, personaEmbebida, revisarVerificaciones } from '../../soporte/cumplimiento';
 import { abrirEmbebido } from '../../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea, irASeccion } from '../../soporte/empresa';
+import { agregarPersona } from '../../soporte/ficha';
 import { esperarEstadoDelTercero } from '../../soporte/proveedor';
 import { crearEscenario } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
@@ -70,16 +71,7 @@ recorrido(
     // El proveedor agrega un socio que sí aparece en la lista: el monitoreo lo encuentra en la siguiente reconsulta.
     await pTercero.goto('/ficha/legal');
     await expect(pTercero.getByRole('heading', { level: 1, name: 'Información legal' })).toBeVisible();
-    await pTercero.getByRole('button', { name: 'Agregar persona' }).click();
-    const persona = pTercero.getByRole('dialog', { name: 'Agregar persona' });
-    await persona.getByRole('combobox', { name: 'Rol' }).click();
-    await pTercero.getByRole('option', { name: 'Socio o accionista' }).click();
-    await persona.getByRole('combobox', { name: 'Tipo de identificación' }).click();
-    await pTercero.getByRole('option', { name: 'CC', exact: true }).click();
-    await persona.getByRole('textbox', { name: 'Número de identificación' }).fill('1012345678');
-    await persona.getByRole('textbox', { name: 'Nombres' }).fill('Roberto');
-    await persona.getByRole('textbox', { name: 'Apellidos' }).fill('Coincidencia Prueba');
-    await persona.getByRole('button', { name: 'Listo' }).click();
+    await agregarPersona(pTercero, { rol: 'Socio o accionista', numero: '1012345678', nombres: 'Roberto', apellidos: 'Coincidencia Prueba', porcentaje: '1' });
     await pTercero.getByRole('group', { name: 'Guardar la sección' }).getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(pTercero.getByRole('listitem', { name: 'Roberto Coincidencia Prueba' })).toBeVisible();
     await revisarVerificaciones(e, dentroDe(62));

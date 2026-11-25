@@ -160,6 +160,9 @@ export function tonoDeAlerta(cantidad: number): TonoKpi {
  * un detalle opcional y, si hay datos que dibujar, una mini gráfica (`grafica`). Es un grupo con el nombre del rótulo (`etiqueta`, o el
  * `titulo` si es texto): el lector de pantalla lee el rótulo con su cifra. En `rojo` el borde y la cifra también se pintan de alerta.
  *
+ * `barra` (opcional) es una barra fina a todo el ancho de la tarjeta, debajo de la cifra y antes del detalle (p. ej. lo consumido de un cupo); `grafica` es
+ * la mini gráfica a la derecha de la cifra.
+ *
  * Con `to` la tarjeta entera es un enlace (`componente`, p. ej. el `Link` del enrutador; sin él, un `<a href>`): lleva un chevron junto al
  * rótulo, el borde se marca al pasar el cursor y su nombre accesible es su contenido (o `etiqueta`, si se da).
  */
@@ -170,6 +173,7 @@ export function TarjetaKpi({
   valor,
   detalle,
   grafica,
+  barra,
   etiqueta,
   componente,
   to,
@@ -180,6 +184,7 @@ export function TarjetaKpi({
   valor: ReactNode;
   detalle?: ReactNode;
   grafica?: ReactNode;
+  barra?: ReactNode;
   etiqueta?: string;
   componente?: ElementType;
   to?: string;
@@ -200,6 +205,11 @@ export function TarjetaKpi({
     boxShadow: t.sombra.suave,
     ...(enlazada && { '&:hover': { borderColor: alerta ? t.palette.estado.error.texto : t.palette.acento.borde } }),
   });
+  const textoDetalle = detalle && (
+    <Typography component="p" variant="caption" sx={{ m: 0, mt: barra ? 0.75 : 0, color: 'text.secondary' }}>
+      {detalle}
+    </Typography>
+  );
   const cuerpo = (
     <>
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 0.75 }}>
@@ -227,14 +237,12 @@ export function TarjetaKpi({
           >
             {valor}
           </Typography>
-          {detalle && (
-            <Typography component="p" variant="caption" sx={{ m: 0, color: 'text.secondary' }}>
-              {detalle}
-            </Typography>
-          )}
+          {!barra && textoDetalle}
         </Box>
         {grafica && <Box sx={{ flex: 'none' }}>{grafica}</Box>}
       </Stack>
+      {barra && <Box sx={{ mt: 0.75 }}>{barra}</Box>}
+      {barra && textoDetalle}
     </>
   );
 

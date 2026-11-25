@@ -11,7 +11,7 @@ import { usePermisos } from '../../../shared/usePermisos';
 import { useEmpresaActiva } from '../../empresas/useEmpresas';
 import { useAprobarCuenta, useCuentaDesignada, useRechazarCuenta } from './api';
 import { CertificacionDeLaCuenta } from './CertificacionDeLaCuenta';
-import { CuentaRechazada, DatosCuenta, SeccionCuenta } from './DatosCuenta';
+import { CuentaRechazada, DatosCuenta, EncabezadoCuenta, SeccionCuenta } from './DatosCuenta';
 import { DialogoRechazarCuenta } from './DialogoRechazarCuenta';
 import { camposCriticosQueDifieren, mensajeErrorCuenta, nombresDe, yaAprobo } from './modelo';
 import { PropuestaCuenta } from './PropuestaCuenta';
@@ -75,7 +75,7 @@ function ContenidoCuenta({ datos, empresaId, vinculoId, tienePermiso }: Contenid
     <>
       <Stack spacing={2} divider={<Divider flexItem />}>
         {actual && (
-          <SeccionCuenta titulo={t('cuentas.secciones.designada')} cuenta={actual} fecha={actual.aprobadaEn}>
+          <SeccionCuenta titulo={t('cuentas.secciones.designada')} encabezado={<EncabezadoCuenta cuenta={actual} etiqueta={t('cuentas.secciones.designada')} />}>
             <DatosCuenta cuenta={actual} />
             <CertificacionDeLaCuenta cuenta={actual} />
             {actual.aprobadaEn && (

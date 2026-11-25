@@ -63,6 +63,8 @@ const entorno = {
   Validalo__Verificadores__SegundosProceso: '1',
   // La revisión automática con IA (Asistido, Automático) revisa casi al instante los documentos que ya tienen su análisis.
   Validalo__RevisionAutomatica__SegundosProceso: '1',
+  // La aprobación de un requisito llega al documento por un barrido corto (TD-13): su vigencia «revalidar cada N días» sale casi al instante, no a los 15 s.
+  Validalo__VigenciasDeDocumentos__SegundosProceso: '1',
   ...(aislado && {
     ConnectionStrings__Validalo: `Host=localhost;Port=5432;Database=${BASE_AISLADA};Username=validalo;Password=validalo`,
     Validalo__Correo__Puerto: '1026',

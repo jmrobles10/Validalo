@@ -1,4 +1,5 @@
 import type {
+  AntiguedadDocumentoDto,
   AreaDeRequisitoDto,
   AreaExpedienteDto,
   DatoDeclaradoDto,
@@ -148,4 +149,39 @@ export function requisitoSeccion(cambios: Partial<RequisitoExpedienteDto> = {}, 
     },
     ...cambios,
   });
+}
+
+/**
+ * La antigüedad del documento frente al máximo de su tipo (`versionActual.antiguedad`, TD-10): por defecto, expedido hace 860 días con un máximo de 30 (difiere, crítico), como lo
+ * calcula la API (`campo` es el campo del cruce «Antigüedad del documento»).
+ */
+export function antiguedad(cambios: Partial<AntiguedadDocumentoDto> = {}): AntiguedadDocumentoDto {
+  return {
+    estado: 'Excedida',
+    maximoDias: 30,
+    fechaExpedicion: '2024-07-17',
+    dias: 860,
+    fuente: 'IA',
+    fechaDeclarada: null,
+    difiereDeLaDeclarada: false,
+    critico: true,
+    detalle: 'Expedida el 17/07/2024: 860 días; el máximo es 30.',
+    mensaje: null,
+    campo: {
+      campo: 'antiguedad',
+      etiqueta: 'Antigüedad del documento',
+      declarado: 'Máximo 30 días',
+      extraido: '860 días',
+      resultado: 'Discrepa',
+      critico: true,
+      detalle: 'Expedida el 17/07/2024: 860 días; el máximo es 30.',
+    },
+    ...cambios,
+  };
+}
+
+/** Un requisito cuya versión vigente trae la antigüedad dada (sin ella, el tipo no tiene regla de antigüedad). */
+export function requisitoConAntiguedad(antiguedadDelDocumento: AntiguedadDocumentoDto | null, cambios: Partial<RequisitoExpedienteDto> = {}): RequisitoExpedienteDto {
+  const base = requisito(cambios);
+  return { ...base, versionActual: base.versionActual ? { ...base.versionActual, antiguedad: antiguedadDelDocumento } : null };
 }

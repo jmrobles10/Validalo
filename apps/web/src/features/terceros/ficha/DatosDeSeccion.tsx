@@ -1,23 +1,31 @@
-import { Box, Divider, Stack, Typography } from '@mui/material';
-import { Dato, RejillaDatos } from '@validalo/ui';
-import type { ReactNode } from 'react';
+import { Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { BloqueDeGrupo, ListaDeFilas, Rejilla } from './BloquesDeDatos';
 import { DeclaracionPep } from './DeclaracionPep';
 import type { DescargaDeclaracionPep } from './descargaDeclaracionPep';
-import { declaracionActiva, esListaDeObjetos, esObjeto, etiquetaCampo, formatearValor, tituloDeFila } from './formato';
+import { declaracionActiva, esListaDeObjetos, esObjeto, etiquetaCampo, SIN_DATO, tieneValor } from './formato';
+import { ordenarPares, ordenDeLaSeccion } from './ordenDeCampos';
+import { agruparPersonas, faltantesPorFila } from './personas';
+import { TarjetaDePersona } from './TarjetaDePersona';
 
 /**
- * Los datos de una sección en solo lectura, en el orden en que los guardó el esquema: valores simples en la rejilla;
- * grupos (dirección por partes, resoluciones, moneda extranjera) y filas (personas, ICA) debajo, con su título. La declaración jurada
- * PEP de una persona con «Sí» en PEP va aparte, como un bloque con su PDF (HU 49093): con `empresaId`, `terceroId` y `seccion` se
- * puede descargar (`version`: la que se está viendo; sin ella, la vigente).
+ * Los datos de una sección en solo lectura, en el orden del esquema (el que el tercero los llena, no el de la base de datos): valores simples en la rejilla; grupos
+ * (dirección por partes, resoluciones, moneda extranjera) y filas (ICA) en bloques con su título; las personas relacionadas, una tarjeta por persona. La declaración jurada
+ * PEP de una persona con «Sí» en PEP va dentro de su tarjeta, con su PDF (HU 49093): con `empresaId`, `terceroId` y `seccion` se puede descargar (`version`: la que se
+ * está viendo; sin ella, la vigente).
  */
-export function DatosDeSeccion({ datos, empresaId, terceroId, seccion, version = null }: Props) {
+export function DatosDeSeccion({ datos, empresaId, terceroId, seccion, version = null, faltantes = [] }: Props) {
   const { t } = useTranslation();
   const descarga: DescargaDeclaracionPep | null = empresaId && terceroId && seccion ? { empresaId, terceroId, seccion, version } : null;
   const declaracionDelTercero = declaracionActiva(datos);
-  const entradas = Object.entries(datos).filter(([clave, v]) => clave !== 'declaracion_pep' && v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0));
-  const simples = entradas.filter(([, v]) => !esObjeto(v) && !esListaDeObjetos(v));
+  const orden = ordenDeLaSeccion(seccion);
+  // «Todo lo llenado»: lo vacío se omite; lo obligatorio que falta (los campos de primer nivel que la API marca en `faltantes`) sale como «Sin dato».
+  const sinDato: [string, unknown][] = faltantes.filter((c): c is string => typeof c === 'string' && /^[a-z_]+$/.test(c) && !tieneValor(datos[c])).map((c) => [c, SIN_DATO]);
+  const entradas = ordenarPares(
+    [...Object.entries(datos).filter(([clave, v]) => clave !== 'declaracion_pep' && tieneValor(v)), ...sinDato],
+    orden,
+  );
+  const simples = entradas.filter(([, v]) => v === SIN_DATO || (!esObjeto(v) && !esListaDeObjetos(v)));
   const grupos = entradas.filter(([, v]) => esObjeto(v));
   const filas = entradas.filter(([, v]) => esListaDeObjetos(v));
 
@@ -34,28 +42,16 @@ export function DatosDeSeccion({ datos, empresaId, terceroId, seccion, version =
       {simples.length > 0 && <Rejilla datos={Object.fromEntries(simples)} />}
       {declaracionDelTercero && <DeclaracionPep declaracion={declaracionDelTercero} indice={null} descarga={descarga} />}
       {grupos.map(([clave, valor]) => (
-        <Grupo key={clave} titulo={etiquetaCampo(clave, t)}>
-          <Rejilla datos={esObjeto(valor) ? valor : {}} />
-        </Grupo>
+        <BloqueDeGrupo key={clave} clave={clave} valor={esObjeto(valor) ? valor : {}} />
       ))}
-      {filas.map(([clave, valor]) => (
-        <Grupo key={clave} titulo={etiquetaCampo(clave, t)}>
-          <Stack component="ol" divider={<Divider component="li" aria-hidden />} spacing={1} sx={{ p: 0, m: 0, listStyle: 'none' }}>
-            {(esListaDeObjetos(valor) ? valor : []).map((fila, i) => {
-              const titulo = tituloDeFila(clave, fila, i, t);
-              const { declaracion_pep: _declaracion, ...resto } = fila;
-              const declaracion = clave === 'personas' ? declaracionActiva(fila) : null;
-              return (
-                <Box component="li" key={`${clave}-${String(i)}`} aria-label={titulo}>
-                  <Typography variant="subtitle2" component="p" sx={{ mb: 0.5 }}>{titulo}</Typography>
-                  <Rejilla datos={resto} />
-                  {declaracion && <DeclaracionPep declaracion={declaracion} indice={i} descarga={descarga} />}
-                </Box>
-              );
-            })}
-          </Stack>
-        </Grupo>
-      ))}
+      {filas.map(([clave, valor]) => {
+        const lista = esListaDeObjetos(valor) ? valor : [];
+        return clave === 'personas' ? (
+          <PersonasRelacionadas key={clave} filas={lista} descarga={descarga} faltantes={faltantesPorFila(faltantes)} />
+        ) : (
+          <ListaDeFilas key={clave} clave={clave} filas={lista} />
+        );
+      })}
     </Stack>
   );
 }
@@ -64,38 +60,33 @@ interface Props {
   datos: Record<string, unknown>;
   empresaId?: string;
   terceroId?: string;
-  /** Código de la sección (`FICHA_LEGAL`): con él y el tercero se descarga el PDF de la declaración PEP. */
+  /** Código de la sección (`FICHA_LEGAL`): da el orden de los datos y, con el tercero, el PDF de la declaración PEP. */
   seccion?: string;
   version?: number | null;
+  /** Las rutas de lo que la API dice que falta (`razon_social`, `personas[0].pep`): lo obligatorio vacío sale como «Sin dato». */
+  faltantes?: readonly (string | null | undefined)[];
 }
 
-function Grupo({ titulo, children }: { titulo: string; children: ReactNode }) {
-  return (
-    <Stack component="section" aria-label={titulo} spacing={0.5}>
-      <Typography variant="overline" component="h5" sx={{ color: 'text.secondary' }}>
-        {titulo}
-      </Typography>
-      {children}
-    </Stack>
-  );
-}
-
-/** Rejilla de pares etiqueta/valor (un nivel; un grupo anidado se muestra en una línea). */
-function Rejilla({ datos }: { datos: Record<string, unknown> }) {
+/** Las personas relacionadas: una tarjeta por persona (las filas de la misma identificación, juntas), con cuántas son. */
+function PersonasRelacionadas({ filas, descarga, faltantes }: { filas: Record<string, unknown>[]; descarga: DescargaDeclaracionPep | null; faltantes: ReadonlyMap<number, ReadonlySet<string>> }) {
   const { t } = useTranslation();
+  const personas = agruparPersonas(filas);
+  const titulo = etiquetaCampo('personas', t);
   return (
-    <RejillaDatos columnas={2}>
-      {Object.entries(datos)
-        .filter(([, v]) => v !== null && v !== undefined)
-        .map(([clave, valor]) => (
-          <Dato key={clave} etiqueta={etiquetaCampo(clave, t)}>
-            {esObjeto(valor)
-              ? Object.entries(valor)
-                  .map(([k, v]) => `${etiquetaCampo(k, t)}: ${formatearValor(k, v, t)}`)
-                  .join(' · ')
-              : formatearValor(clave, valor, t)}
-          </Dato>
+    <Stack component="section" aria-label={titulo} spacing={1}>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <Typography variant="subtitle2" component="h5">
+          {titulo}
+        </Typography>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          {t('fichaMaestra.persona.cuantas', { count: personas.length })}
+        </Typography>
+      </Stack>
+      <Stack component="ul" spacing={1} sx={{ p: 0, m: 0, listStyle: 'none' }}>
+        {personas.map((persona) => (
+          <TarjetaDePersona key={persona.filas.map((f) => f.indice).join('-')} persona={persona} descarga={descarga} faltantes={faltantes} />
         ))}
-    </RejillaDatos>
+      </Stack>
+    </Stack>
   );
 }

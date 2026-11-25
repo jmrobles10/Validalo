@@ -37,8 +37,7 @@ public class LigaDeCertificacionPorNumeroTests
             ["banco"] = JsonSerializer.SerializeToElement("Davivienda S.A."),
             ["tipoCuenta"] = JsonSerializer.SerializeToElement("Cuenta corriente"),
             ["titular"] = JsonSerializer.SerializeToElement("ATLAS SERVICES SAS"),
-            ["identificacionTitular"] = JsonSerializer.SerializeToElement("9011788768"),
-            ["estadoCuenta"] = JsonSerializer.SerializeToElement("Activa")
+            ["identificacionTitular"] = JsonSerializer.SerializeToElement("9011788768")
         };
         if (numeroCuenta is not null)
             campos["numeroCuenta"] = JsonSerializer.SerializeToElement(numeroCuenta);

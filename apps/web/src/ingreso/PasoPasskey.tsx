@@ -65,7 +65,7 @@ export function PasoVerificarPasskey({ desafio, opciones, alResultado, alVolver 
           {mensajeDeIngreso(verificar.error, t)}
         </Alert>
       )}
-      <Button variant="contained" size="large" fullWidth disabled={verificar.isPending} onClick={() => verificar.mutate()} startIcon={verificar.isPending ? <IconoCarga /> : undefined}>
+      <Button variant="contained" fullWidth disabled={verificar.isPending} onClick={() => verificar.mutate()} startIcon={verificar.isPending ? <IconoCarga /> : undefined}>
         {verificar.isPending ? t('ingreso.esperandoPasskey') : t('ingreso.usarPasskey')}
       </Button>
       <Button variant="text" size="small" onClick={() => setRecuperando(true)} disabled={verificar.isPending} sx={{ alignSelf: 'center' }}>
@@ -109,7 +109,7 @@ export function PasoRegistrarPasskey({ desafio, opciones, alResultado, alVolver 
           fullWidth
           slotProps={{ htmlInput: { maxLength: 60 } }}
         />
-        <Button type="submit" variant="contained" size="large" fullWidth disabled={registrar.isPending} startIcon={registrar.isPending ? <IconoCarga /> : undefined}>
+        <Button type="submit" variant="contained" fullWidth disabled={registrar.isPending} startIcon={registrar.isPending ? <IconoCarga /> : undefined}>
           {registrar.isPending ? t('ingreso.registrando') : t('ingreso.registrar')}
         </Button>
         <Button variant="text" size="small" onClick={alVolver} disabled={registrar.isPending} sx={{ alignSelf: 'center' }}>

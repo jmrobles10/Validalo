@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { mensajeFallo, mensajeProblema } from '../boveda/mensajesSubida';
 import { REGLAS_GLOBALES } from '../boveda/subida';
 import i18n from '../i18n';
-import { aceptaDe, aceptaFotos, enumerarFormatos, modoDe, reglasDe, sonPropias, textoReglas } from './reglas';
+import { aceptaDe, aceptaFotos, enumerarFormatos, modoDe, reglasDe, sonPropias, textoAntiguedad, textoReglas } from './reglas';
 
 const t = i18n.t.bind(i18n);
 const MB = 1024 * 1024;
@@ -32,6 +32,15 @@ describe('reglas de archivo del tipo de documento', () => {
     expect(textoReglas({ formatos: ['image/jpeg', 'image/png'], tamanoMaximoBytes: 512 * 1024, paginasMaximas: 1 }, t)).toBe('JPG o PNG de hasta 512 KB');
     expect(textoReglas({ ...soloPdf, paginasMaximas: 1 }, t)).toBe('Solo PDF de hasta 5 MB y 1 página');
     expect(enumerarFormatos(['application/pdf', 'image/webp'])).toBe('PDF o WebP');
+  });
+
+  it('dice la antigüedad máxima que pide la empresa solo si la pide', () => {
+    expect(textoAntiguedad({ antiguedadMaximaDias: 30 }, t)).toBe('expedido hace menos de 30 días');
+    expect(textoAntiguedad({ antiguedadMaximaDias: 1 }, t)).toBe('expedido hace menos de 1 día');
+    expect(textoAntiguedad({ antiguedadMaximaDias: null }, t)).toBeNull();
+    expect(textoAntiguedad({ antiguedadMaximaDias: 0 }, t)).toBeNull();
+    expect(textoAntiguedad({}, t)).toBeNull();
+    expect(textoAntiguedad(null, t)).toBeNull();
   });
 
   it('el selector solo ofrece los formatos del tipo, y sin imágenes no hay cámara', () => {
