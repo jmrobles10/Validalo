@@ -17,6 +17,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   navegador?.restaurar();
   navegador = null;
   reiniciarCliente();
@@ -190,7 +191,7 @@ describe('passkeys en el campo del correo (PI-14)', () => {
     expect(screen.getByRole('button', { name: 'Entrar con una passkey' })).toBeInTheDocument();
   });
 
-  it('usar el botón de la passkey aborta la condicional, espera a que se libere y entra por la ventana (Chrome: «A request is already pending»)', async () => {
+  it('usar el botón de la passkey aborta la condicional y, si Chrome aún no la libera («A request is already pending»), reintenta y entra por la ventana', async () => {
     navegador = simularNavegadorConPasskeys({ condicional: true, esperaLaFirma: true });
     simularApi({
       'POST /api/v1/ingreso/passkey/opciones': { desafio: 'd9', opciones: OPCIONES_DE_FIRMA },
@@ -205,14 +206,16 @@ describe('passkeys en el campo del correo (PI-14)', () => {
     await waitFor(() => expect(alResultado).toHaveBeenCalledTimes(1));
     expect(alResultado.mock.calls[0]?.[0]).toEqual(SESION);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    // Si la persona siguiera en el paso (aquí `alResultado` no lo cambia), el autocompletado vuelve a quedar abierto.
-    expect(navegador.llamadas.map((l) => l.mediation)).toEqual(['conditional', undefined, 'conditional']);
+    // La ventana choca una vez con la condicional que Chrome aún no libera y entra al reintentar. Si la persona siguiera en el paso (aquí `alResultado` no
+    // lo cambia), el autocompletado vuelve a quedar abierto.
+    expect(navegador.llamadas.map((l) => l.mediation)).toEqual(['conditional', undefined, undefined, 'conditional']);
     expect(navegador.senales[0]?.aborted).toBe(true);
     expect(navegador.senales[1]?.aborted).toBe(false);
   });
 
   it('si la ventana se cierra, explica el fallo, vuelve a dejar abierta la condicional y el botón se puede usar otra vez', async () => {
-    navegador = simularNavegadorConPasskeys({ condicional: true, esperaLaFirma: true, falloDeLaModal: 'NotAllowedError' });
+    // La persona cierra la ventana pasado un rato (más que el umbral de los reintentos): es una cancelación de verdad.
+    navegador = simularNavegadorConPasskeys({ condicional: true, esperaLaFirma: true, falloDeLaModal: 'NotAllowedError', demoraDelFallo: 500 });
     simularApi({
       'POST /api/v1/ingreso/passkey/opciones': { desafio: 'd9', opciones: OPCIONES_DE_FIRMA },
       'POST /api/v1/ingreso/passkey/verificar': SESION,
@@ -235,6 +238,55 @@ describe('passkeys en el campo del correo (PI-14)', () => {
     await waitFor(() => expect(alResultado).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(navegador.senales[1]?.aborted).toBe(true);
-    expect(navegador.llamadas.map((l) => l.mediation)).toEqual(['conditional', undefined, 'conditional', undefined, 'conditional']);
+    expect(navegador.llamadas.map((l) => l.mediation)).toEqual(['conditional', undefined, undefined, 'conditional', undefined, undefined, 'conditional']);
+  });
+
+  it('un rechazo al instante, sin ventana ni decisión de la persona, se reintenta y entra sin mostrar ningún error', async () => {
+    navegador = simularNavegadorConPasskeys();
+    navegador.get.mockRejectedValueOnce(new DOMException('rechazada', 'NotAllowedError')).mockRejectedValueOnce(new DOMException('rechazada', 'NotAllowedError'));
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    simularApi({
+      'POST /api/v1/ingreso/passkey/opciones': { desafio: 'd9', opciones: OPCIONES_DE_FIRMA },
+      'POST /api/v1/ingreso/passkey/verificar': SESION,
+    });
+    const alResultado = vi.fn();
+    const usuario = montar(alResultado);
+
+    await usuario.click(screen.getByRole('button', { name: 'Entrar con una passkey' }));
+
+    await waitFor(() => expect(alResultado).toHaveBeenCalledTimes(1));
+    expect(alResultado.mock.calls[0]?.[0]).toEqual(SESION);
+    expect(navegador.get).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('si la persona cierra la ventana (el error llega tarde) no se reintenta: explica la cancelación y deja repetir', async () => {
+    navegador = simularNavegadorConPasskeys({ falloDeLaModal: 'NotAllowedError', demoraDelFallo: 500 });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    simularApi({ 'POST /api/v1/ingreso/passkey/opciones': { desafio: 'd9', opciones: OPCIONES_DE_FIRMA } });
+    const alResultado = vi.fn();
+    const usuario = montar(alResultado);
+
+    await usuario.click(screen.getByRole('button', { name: 'Entrar con una passkey' }));
+
+    expect(await screen.findByText('No se completó el paso de la passkey. Inténtalo de nuevo cuando quieras.')).toBeInTheDocument();
+    expect(navegador.get).toHaveBeenCalledTimes(1);
+    expect(alResultado).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Entrar con una passkey' })).toBeEnabled();
+  });
+
+  it('si el navegador sigue ocupado tras los reintentos lo dice como un conflicto, no como una cancelación', async () => {
+    navegador = simularNavegadorConPasskeys();
+    navegador.get.mockRejectedValue(new DOMException('A request is already pending.', 'NotAllowedError'));
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    simularApi({ 'POST /api/v1/ingreso/passkey/opciones': { desafio: 'd9', opciones: OPCIONES_DE_FIRMA } });
+    const usuario = montar();
+
+    await usuario.click(screen.getByRole('button', { name: 'Entrar con una passkey' }));
+
+    expect(await screen.findByText('El navegador aún tiene otra petición de passkey abierta. Espera unos segundos e inténtalo de nuevo.')).toBeInTheDocument();
+    expect(screen.queryByText(/No se completó el paso de la passkey/)).not.toBeInTheDocument();
+    // La primera y los tres reintentos.
+    expect(navegador.get).toHaveBeenCalledTimes(4);
   });
 });

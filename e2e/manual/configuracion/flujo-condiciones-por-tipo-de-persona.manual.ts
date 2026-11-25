@@ -1,4 +1,5 @@
 import { abrirEmbebido } from '../../soporte/embebido';
+import { agregarDocumento } from '../../soporte/editorDeFlujos';
 import { crearEscenario } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -28,7 +29,7 @@ recorrido(
     await paso(page, {
       titulo: 'Abre un flujo nuevo para proveedores',
       explicacion:
-        'Cada documento de un flujo tiene una columna «Se pide a» que decide a qué terceros se les pide. Por omisión es «Todos»; las otras tres opciones limitan el documento: «Solo personas jurídicas» y «Solo personas naturales» según el tipo de persona del tercero, y «Según la ficha del tercero» según lo que declara en su ficha. ' +
+        'Cada documento de un flujo tiene un campo «Se pide a» (al abrir su fila en «Lo que pide el flujo») que decide a qué terceros se les pide. Por omisión es «Todos»; las otras tres opciones limitan el documento: «Solo personas jurídicas» y «Solo personas naturales» según el tipo de persona del tercero, y «Según la ficha del tercero» según lo que declara en su ficha. ' +
         'Para armar el ejemplo creamos un flujo nuevo de proveedores desde «Nuevo flujo».',
       resaltar: app.getByRole('button', { name: 'Nuevo flujo' }),
       configuracion: {
@@ -46,27 +47,22 @@ recorrido(
     await app.getByRole('option', { name: /^Revisión/ }).click();
 
     // 2. Tres documentos con condiciones distintas.
-    await app.getByRole('button', { name: 'Agregar documento' }).click();
-    await app.getByRole('combobox', { name: 'Tipo de documento' }).nth(0).click();
-    await app.getByRole('option', { name: new RegExp(RUT) }).click();
-    await app.getByRole('button', { name: 'Agregar documento' }).click();
-    await app.getByRole('combobox', { name: 'Tipo de documento' }).nth(1).click();
-    await app.getByRole('option', { name: new RegExp(CAMARA) }).click();
-    await app.getByRole('combobox', { name: 'Se pide a' }).nth(1).click();
+    // Cada documento nuevo queda abierto y los anteriores se cierran con su resumen (ya dicen «Solo personas jurídicas»): «Se pide a» es el del abierto.
+    await agregarDocumento(app, new RegExp(RUT));
+    await agregarDocumento(app, new RegExp(CAMARA));
+    await app.getByRole('combobox', { name: 'Se pide a' }).click();
     await app.getByRole('option', { name: 'Solo personas jurídicas', exact: true }).click();
-    await app.getByRole('button', { name: 'Agregar documento' }).click();
-    await app.getByRole('combobox', { name: 'Tipo de documento' }).nth(2).click();
-    await app.getByRole('option', { name: new RegExp(CEDULA) }).click();
-    await app.getByRole('combobox', { name: 'Se pide a' }).nth(2).click();
+    await agregarDocumento(app, new RegExp(CEDULA));
+    await app.getByRole('combobox', { name: 'Se pide a' }).click();
     await app.getByRole('option', { name: 'Solo personas naturales', exact: true }).click();
     await page.keyboard.press('Escape');
-    await expect(app.getByRole('combobox', { name: 'Se pide a' }).nth(2)).toContainText('Solo personas naturales');
+    await expect(app.getByRole('combobox', { name: 'Se pide a' })).toContainText('Solo personas naturales');
     await paso(page, {
       titulo: 'Elige a quién se pide cada documento',
       explicacion:
         'El RUT queda en «Todos»: lo entregan las personas jurídicas y las naturales. La Cámara de comercio queda en «Solo personas jurídicas» y la cédula en «Solo personas naturales». ' +
-        'Cada documento también elige qué áreas lo revisan: por omisión, «Todas las áreas del flujo»; como este flujo tiene una sola área, Revisión revisa los tres. «Aprobadores» dice cuántas personas deben aprobar, y «Los del área» usa a todos los miembros. Un documento que no le toca a un tercero no lo ve ni lo entrega.',
-      resaltar: app.getByRole('combobox', { name: 'Se pide a' }).nth(2),
+        'Cada documento también elige qué áreas lo revisan: por omisión, «Todas las áreas del flujo»; como este flujo tiene una sola área, Revisión revisa los tres. «Aprobadores» dice cuántas personas deben aprobar, y «Los del área» usa a todos los miembros. Un documento que no le toca a un tercero no lo ve ni lo entrega. Las filas cerradas ya lo resumen: a quién se pide, quién lo revisa y, si la hay, su condición.',
+      resaltar: app.getByRole('combobox', { name: 'Se pide a' }),
       variantes: [
         { cuando: 'Eliges «Solo personas jurídicas»', entonces: 'El documento aparece en la lista del tercero solo si es persona jurídica.' },
         { cuando: 'El documento tiene una condición que no coincide con ningún atajo', entonces: 'Aparece la opción «Condición personalizada» y dice en qué se pide, por ejemplo «Se pide cuando …».' },

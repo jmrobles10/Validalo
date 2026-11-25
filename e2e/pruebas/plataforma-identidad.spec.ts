@@ -49,15 +49,18 @@ interface Grupo {
   nombre: string;
 }
 
-/** Un grupo con ingreso directo, su primera empresa y un administrador de todo el grupo (sin passkey aún). */
-async function crearGrupoDirecto(): Promise<Grupo> {
+/**
+ * Un grupo con ingreso directo, su primera empresa y un administrador de todo el grupo (sin passkey aún). Con `passkeyParaTodos` el grupo exige passkey a todas sus
+ * personas: el primer ingreso la registra y confirmar una acción sensible exige la passkey (sin la opción, el código del correo basta, PI-20).
+ */
+async function crearGrupoDirecto(opciones: { passkeyParaTodos?: boolean } = {}): Promise<Grupo> {
   const sufijo = `${Date.now().toString(36)}${randomUUID().slice(0, 4)}`;
   const correoAdmin = `ana.${sufijo}@e2e.validalo.co`;
   const slug = `pi-${sufijo}`;
   const nombre = `Grupo Identidad ${sufijo}`;
   const creado = await llamar<{ tenant: { id: string }; apiKeyAdministrador: { valor: string } }>('POST', '/api/v1/plataforma/tenants', {
     llave: CLAVE_PLATAFORMA,
-    cuerpo: { slug, nombre, region: 'co', zonaHoraria: 'America/Bogota', ingreso: { modos: ['Directo'], sesionHoras: 8, inactividadMinutos: 30, passkeyParaTodos: false } },
+    cuerpo: { slug, nombre, region: 'co', zonaHoraria: 'America/Bogota', ingreso: { modos: ['Directo'], sesionHoras: 8, inactividadMinutos: 30, passkeyParaTodos: opciones.passkeyParaTodos ?? false } },
   });
   const admin = creado.apiKeyAdministrador.valor;
   const empresa = await llamar<{ id: string }>('POST', '/api/v1/empresas', {
@@ -71,7 +74,7 @@ async function crearGrupoDirecto(): Promise<Grupo> {
   return { admin, empresaId: empresa.id, correoAdmin, tenantId: creado.tenant.id, slug, nombre };
 }
 
-/** La primera entrada de una administradora: código y registro de su primera passkey. */
+/** La primera entrada de una administradora de un grupo que exige passkey a todos: código y registro de su primera passkey. */
 async function entrarYRegistrarPasskey(page: Page, g: Grupo): Promise<AutenticadorVirtual> {
   const virtual = await autenticadorVirtual(page);
   await page.goto('/app/');
@@ -170,7 +173,8 @@ test('Plataforma: agregar una empresa a un grupo y desactivar y reactivar uno de
 });
 
 test('Mi cuenta: generar códigos de recuperación pide la passkey y uno de ellos devuelve el acceso sin ella', async ({ page }) => {
-  const g = await crearGrupoDirecto();
+  // Los códigos de recuperación respaldan la passkey donde el grupo la exige: sin ella, el código del correo no abre la sesión.
+  const g = await crearGrupoDirecto({ passkeyParaTodos: true });
   const virtual = await entrarYRegistrarPasskey(page, g);
 
   await page.goto(`/app/#/e/${g.empresaId}/mi-cuenta`);
@@ -231,7 +235,7 @@ test('Mi cuenta: generar códigos de recuperación pide la passkey y uno de ello
 });
 
 test('Configuración › Inicio de sesión único: el secreto no vuelve, el dominio pide verificarse y guardar pide la passkey', async ({ page }) => {
-  const g = await crearGrupoDirecto();
+  const g = await crearGrupoDirecto({ passkeyParaTodos: true });
   await entrarYRegistrarPasskey(page, g);
   const sufijo = randomUUID().replace(/-/g, '').slice(0, 6);
 

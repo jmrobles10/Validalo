@@ -58,7 +58,10 @@ public sealed class Tenant
     /// <summary>Minutos sin renovar tras los cuales una sesión de ingreso directo se cierra.</summary>
     public int InactividadMinutos { get; set; } = InactividadMinutosPorDefecto;
 
-    /// <summary>Todas las personas del grupo deben tener passkey, no solo los roles que la exigen (P-14-4).</summary>
+    /// <summary>
+    /// Opción explícita del grupo, apagada por omisión: si la activa, todas sus personas deben tener passkey y el código del correo solo les sirve para registrar la primera.
+    /// Ningún rol la exige por sí mismo: sin esta opción el código del correo basta para entrar y para confirmar acciones sensibles (PI-20).
+    /// </summary>
     public bool PasskeyParaTodos { get; set; }
 
     public const int SesionHorasPorDefecto = 8;

@@ -1,6 +1,7 @@
 import {
   SCOPES,
   type AreaDeRequisitoDto,
+  type AreaExpedienteDto,
   type ExpedienteDto,
   type HechosDto,
   type RequisitoExpedienteDto,
@@ -8,7 +9,7 @@ import {
 } from '@validalo/api-client';
 import { datosDe, esVersionSinArchivo } from '../documentos/formatoDatos';
 import type { DocumentoEnVisor } from '../documentos/VisorDocumento';
-import type { ContextoRevisor } from './reglas';
+import type { ContextoRevisor, DialogoExpediente } from './reglas';
 
 /**
  * Reglas de la UI de los requisitos documentales (docs/05 §2.4.2, RQ-1…RQ-10): cada área aprueba u observa
@@ -81,6 +82,43 @@ export function bloqueoRequisito(
   if (contexto.esMiembro === false) return 'no-es-miembro';
   if (contexto.usuarioId && votoSobreVersion(area, contexto.usuarioId, requisito.versionActual.n)) return 'ya-voto';
   return null;
+}
+
+/**
+ * El diálogo de «Aprobar u observar» el requisito en un área: la misma acción para el botón del área (`AreaDelRequisito`) y para el «Aprobar» que va junto a la conclusión de la IA
+ * (`ConclusionDeLaIa`), así que no hay dos maneras de decidir un documento.
+ */
+export function dialogoDeVeredicto(requisito: RequisitoExpedienteDto, areaRequisito: AreaDeRequisitoDto, nombreArea: string): Extract<DialogoExpediente, { tipo: 'veredictoRequisito' }> {
+  return { tipo: 'veredictoRequisito', requisito, areaRequisito, nombreArea };
+}
+
+/** Quién puede decidir el requisito: el área donde quien mira lo puede hacer ahora y las demás que aún no deciden. */
+export interface QuienDecideElRequisito {
+  /** El área (la primera) en la que quien mira puede emitir el veredicto ahora: sin bloqueo (`bloqueoRequisito`), con la misma regla del botón del área. `null` si no puede. */
+  puede: { areaRequisito: AreaDeRequisitoDto; nombre: string } | null;
+  /** Nombres de las demás áreas que aún no deciden (en turno o en espera), en el orden del flujo. Si no puede decidir, son las que sí deciden. */
+  pendientes: string[];
+}
+
+/**
+ * Quién decide el requisito, para decirlo junto a la conclusión de la IA: si quien mira puede decidir ahora en alguna de sus áreas (con la misma guarda que el botón del área,
+ * `bloqueoRequisito`) y qué otras áreas aún no lo deciden. El nombre de cada área es el del expediente (el código si no se conoce).
+ */
+export function quienDecide(
+  expediente: Pick<ExpedienteDto, 'estado'>,
+  requisito: RequisitoExpedienteDto,
+  areas: ReadonlyMap<string, AreaExpedienteDto>,
+  contexto: (area: AreaExpedienteDto | null) => ContextoRevisor,
+): QuienDecideElRequisito {
+  const nombreDe = (area: AreaDeRequisitoDto) => areas.get(area.areaId)?.nombre ?? area.codigo;
+  let puede: QuienDecideElRequisito['puede'] = null;
+  const pendientes: string[] = [];
+  for (const area of requisito.areas) {
+    const ctx = contexto(areas.get(area.areaId) ?? null);
+    if (puede === null && bloqueoRequisito(expediente, requisito, area, ctx) === null) puede = { areaRequisito: area, nombre: nombreDe(area) };
+    else if (area.estado === 'Pendiente' || area.estado === 'Esperando') pendientes.push(nombreDe(area));
+  }
+  return { puede, pendientes };
 }
 
 /** El veredicto que la persona ya emitió sobre esta versión (cuenta para `aprobador-repetido`). */

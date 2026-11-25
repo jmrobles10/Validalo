@@ -89,8 +89,32 @@ export const ficha = {
     retirado: 'Tu soporte ({{tipo}}, versión {{n}}) fue retirado.',
     retiradoAyuda: 'Tus datos siguen guardados. Elige otro documento que los respalde o sube uno nuevo, y guarda.',
     subir: 'Subir un soporte',
-    subirAyuda: 'Al terminar de subirlo lo eliges en la lista de arriba; tus cambios sin guardar siguen aquí.',
-    nombreCanonico: 'Soporte de mi información',
+    subirAyuda: 'Al terminar queda marcado como soporte de esta sección; tus cambios sin guardar siguen aquí.',
+    // «Subir un soporte» (FD-10): primero se elige qué documento es, para guardarlo como tal y poder leerlo.
+    queDocumento: '¿Qué documento vas a subir?',
+    queDocumentoAyuda: 'Elige cuál es para guardarlo como tal y, si lo podemos leer, proponerte los datos.',
+    // `opcion` es lo que se elige; `nombre`, cómo se llama el documento en tu bóveda y en el diálogo de subida.
+    tipos: {
+      RUT: { opcion: 'Registro Único Tributario (RUT)', nombre: 'Registro Único Tributario' },
+      CAMARA_COMERCIO: { opcion: 'Cámara de comercio', nombre: 'Certificado de existencia y representación legal' },
+      CEDULA: { opcion: 'Cédula de ciudadanía', nombre: 'Cédula de ciudadanía' },
+      ESTADOS_FINANCIEROS: { opcion: 'Estados financieros', nombre: 'Estados financieros' },
+      SOPORTE_FICHA: { opcion: 'Otro documento', nombre: 'Otro soporte' },
+    },
+    otroAyuda: 'Cualquier otro documento que respalde estos datos. No lo leemos para proponerte valores.',
+  },
+  // Lo que pasa con un documento que el tercero acaba de subir desde la sección (FD-10): se lee en segundo plano y, si se pudo, se propone.
+  lectura: {
+    leyendoTitulo: 'Leyendo el documento que subiste',
+    progreso: 'Leyendo el documento',
+    leyendoTexto: '{{documento}} · versión {{n}}. Esto toma unos segundos: cuando termine te proponemos los datos de esta sección.',
+    sinLecturaTitulo: 'No pudimos leer el documento',
+    sinLecturaTexto: '{{documento}} (versión {{n}}) quedó como soporte de esta sección. Diligencia los datos con el documento a la vista.',
+    ilegibleTitulo: 'El documento no se lee bien',
+    ilegibleTexto: 'No alcanzamos a leer {{documento}} (versión {{n}}). Sube una copia más clara o diligencia los datos con el documento a la vista: el que subiste quedó como soporte.',
+    sinDiferenciasTitulo: 'Leímos el documento',
+    sinDiferenciasTexto: '{{documento}} (versión {{n}}) no trae datos distintos a los de esta sección. Quedó como soporte: guarda para que tus empresas lo vean.',
+    cerrar: 'Cerrar',
   },
   // Documentos más nuevos que la ficha (F5, UI-6, UI-9): un solo aviso, con un bloque con borde por documento y poco texto.
   propuesta: {

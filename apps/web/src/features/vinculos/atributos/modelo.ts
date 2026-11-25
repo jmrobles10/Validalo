@@ -83,3 +83,23 @@ export function cuerpoDeAtributos(permitidos: readonly AtributoPermitidoDto[], v
 export function valorActual(atributo: AtributoPermitidoDto, valores: ValoresDeAtributos): ValorDeAtributo {
   return valores[atributo.clave] ?? valorVacio(atributo);
 }
+
+/**
+ * La etiqueta legible de un atributo para los formularios. La definición del atributo (`AtributoPermitidoDto`) solo trae su código (`clave`), sin nombre: se muestra el código
+ * convertido a texto («montoEstimado» → «Monto estimado», «nivel_riesgo» → «Nivel riesgo»), respetando las siglas («valorCOP» → «Valor COP»). No puede recuperar lo que el código
+ * no trae (las tildes: «categorias» queda «Categorias»); para eso el tipo de vínculo tendría que guardar un nombre por atributo.
+ */
+export function etiquetaDeAtributo(clave: string): string {
+  const codigo = clave.trim();
+  if (!codigo) return clave;
+  // Un código todo en mayúsculas («MONTO_ESTIMADO») no tiene siglas: se lee como minúsculas.
+  const base = /[a-záéíóúüñ]/.test(codigo) ? codigo : codigo.toLowerCase();
+  const palabras = base
+    .replace(/([a-záéíóúüñ0-9])([A-ZÁÉÍÓÚÜÑ])/g, '$1 $2')
+    .replace(/([A-ZÁÉÍÓÚÜÑ]+)([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ])/g, '$1 $2')
+    .split(/[\s_.-]+/)
+    .filter(Boolean)
+    .map((palabra) => (/^[A-ZÁÉÍÓÚÜÑ0-9]{2,}$/.test(palabra) ? palabra : palabra.toLowerCase()));
+  const texto = palabras.join(' ');
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}

@@ -56,6 +56,43 @@ export const ia = {
       'Al agotar las incluidas (y el adicional, si lo tienes), los documentos nuevos quedan sin análisis automático, para revisión manual. Nada se bloquea.',
     ayudaAvisos: 'Los administradores de la empresa reciben un aviso al llegar al 80 % y al 100 % de las incluidas.',
   },
+  // La conclusión de la IA del documento (en cualquier nivel de revisión): la regla es del servidor; aquí solo cómo se dice.
+  conclusion: {
+    titulo: 'Conclusión de la IA',
+    aprobar: 'Se sugiere aprobar',
+    aprobarCerrado: 'Verificado por la IA',
+    revisar: 'Revisa antes de aprobar',
+    revisarCerrado: 'La IA encontró puntos por revisar',
+    sinAnalisis: 'Sin análisis de la IA',
+    motivos: 'Qué revisar',
+    sinAnalisisTexto: 'La IA no pudo analizarlo; revísalo a mano.',
+    verificado: 'La IA verificó el documento: {{puntos}}.',
+    puntos: {
+      legible: 'es legible',
+      tipo: 'es del tipo pedido',
+      cruce: 'lo que dice coincide con lo que declaró el tercero',
+      cruceCritico: 'lo crítico coincide con lo que declaró el tercero',
+      persona: 'coincide con la persona declarada {{nombre}} ({{identificacion}})',
+      personaSinIdentificacion: 'coincide con la persona declarada {{nombre}}',
+      antiguedad: 'su antigüedad está dentro del máximo',
+    },
+    sinVerificar: 'No se pudo verificar: {{campos}}.',
+    // Un dato que no es crítico difiere: no manda el documento a una persona, se dice aparte con lo declarado y lo leído.
+    diferencias_one: 'Difiere en un dato no crítico: {{campos}}.',
+    diferencias_other: 'Difiere en {{count}} datos no críticos: {{campos}}.',
+    diferencia: '{{etiqueta}} (declaró {{declarado}}; el documento trae {{extraido}})',
+    diferenciaSinLeer: '{{etiqueta}} (declaró {{declarado}}; el documento no lo trae)',
+    sinValor: '—',
+    aprobarAccion: 'Aprobar',
+    aprobarAccesible: 'Aprobar {{documento}} por {{area}}',
+    // El rol de la IA: sugiere, decide una persona (salvo el nivel Automático, que tiene su propio flujo).
+    rol: {
+      puedes: 'Es una sugerencia de la IA: la decisión es tuya, por {{area}}.',
+      decide: 'Es una sugerencia de la IA: decide una persona de {{areas}}.',
+      sinAreas: 'Es una sugerencia de la IA: decide una persona.',
+      automatico: 'La empresa tiene revisión automática: el sistema aprueba solo lo que cumple lo que autorizó y una persona decide lo demás.',
+    },
+  },
   revision: {
     titulo: 'Revisión automática',
     confianza: 'Confianza {{porcentaje}}',
@@ -66,6 +103,9 @@ export const ia = {
     legibleSi: 'Sí',
     legibleNo: 'No: revisa el archivo a mano',
     tipoDetectado: 'Tipo detectado',
+    // La línea de detalles al pie del bloque.
+    legibleLinea: 'Legible: {{valor}}',
+    tipoDetectadoLinea: 'Tipo detectado: {{valor}}',
     tipoNoCoincide: 'El archivo parece ser «{{detectado}}», no «{{esperado}}». Revisa que el tercero haya cargado el documento correcto.',
     alertas: 'Posibles señales de alteración',
     campos: 'Datos extraídos',

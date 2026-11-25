@@ -63,7 +63,7 @@ public static class Mapeos
     public static UsuarioDto ADto(this Usuario u, bool passkeyParaTodos = false, int passkeys = 0) =>
         new(u.Id, u.Nombre, u.Correo, u.Identificacion?.ADto(), u.Activo,
             [.. u.Identidades.Select(i => new IdentidadExternaDto(i.SistemaId, i.IdExterno))],
-            [.. u.Roles.Select(ADto)], u.CreadoEn, u.UltimoAcceso, u.ExigePasskey(passkeyParaTodos), passkeys, u.InvitadoEn,
+            [.. u.Roles.Select(ADto)], u.CreadoEn, u.UltimoAcceso, passkeyParaTodos, passkeys, u.InvitadoEn,
             [.. u.Grupos.Select(g => new AsignacionDeGrupoDto(g.GrupoId, g.EmpresaId))]);
 
     public static AreaDto ADto(this Area a) => new(a.Id, a.EmpresaId, a.Codigo, a.Nombre, a.Miembros, a.Activa);

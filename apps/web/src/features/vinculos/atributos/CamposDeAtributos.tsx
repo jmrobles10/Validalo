@@ -1,8 +1,8 @@
-import { Autocomplete, MenuItem, Stack, TextField, type Theme } from '@mui/material';
+import { Autocomplete, MenuItem, Stack, TextField } from '@mui/material';
 import type { AtributoPermitidoDto } from '@validalo/api-client';
 import { CampoFecha } from '@validalo/ui';
 import { useTranslation } from 'react-i18next';
-import { valorActual, type ErrorDeAtributo, type ValorDeAtributo, type ValoresDeAtributos } from './modelo';
+import { etiquetaDeAtributo, valorActual, type ErrorDeAtributo, type ValorDeAtributo, type ValoresDeAtributos } from './modelo';
 
 interface Props {
   atributos: readonly AtributoPermitidoDto[];
@@ -14,11 +14,9 @@ interface Props {
   deshabilitado?: boolean;
 }
 
-const mono = (th: Theme) => ({ '& label': { fontFamily: th.typography.mono.fontFamily } });
-
 /**
  * El formulario de los atributos del vínculo, generado desde los atributos permitidos de su tipo de vínculo: un control por tipo (texto, número, fecha, sí/no, una opción o
- * varias), con los obligatorios marcados. Lo usan «Invitar tercero» y el diálogo de editar los atributos de un vínculo.
+ * varias), con los obligatorios marcados y la etiqueta legible del atributo (`etiquetaDeAtributo`: su código no se muestra tal cual). Lo usan «Invitar tercero» y el diálogo de editar los atributos de un vínculo.
  */
 export function CamposDeAtributos({ atributos, valores, onCambiar, errores, deLaApi = {}, deshabilitado = false }: Props) {
   const { t } = useTranslation();
@@ -27,9 +25,10 @@ export function CamposDeAtributos({ atributos, valores, onCambiar, errores, deLa
     <Stack spacing={2}>
       {atributos.map((a) => {
         const valor = valorActual(a, valores);
+        const etiqueta = etiquetaDeAtributo(a.clave);
         const error = errores[a.clave];
         const mensaje = deLaApi[a.clave] ?? (error ? t(`atributosVinculo.errores.${error}`) : undefined);
-        const comunes = { size: 'small', required: a.obligatorio, label: a.clave, error: mensaje !== undefined, disabled: deshabilitado, sx: mono } as const;
+        const comunes = { size: 'small', required: a.obligatorio, label: etiqueta, error: mensaje !== undefined, disabled: deshabilitado } as const;
 
         if (a.tipo === 'ListaOpciones') {
           return (
@@ -42,7 +41,7 @@ export function CamposDeAtributos({ atributos, valores, onCambiar, errores, deLa
               value={Array.isArray(valor) ? valor : []}
               onChange={(_, elegidas) => onCambiar(a.clave, elegidas)}
               disabled={deshabilitado}
-              renderInput={(parametros) => <TextField {...parametros} required={a.obligatorio} label={a.clave} error={mensaje !== undefined} helperText={mensaje ?? t('atributosVinculo.listaAyuda')} sx={mono} />}
+              renderInput={(parametros) => <TextField {...parametros} required={a.obligatorio} label={etiqueta} error={mensaje !== undefined} helperText={mensaje ?? t('atributosVinculo.listaAyuda')} />}
             />
           );
         }
@@ -73,7 +72,7 @@ export function CamposDeAtributos({ atributos, valores, onCambiar, errores, deLa
           return (
             <CampoFecha
               key={a.clave}
-              etiqueta={a.clave}
+              etiqueta={etiqueta}
               valor={typeof valor === 'string' ? valor : ''}
               onCambiar={(iso) => onCambiar(a.clave, iso)}
               requerido={a.obligatorio}
@@ -81,7 +80,6 @@ export function CamposDeAtributos({ atributos, valores, onCambiar, errores, deLa
               error={mensaje !== undefined}
               ayuda={mensaje}
               fullWidth
-              sx={mono}
             />
           );
         }

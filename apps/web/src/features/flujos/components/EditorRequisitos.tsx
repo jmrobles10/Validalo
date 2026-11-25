@@ -1,19 +1,15 @@
-import { Box, Button, FormControlLabel, IconButton, MenuItem, Stack, Switch, TextField, Tooltip, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import type { AreaDto, AtributoPermitidoDto, TipoDocumentoTenantDto } from '@validalo/api-client';
-import { AlineadoConCampo, CampoNumero } from '@validalo/ui';
-import { ClipboardList, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fichaEmpresa } from '../../../i18n/es-CO-ficha-empresa';
-import { resumenTipo } from '../../configuracion/tiposDocumento/resumen';
-import { nombreSeccion, seccionFicha } from '../../terceros/ficha/secciones';
-import { atajoDe, describirCondicion } from '../condiciones';
-import { admitePersona, requisitoDeSeccionNuevo, requisitoNuevo, ROLES_DE_PERSONA, sePuedePedir, type ErrorFlujo, type EtapaEnEditor, type RequisitoEnEditor } from '../editor';
-import { seccionesQueRespalda } from '../requisitosDeSeccion';
-import { OpcionesSeccion, SelectorSeccion } from './CamposRequisitoSeccion';
-import { SelectorAreasRequisito } from './SelectorAreasRequisito';
-import { CondicionDeAtributo } from './CondicionDeAtributo';
-import { CondicionDeFicha } from './CondicionDeFicha';
-import { SelectorDeCondicion } from './SelectorDeCondicion';
+import type { SectorDeRequisito } from '../../vinculos/ficha/sectores';
+import { requisitoDeSeccionNuevo, requisitoNuevo, sePuedePedir, type ErrorFlujo, type EtapaEnEditor, type RequisitoEnEditor } from '../editor';
+import { agruparPorSector, contarRequisitos, entradasEnOrdenVisual, POR_COMPLETAR, posicionesConError, textoDelConteo, tiposPorPedirEnSector, type SectorEnVista, type UbicacionesProvisionales } from '../requisitosPorSector';
+import { FilaDeRequisito } from './FilaDeRequisito';
+import type { MensajesDelRequisito } from './FormularioDeRequisito';
+import { GrupoDeSector } from './GrupoDeSector';
+import { MenuAgregarRequisito } from './MenuAgregarRequisito';
 
 export interface EditorRequisitosProps {
   requisitos: RequisitoEnEditor[];
@@ -31,213 +27,110 @@ type CodigoErrorSeccion = keyof typeof fichaEmpresa.editor.errores;
 const esErrorDeSeccion = (codigo: string): codigo is CodigoErrorSeccion => codigo in fichaEmpresa.editor.errores;
 
 /**
- * Lo que pide el flujo (RQ-1): documentos o secciones de la información del tercero (F2, FM-25). Cada uno con
- * obligatorio, qué áreas lo revisan (ninguna elegida = todas las del flujo), cuántas personas deben aprobarlo (vacío =
- * las del área) y a quién se le pide (RQ-12: todos, solo personas jurídicas o naturales; una condición armada por la
- * API se describe y se conserva). Una sección suma periodos (la financiera) y «Exige soporte». Sin requisitos, el flujo
- * decide por área (FL-1).
+ * Lo que pide el flujo (RQ-1): documentos o secciones de la información del tercero (F2, FM-25). Cada uno con obligatorio, qué áreas lo revisan
+ * (ninguna elegida = todas las del flujo), cuántas personas deben aprobarlo (vacío = las del área) y a quién se le pide (RQ-12: todos, solo
+ * personas jurídicas o naturales; una condición armada por la API se describe y se conserva). Una sección suma periodos (la financiera) y «Exige
+ * soporte». Sin requisitos, el flujo decide por área (FL-1).
+ *
+ * Se ve por sector, como el menú lateral de la ficha (el documento nuevo sin tipo, en «Por completar» hasta que se elige), y cada requisito es una fila cerrada con su resumen; abrirla (una a la vez) muestra todos sus
+ * controles. Es solo diagramación: los requisitos siguen en el orden del borrador, que es el que se guarda, y los errores apuntan a su posición.
  */
 export function EditorRequisitos({ requisitos, etapas, areas, tiposDocumento, onCambiar, errores, soloLectura, atributos = [] }: EditorRequisitosProps) {
   const { t } = useTranslation();
+  const [abierto, setAbierto] = useState<number | null>(null);
+  const [ubicaciones, setUbicaciones] = useState<UbicacionesProvisionales>({});
+  const [conErrorVistas, setConErrorVistas] = useState<readonly number[]>([]);
   const areasDelFlujo = etapas.flatMap((e) => e.areas.map((a) => a.areaId)).filter(Boolean);
   const nombreArea = (id: string) => areas.find((a) => a.id === id)?.nombre ?? id;
   const elegibles = tiposDocumento.filter(sePuedePedir);
+  const grupos = agruparPorSector(requisitos, tiposDocumento, ubicaciones);
+
+  // Un requisito que recibe un error de validación se abre solo (el primero, en el orden en que se ven) para mostrarlo.
+  const conError = posicionesConError(errores);
+  if (conError.join() !== conErrorVistas.join()) {
+    setConErrorVistas(conError);
+    const primero = entradasEnOrdenVisual(grupos).find((e) => conError.includes(e.indice) && !conErrorVistas.includes(e.indice));
+    if (primero) setAbierto(primero.indice);
+  }
+
   const cambiar = (k: number, cambio: Partial<RequisitoEnEditor>) => onCambiar(requisitos.map((r, i) => (i === k ? { ...r, ...cambio } : r)));
-  const error = (campo: string) => errores.find((e) => e.campo === campo);
-  const textoError = (e: ErrorFlujo, esSeccion: boolean) =>
-    esSeccion && esErrorDeSeccion(e.codigo)
-      ? t(`fichaEmpresa.editor.errores.${e.codigo}`)
-      : e.codigo === 'condicion-invalida'
-        ? t('flujos.editor.requisitos.condicionInvalida')
-        : t(`flujos.editor.errores.${e.codigo}`);
+  const quitar = (k: number) => {
+    onCambiar(requisitos.filter((_, i) => i !== k));
+    setAbierto((a) => (a === null || a === k ? null : a > k ? a - 1 : a));
+  };
+  const agregar = (nuevo: RequisitoEnEditor, sector?: SectorDeRequisito) => {
+    onCambiar([...requisitos, nuevo]);
+    setAbierto(requisitos.length);
+    if (sector) setUbicaciones((u) => ({ ...u, [nuevo.clave]: sector }));
+  };
+  // Desde un sector, el documento nuevo se queda en él mientras no se elija su tipo y, si el sector solo tiene un tipo por pedir, ya viene elegido.
+  const agregarAlSector = (sector: SectorDeRequisito) => {
+    const porPedir = tiposPorPedirEnSector(sector, requisitos, elegibles);
+    agregar(requisitoNuevo(porPedir.length === 1 ? (porPedir[0]?.id ?? '') : ''), sector);
+  };
+  // «Por completar» no ofrece agregar: es el paso del documento nuevo hacia su sector.
+  const alSector = (sector: SectorEnVista) => (soloLectura || sector === POR_COMPLETAR ? undefined : () => agregarAlSector(sector));
+
+  const mensajesDe = (k: number, esSeccion: boolean): MensajesDelRequisito => {
+    const de = (campo: string, deSeccion: boolean) => {
+      const e = errores.find((x) => x.campo === campo);
+      if (!e) return null;
+      return deSeccion && esErrorDeSeccion(e.codigo)
+        ? t(`fichaEmpresa.editor.errores.${e.codigo}`)
+        : e.codigo === 'condicion-invalida'
+          ? t('flujos.editor.requisitos.condicionInvalida')
+          : t(`flujos.editor.errores.${e.codigo}`);
+    };
+    return {
+      general: de(`requisito.${String(k)}`, esSeccion),
+      periodos: de(`requisito.${String(k)}.periodos`, true),
+      vigencia: de(`requisito.${String(k)}.vigencia`, true),
+      revalidacion: de(`requisito.${String(k)}.revalidacion`, true),
+    };
+  };
 
   return (
-    <Stack spacing={1.5}>
-      <Typography sx={{ color: 'text.secondary' }}>
-        {requisitos.length === 0 ? t('flujos.editor.requisitos.vacio') : t('flujos.editor.requisitos.ayuda')}
-      </Typography>
-      {requisitos.map((r, k) => {
-        const e = error(`requisito.${String(k)}`);
-        const ePeriodos = error(`requisito.${String(k)}.periodos`);
-        const eVigencia = error(`requisito.${String(k)}.vigencia`);
-        const eRevalidacion = error(`requisito.${String(k)}.revalidacion`);
-        const esSeccion = r.seccion !== null;
-        const tipo = esSeccion ? undefined : tiposDocumento.find((x) => x.id === r.tipoDocumentoTenantId);
-        const seccion = seccionFicha(r.seccion);
-        const nombre = esSeccion
-          ? seccion ? nombreSeccion(seccion.codigo, t) : t('fichaEmpresa.editor.nueva')
-          : (tipo?.nombre ?? t('flujos.editor.requisitos.nuevo'));
-        const quitar = esSeccion ? t('fichaEmpresa.editor.quitar') : t('flujos.editor.requisitos.quitar');
-        return (
-          <Box
-            key={r.clave}
-            component="section"
-            aria-label={nombre}
-            sx={{ border: 1, borderColor: e || ePeriodos || eVigencia || eRevalidacion ? 'error.main' : 'divider', borderRadius: (th) => `${String(th.radio.sm)}px`, p: 1.5 }}
-          >
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: {
-                  xs: '1fr',
-                  sm: 'minmax(180px,1fr) minmax(180px,1fr)',
-                  lg: 'minmax(180px,1.2fr) minmax(180px,1.2fr) minmax(170px,1fr) 120px auto',
-                },
-                columnGap: 1.5,
-                rowGap: 1,
-                alignItems: 'start',
-              }}
-            >
-              {esSeccion ? (
-                <SelectorSeccion requisito={r} onCambiar={(cambio) => cambiar(k, cambio)} deshabilitado={soloLectura} />
-              ) : (
-                <TextField
-                  select
-                  size="small"
-                  label={t('flujos.editor.requisitos.tipo')}
-                  value={r.tipoDocumentoTenantId}
-                  onChange={(ev) => cambiar(k, { tipoDocumentoTenantId: ev.target.value })}
-                  disabled={soloLectura}
-                >
-                  {(tipo && !elegibles.includes(tipo) ? [tipo, ...elegibles] : elegibles).map((x) => (
-                    <MenuItem key={x.id} value={x.id}>
-                      {x.nombre}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              )}
-              <SelectorAreasRequisito
+    <Stack spacing={2}>
+      <Box>
+        {requisitos.length > 0 && (
+          <Typography variant="subtitle1" data-resumen-requisitos="">
+            {textoDelConteo(contarRequisitos(requisitos), t, true)}
+          </Typography>
+        )}
+        <Typography sx={{ color: 'text.secondary' }}>{requisitos.length === 0 ? t('flujos.editor.requisitos.vacio') : t('flujos.editor.requisitos.ayuda')}</Typography>
+      </Box>
+      {grupos.map((grupo) => (
+        <GrupoDeSector key={grupo.sector} grupo={grupo} onAgregar={alSector(grupo.sector)}>
+          {[...grupo.secciones, ...grupo.documentos].map(({ indice, requisito }) => (
+            <Box component="li" key={requisito.clave}>
+              <FilaDeRequisito
+                requisito={requisito}
+                onCambiar={(cambio) => cambiar(indice, cambio)}
+                tipo={requisito.seccion === null ? tiposDocumento.find((x) => x.id === requisito.tipoDocumentoTenantId) : undefined}
+                elegibles={elegibles}
                 areasDelFlujo={areasDelFlujo}
-                elegidas={r.areasQueRevisan}
                 nombreArea={nombreArea}
-                onCambiar={(areasQueRevisan) => cambiar(k, { areasQueRevisan })}
-                deshabilitado={soloLectura}
-              />
-              <SelectorDeCondicion
-                etiqueta={t('flujos.editor.requisitos.sePideA')}
-                condicion={r.condicion}
-                onCambiar={(condicion) => cambiar(k, { condicion })}
-                deshabilitado={soloLectura}
-                textoDe={(a) => t(`flujos.editor.requisitos.atajos.${a}`)}
                 atributos={atributos}
+                mensajes={mensajesDe(indice, requisito.seccion !== null)}
+                soloLectura={soloLectura}
+                abierto={abierto === indice}
+                sector={grupo.sector}
+                conError={conError.includes(indice)}
+                onAlternar={() => setAbierto(abierto === indice ? null : indice)}
+                onQuitar={() => quitar(indice)}
               />
-              <CampoNumero
-                etiqueta={t('flujos.editor.requisitos.aprobadores')}
-                valor={r.aprobadoresRequeridos}
-                placeholder={t('flujos.editor.requisitos.losDelArea')}
-                onCambiar={(texto) => cambiar(k, { aprobadoresRequeridos: texto === '' ? null : Number(texto) })}
-                deshabilitado={soloLectura}
-              />
-              <AlineadoConCampo desde="sm">
-                <FormControlLabel
-                  control={<Switch checked={r.obligatorio} onChange={(ev) => cambiar(k, { obligatorio: ev.target.checked })} disabled={soloLectura} />}
-                  label={t('flujos.editor.requisitos.obligatorio')}
-                  sx={{ mx: 0, flex: 'none' }}
-                />
-                {!soloLectura && (
-                  <Tooltip title={quitar}>
-                    <IconButton size="small" aria-label={quitar} onClick={() => onCambiar(requisitos.filter((_, i) => i !== k))} sx={{ ml: 'auto' }}>
-                      <Trash2 size={16} strokeWidth={1.75} />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </AlineadoConCampo>
             </Box>
-            {r.condicion && atajoDe(r.condicion) === 'ficha' && (
-              <CondicionDeFicha condicion={r.condicion} onCambiar={(condicion) => cambiar(k, { condicion })} deshabilitado={soloLectura} />
-            )}
-            {r.condicion && atajoDe(r.condicion) === 'atributo' && (
-              <CondicionDeAtributo
-                condicion={r.condicion}
-                atributos={atributos}
-                onCambiar={(condicion) => cambiar(k, { condicion })}
-                deshabilitado={soloLectura}
-                resumen={(condicion) => t('flujos.editor.requisitos.personalizada', { condicion })}
-              />
-            )}
-            {esSeccion && (
-              <OpcionesSeccion
-                requisito={r}
-                onCambiar={(cambio) => cambiar(k, cambio)}
-                deshabilitado={soloLectura}
-                errorPeriodos={ePeriodos ? textoError(ePeriodos, true) : null}
-                errorVigencia={eVigencia ? textoError(eVigencia, true) : null}
-                errorRevalidacion={eRevalidacion ? textoError(eRevalidacion, true) : null}
-              />
-            )}
-            {tipo && admitePersona(tipo.tipoCanonico) && (
-              <Box sx={{ mt: 1 }}>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
-                  <TextField
-                    select
-                    size="small"
-                    label={t('personasRelacionadas.editor.documentoDe')}
-                    value={r.dePersonaRelacionada ?? ''}
-                    onChange={(ev) => cambiar(k, { dePersonaRelacionada: ev.target.value === '' ? null : ev.target.value, todasLasRelaciones: ev.target.value === '' ? false : r.todasLasRelaciones })}
-                    disabled={soloLectura}
-                    sx={{ minWidth: 260 }}
-                  >
-                    <MenuItem value="">{t('personasRelacionadas.editor.delTercero')}</MenuItem>
-                    {ROLES_DE_PERSONA.map((rol) => (
-                      <MenuItem key={rol} value={rol}>
-                        {t(`personasRelacionadas.roles.${rol}`)}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  {r.dePersonaRelacionada !== null && (
-                    <FormControlLabel
-                      control={<Switch checked={r.todasLasRelaciones} onChange={(ev) => cambiar(k, { todasLasRelaciones: ev.target.checked })} disabled={soloLectura} />}
-                      label={t('personasRelacionadas.editor.todas')}
-                      sx={{ mx: 0 }}
-                    />
-                  )}
-                </Stack>
-                {r.dePersonaRelacionada !== null && (
-                  <Typography component="p" variant="caption" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                    {t('personasRelacionadas.editor.ayuda')}
-                  </Typography>
-                )}
-              </Box>
-            )}
-            {tipo && seccionesQueRespalda(tipo.tipoCanonico).length > 0 && r.dePersonaRelacionada === null && (
-              <Box sx={{ mt: 0.5 }}>
-                <FormControlLabel
-                  control={<Switch checked={r.usarComoSoporte !== false} onChange={(ev) => cambiar(k, { usarComoSoporte: ev.target.checked })} disabled={soloLectura} />}
-                  label={t('cruce.editor.usarComoSoporte')}
-                  sx={{ mx: 0 }}
-                />
-                <Typography component="p" variant="caption" sx={{ color: 'text.secondary' }}>
-                  {t('cruce.editor.ayuda', { secciones: seccionesQueRespalda(tipo.tipoCanonico).map((c) => nombreSeccion(c, t)).join(', ') })}
-                </Typography>
-              </Box>
-            )}
-            {tipo && (
-              <Typography component="p" variant="caption" sx={{ color: 'text.secondary', mt: 0.75 }} data-resumen-tipo="">
-                {resumenTipo(tipo, t)}
-              </Typography>
-            )}
-            {r.condicion && atajoDe(r.condicion) === 'personalizada' && (
-              <Typography component="p" variant="caption" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                {t('flujos.editor.requisitos.personalizada', { condicion: describirCondicion(r.condicion, t) })}
-              </Typography>
-            )}
-            {e && (
-              <Typography variant="caption" component="p" color="error" sx={{ mt: 1 }}>
-                {textoError(e, esSeccion)}
-              </Typography>
-            )}
-          </Box>
-        );
-      })}
+          ))}
+        </GrupoDeSector>
+      ))}
       {!soloLectura && (
-        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-          <Button variant="outlined" size="small" startIcon={<Plus size={16} aria-hidden />} onClick={() => onCambiar([...requisitos, requisitoNuevo()])}>
-            {t('flujos.editor.requisitos.agregar')}
-          </Button>
-          <Button variant="outlined" size="small" startIcon={<ClipboardList size={16} aria-hidden />} onClick={() => onCambiar([...requisitos, requisitoDeSeccionNuevo()])}>
-            {t('fichaEmpresa.editor.agregarSeccion')}
-          </Button>
-        </Stack>
+        <Box>
+          <MenuAgregarRequisito
+            seccionesPedidas={new Set(requisitos.flatMap((r) => (r.seccion ? [r.seccion] : [])))}
+            onAgregarDocumento={() => agregar(requisitoNuevo())}
+            onAgregarSeccion={(seccion) => agregar(requisitoDeSeccionNuevo(seccion))}
+          />
+        </Box>
       )}
     </Stack>
   );

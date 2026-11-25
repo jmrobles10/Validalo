@@ -17,6 +17,27 @@ public sealed record RevisionAutomaticaDto(
     decimal? Confianza, DateTimeOffset Fecha, bool PendienteDeAtencion, string? Resolucion, string? ResueltaPor, DateTimeOffset? ResueltaEn,
     string? JustificacionResolucion);
 
+/// <summary>Un campo que no es crítico y difiere entre lo declarado y lo que trae el documento: no manda el documento a una persona, se dice aparte (IA-16). Un valor nulo es «nada».</summary>
+public sealed record DiferenciaDeCruceDto(string Etiqueta, string? Declarado, string? Extraido);
+
+/// <summary>La persona declarada de un documento de persona relacionada (ADR-0010) con la que se cruzó: su nombre y su identificación como la lee una persona («CC 1073250322»).</summary>
+public sealed record PersonaVerificadaDto(string Nombre, string? Identificacion);
+
+/// <summary>
+/// Lo que la IA concluye del documento que cubre un requisito, en <b>cualquier nivel</b> de revisión de la empresa (Manual incluido): la misma regla que da la sugerencia del
+/// nivel Asistido (<c>MotorDeRevision.Concluir</c>), con el umbral de confianza de la empresa (en Manual, el del plan de IA). <see cref="Sugerencia"/>: <c>Aprobar</c> (la IA
+/// lo verificó y no hay motivos), <c>Revisar</c> (hay <see cref="Motivos"/>) o <c>SinAnalisis</c> (la empresa usa IA y el análisis de esta versión no le llegó ni va a llegar:
+/// falló o no hay cupo). <see cref="Nivel"/>: <c>Manual|Asistido|Automatico</c> de la empresa. <see cref="Umbral"/>: el umbral de confianza con el que se concluyó (el de la
+/// empresa o, en Manual, el del plan). Es una sugerencia: decide una persona (salvo lo que el nivel Automático apruebe solo). Para <c>Aprobar</c>:
+/// <see cref="CruzadoConLoDeclarado"/> (el documento se cruzó con lo declarado y lo crítico coincide), <see cref="AntiguedadVerificada"/> (cumple la antigüedad máxima de su
+/// tipo), <see cref="SinVerificar"/> (campos críticos que el cruce no pudo verificar; el motor no los cuenta como motivo), <see cref="Diferencias"/> (campos no críticos que
+/// difieren, con lo declarado y lo leído: una nota, no un motivo) y <see cref="Persona"/> (la persona declarada con la que coincide, en el documento de una persona relacionada). Nula si no hay conclusión: el análisis aún llega, la empresa no usa IA o la versión
+/// no tiene archivo.
+/// </summary>
+public sealed record ConclusionDeRevisionDto(
+    string Sugerencia, string Nivel, IReadOnlyList<MotivoDeRevisionDto> Motivos, bool CruzadoConLoDeclarado, bool AntiguedadVerificada, IReadOnlyList<string> SinVerificar,
+    decimal Umbral, IReadOnlyList<DiferenciaDeCruceDto> Diferencias, PersonaVerificadaDto? Persona = null);
+
 public sealed record UsoRevisionAutomaticaDto(string Mes, int Aprobadas, int Muestreadas, int Excepciones, int Sugerencias, int? Tope);
 
 /// <summary>Tipo de documento que el sistema puede analizar con IA (y, por tanto, aprobar solo).</summary>

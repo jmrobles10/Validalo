@@ -284,7 +284,7 @@ public sealed partial class IngresoApiTests
         var completado = await Anonimo("/api/v1/ingreso/sso/completar", new CompletarSsoDto(Guid.Parse(regreso.Desafio!)), 200);
         var paso = (await completado.ReadAsJsonAsync<PasoDeIngresoDto>())!;
         paso.Estado.ShouldBe("Sesion");
-        paso.Sesion!.Metodo.ShouldBe("Sso"); // el proveedor declaró mfa: ni siquiera un Administrador necesita passkey
+        paso.Sesion!.Metodo.ShouldBe("Sso"); // el proveedor declaró mfa: vale por sí solo, sea cual sea el rol
         paso.Sesion.SugerirPasskey.ShouldBeFalse();
         var yo = await ObtenerAsync<YoDto>("/api/v1/yo", paso.Sesion.Token);
         (yo.ActorTipo, yo.TenantId, yo.Roles.Single().Rol).ShouldBe(("Usuario", g.TenantId, "Administrador"));
@@ -323,9 +323,9 @@ public sealed partial class IngresoApiTests
     }
 
     [Fact]
-    public async Task Sin_segundo_factor_declarado_el_SSO_sigue_con_la_passkey_donde_el_rol_la_exige()
+    public async Task Sin_segundo_factor_declarado_el_SSO_sigue_con_la_passkey_solo_donde_el_grupo_la_exige_a_todos()
     {
-        var g = await GrupoAsync();
+        var g = await GrupoAsync(passkeyParaTodos: true);
         var sso = await GrupoConSsoAsync((cliente, secreto) => DtoDeSso(cliente, secreto, roles: [new RolAsignadoDto("Revisor", g.Empresa.Id)],
             reglas: [new ReglaDeGrupoSsoDto("TI-Admins", "Administrador")]), grupo: g);
         var admin = $"adm@{sso.Dominio}";
@@ -333,7 +333,7 @@ public sealed partial class IngresoApiTests
         Idp.Persona(admin, "Ada Admin", ["TI-Admins"], ["pwd"]);
         Idp.Persona(revisor, "Rafa Revisor", [], ["pwd"]);
 
-        // Un solo factor y un rol que exige passkey: registra la primera en el mismo ingreso.
+        // Un solo factor y un grupo que exige passkey a todos: registra la primera en el mismo ingreso.
         var paso = await EntrarConSsoAsync(admin);
         paso.Estado.ShouldBe("RegistrarPasskey");
         var autenticador = new AutenticadorVirtual(ApiFixture.OrigenDeLaApp);
@@ -346,9 +346,30 @@ public sealed partial class IngresoApiTests
         var verificada = await (await Anonimo("/api/v1/ingreso/passkey/verificar", new VerificarPasskeyDto(siguiente.Desafio, autenticador.Firmar(siguiente.Opciones!.Value)), 200)).ReadAsJsonAsync<PasoDeIngresoDto>();
         verificada!.Sesion!.Metodo.ShouldBe("SsoYPasskey");
 
-        // Sin rol que la exija, un solo factor del proveedor abre la sesión.
-        var sinPasskey = await EntrarConSsoAsync(revisor);
-        (sinPasskey.Estado, sinPasskey.Sesion!.Metodo, sinPasskey.Sesion.SugerirPasskey).ShouldBe(("Sesion", "Sso", false));
+        // También a quien tiene un rol de otro nivel: lo exige el grupo, no el rol.
+        var otro = await EntrarConSsoAsync(revisor);
+        otro.Estado.ShouldBe("RegistrarPasskey");
+    }
+
+    [Fact]
+    public async Task Sin_passkey_para_todos_un_solo_factor_del_proveedor_abre_la_sesion_aunque_el_rol_sea_de_administracion_y_tenga_passkeys()
+    {
+        var g = await GrupoAsync();
+        var sso = await GrupoConSsoAsync((cliente, secreto) => DtoDeSso(cliente, secreto, roles: [new RolAsignadoDto("Revisor", g.Empresa.Id)],
+            reglas: [new ReglaDeGrupoSsoDto("TI-Admins", "Administrador")]), grupo: g);
+        var admin = $"adm@{sso.Dominio}";
+        Idp.Persona(admin, "Ada Admin", ["TI-Admins"], ["pwd"]);
+
+        // Un solo factor del proveedor y ningún rol que exija passkey: abre la sesión (la passkey es opcional, no se pide registrarla).
+        var primera = await EntrarConSsoAsync(admin);
+        (primera.Estado, primera.Sesion!.Metodo, primera.Sesion.SugerirPasskey).ShouldBe(("Sesion", "Sso", false));
+
+        // Con una passkey registrada desde Mi cuenta tampoco la pide: es otra forma de entrar, no un paso obligatorio.
+        var autenticador = new AutenticadorVirtual(ApiFixture.OrigenDeLaApp);
+        var opciones = await PostJsonAsync<OpcionesDePasskeyDto>("/api/v1/mi-cuenta/passkeys/opciones", null, primera.Sesion.Token);
+        await PostJsonAsync<PasskeyDto>("/api/v1/mi-cuenta/passkeys", new RegistrarPasskeyDto(opciones.Desafio, autenticador.Registrar(opciones.Opciones), "Mi teléfono"), primera.Sesion.Token);
+        var segunda = await EntrarConSsoAsync(admin);
+        (segunda.Estado, segunda.Sesion!.Metodo).ShouldBe(("Sesion", "Sso"));
     }
 
     [Fact]
@@ -506,16 +527,14 @@ public sealed partial class IngresoApiTests
         var solo = await (await Anonimo("/api/v1/ingreso/passkey/opciones", null, 200)).ReadAsJsonAsync<OpcionesDePasskeyDto>();
         (await CodigoDeErrorAsync(await Anonimo("/api/v1/ingreso/passkey/verificar", new VerificarPasskeyDto(solo!.Desafio, autenticador.Firmar(solo.Opciones)), 403))).ShouldBe("sso-obligatorio");
         var conSso = await EntrarConSsoAsync(deDominio.Correo);
-        conSso.Estado.ShouldBe("PasskeyRequerida"); // un factor del proveedor y una passkey registrada: pide la passkey
-        (await (await Anonimo("/api/v1/ingreso/passkey/verificar", new VerificarPasskeyDto(conSso.Desafio, autenticador.Firmar(conSso.Opciones!.Value)), 200)).ReadAsJsonAsync<PasoDeIngresoDto>())!
-            .Sesion!.Metodo.ShouldBe("SsoYPasskey");
+        (conSso.Estado, conSso.Sesion!.Metodo).ShouldBe(("Sesion", "Sso")); // un factor del proveedor basta: la passkey registrada es opcional
 
         // Plataforma puede apagar el SSO de un grupo (válvula de emergencia): el código vuelve a servir.
         var desactivado = await ApiAsync<ConfiguracionDeSsoDto>("POST", $"/api/v1/plataforma/tenants/{g.TenantId}/sso/desactivar", ApiFixture.ClavePlataforma, null, null, 200);
         desactivado.Activo.ShouldBeFalse();
         (await CodigoDeErrorAsync(await ApiRaw("POST", $"/api/v1/plataforma/tenants/{g.TenantId}/sso/desactivar", ApiFixture.ClavePlataforma, 409))).ShouldBe("sso-inactivo");
         (await (await Anonimo("/api/v1/ingreso/sso/descubrir", new DescubrirSsoDto(deDominio.Correo), 200)).ReadAsJsonAsync<SsoDescubiertoDto>())!.Disponible.ShouldBeFalse();
-        (await IngresarConCodigoAsync(deDominio.Correo, numero: 2)).Paso.Estado.ShouldBe("PasskeyRequerida"); // el código vuelve a servir (y como ya tiene una passkey, la pide)
+        (await IngresarConCodigoAsync(deDominio.Correo, numero: 2)).Paso.Sesion!.Metodo.ShouldBe("Codigo"); // el código vuelve a servir y, aunque ya tiene una passkey, abre la sesión
         await Anonimo("/api/v1/ingreso/sso/iniciar", new IniciarSsoDto(deDominio.Correo), 403);
     }
 
@@ -544,10 +563,9 @@ public sealed partial class IngresoApiTests
         var regreso = await RegresarAsync(await AutorizarEnElIdpAsync(inicio.UrlDeAutorizacion), cookie);
         regreso.Error.ShouldBeNull();
         var paso = await CompletarSsoAsync(regreso.Desafio!);
-        // WorkOS no declara cuántos factores usó la persona: un rol Auditor exige passkey y se registra en el mismo ingreso.
-        paso.Estado.ShouldBe("RegistrarPasskey");
+        // WorkOS no declara cuántos factores usó la persona: con un rol Auditor, que ya no exige passkey, un solo factor abre la sesión.
+        (paso.Estado, paso.Sesion!.Metodo).ShouldBe(("Sesion", "Sso"));
         (await UsuariosDelGrupoAsync(g)).Single(u => u.Correo == correo).Roles.ShouldHaveSingleItem().Rol.ShouldBe("Auditor");
-        await RegistrarEnIngresoAsync(paso, new AutenticadorVirtual(ApiFixture.OrigenDeLaApp), "Mi llave");
 
         // Un perfil de otra organización de WorkOS no entra a este grupo.
         await ApiAsync<ConfiguracionDeSsoDto>("PUT", "/api/v1/configuracion/sso", g.Admin, null, dto with { OrganizacionWorkOs = "org_otra" }, 200);

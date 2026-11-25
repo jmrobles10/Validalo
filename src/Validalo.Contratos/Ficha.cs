@@ -338,8 +338,9 @@ public sealed record CampoPropuestoDto(string Campo, string Etiqueta, string? Ac
 
 /// <summary>
 /// Actualización desde el documento (FM-14): lo que la versión actual de un documento del tercero propone para una sección.
-/// <see cref="Disponible"/> falso con <see cref="Motivo"/> <c>sin-lectura-automatica</c> si el documento no tiene lectura
-/// automática (se diligencia con el documento a la vista). <see cref="Datos"/>: los de la sección con los cambios aplicados,
+/// <see cref="Disponible"/> falso con <see cref="Motivo"/> si el documento no tiene lectura automática (se diligencia con el documento
+/// a la vista): <c>sin-lectura-automatica</c> (aún no termina, no hay plan o cupo, o no se lee), <c>documento-ilegible</c> (la IA lo leyó y
+/// no se alcanza: se sube una copia más clara) o <c>lectura-fallida</c> (el análisis falló). <see cref="Datos"/>: los de la sección con los cambios aplicados,
 /// para prellenar el formulario (nunca se guardan solos); solo en la consulta de una sección.
 /// </summary>
 public sealed record PropuestaDeSeccionDto(

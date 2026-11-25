@@ -14,7 +14,6 @@ export const fichaEmpresa = {
   },
   campos: { soporte: 'Soporte' },
   editor: {
-    agregarSeccion: 'Agregar sección de la información',
     nueva: 'Sección nueva',
     seccion: 'Sección de la información del tercero',
     periodos: 'Periodos',
@@ -51,6 +50,7 @@ export const fichaEmpresa = {
     sinSoportes: 'Sin soporte.',
     soporte: '{{tipo}} · versión {{n}}',
     soporteNoCompartido: 'Soporte del tercero · versión {{n}} (no compartido con este vínculo)',
+    soporteNombradoNoCompartido: '{{nombre}} · versión {{n}} (no compartido con este vínculo)',
     verSoporte: 'Ver',
     verSoporteAccesible: 'Ver el soporte {{tipo}}, versión {{n}}',
     campos: 'Campos señalados: {{campos}}',

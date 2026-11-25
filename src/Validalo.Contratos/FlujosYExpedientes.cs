@@ -259,12 +259,14 @@ public sealed record RetiroDeVersionDto(int Numero, string Motivo, DateTimeOffse
 /// <see cref="VersionActual"/> la versión de la sección (<c>documentoId</c> = id de la sección, <c>sha256</c> = huella) y
 /// <see cref="Seccion"/> el detalle: completitud para la empresa, datos, soportes y cambios frente a lo aceptado.
 /// <see cref="Retiro"/>: el tercero retiró la versión que este requisito reemplaza y <see cref="VersionActual"/> es la que vuelve (RT-3).
+/// <see cref="ConclusionDeRevision"/>: lo que la IA concluye del documento (aprobar, revisar con sus motivos o sin análisis) en cualquier nivel de revisión; solo en la vista de la empresa.
 /// </summary>
 public sealed record RequisitoExpedienteDto(
     Guid Id, TipoDocumentoRequisitoDto TipoDocumento, bool Obligatorio, string Estado, VersionRequisitoDto? VersionActual, int Reenvios,
     ExencionDto? Exencion, IReadOnlyList<AreaDeRequisitoDto> Areas, string TipoRequisito = "Documento", SeccionDeRequisitoDto? Seccion = null,
     SoporteDeSeccionesDto? SoporteDeSecciones = null, RetiroDeVersionDto? Retiro = null,
-    IReadOnlyList<RevisionAutomaticaDto>? RevisionesAutomaticas = null, PersonaDelRequisitoDto? Persona = null, IReadOnlyList<MotivoDeExigenciaDto>? PorQue = null);
+    IReadOnlyList<RevisionAutomaticaDto>? RevisionesAutomaticas = null, PersonaDelRequisitoDto? Persona = null, IReadOnlyList<MotivoDeExigenciaDto>? PorQue = null,
+    ConclusionDeRevisionDto? ConclusionDeRevision = null);
 
 /// <summary>
 /// Lo que de la ficha del tercero hizo que se pida un requisito (EF-6): el campo (<c>ficha.especialidades.especialidades</c>), su nombre legible y los valores de

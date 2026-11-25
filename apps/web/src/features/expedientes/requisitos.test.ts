@@ -1,11 +1,13 @@
-import { SCOPES } from '@validalo/api-client';
+import { SCOPES, type AreaDeRequisitoDto } from '@validalo/api-client';
 import { describe, expect, it } from 'vitest';
 import { area, areaDeRequisito, expediente, requisito, veredicto } from './datosPrueba';
 import { dialogoAplica, type ContextoRevisor } from './reglas';
 import {
   bloqueoRequisito,
+  dialogoDeVeredicto,
   enFaseDeCarga,
   puedeEximir,
+  quienDecide,
   requisitosFaltantes,
   usuariosDelExpediente,
   veredictosInvalidados,
@@ -90,5 +92,64 @@ describe('exención y nombres', () => {
     });
     const exp = { ...expediente('EnRevision', [area({ miembrosPendientes: ['u-3'], veredictos: [veredicto({ usuario: 'u-2' })] })]), requisitos: [r] };
     expect(usuariosDelExpediente(exp)).toEqual(['u-2', 'u-3', 'u-admin']);
+  });
+});
+
+describe('quién decide el requisito (junto a la conclusión de la IA)', () => {
+  const acceso = area({ areaId: 'a-acceso', codigo: 'ACCESO', nombre: 'Acceso Total' });
+  const cumplimiento = area({ areaId: 'a-cumpl', codigo: 'CUMPLIMIENTO', nombre: 'Cumplimiento' });
+  const areas = new Map([acceso, cumplimiento].map((a) => [a.areaId, a]));
+  const dosAreas = (estados: [AreaDeRequisitoDto['estado'], AreaDeRequisitoDto['estado']]) =>
+    requisito({ areas: [areaDeRequisito({ areaId: 'a-acceso', codigo: 'ACCESO', estado: estados[0] }), areaDeRequisito({ areaId: 'a-cumpl', codigo: 'CUMPLIMIENTO', estado: estados[1] })] });
+  const comoMiembroDe = (...ids: string[]) => (a: { areaId: string } | null) => miembro(REVISOR, { esMiembro: a !== null && ids.includes(a.areaId) });
+
+  it('quien es miembro del área en turno puede decidir ahora, con la misma guarda del botón del área; las demás quedan como pendientes', () => {
+    const r = dosAreas(['Pendiente', 'Esperando']);
+    const quien = quienDecide(conRequisitos('EnRevision', [r]), r, areas, comoMiembroDe('a-acceso'));
+
+    expect(quien.puede?.nombre).toBe('Acceso Total');
+    expect(quien.puede?.areaRequisito).toBe(r.areas[0]);
+    expect(quien.pendientes).toEqual(['Cumplimiento']);
+    // Es exactamente lo que dice bloqueoRequisito para esa área: sin bloqueo.
+    expect(bloqueoRequisito(conRequisitos('EnRevision', [r]), r, r.areas[0]!, miembro())).toBeNull();
+  });
+
+  it('quien no es miembro de ninguna área en turno no puede decidir y se dice quién decide', () => {
+    const r = dosAreas(['Pendiente', 'Esperando']);
+    const quien = quienDecide(conRequisitos('EnRevision', [r]), r, areas, comoMiembroDe());
+
+    expect(quien).toEqual({ puede: null, pendientes: ['Acceso Total', 'Cumplimiento'] });
+  });
+
+  it('otra área en turno: el miembro de un área en espera todavía no decide', () => {
+    const r = dosAreas(['Pendiente', 'Esperando']);
+
+    expect(quienDecide(conRequisitos('EnRevision', [r]), r, areas, comoMiembroDe('a-cumpl')).puede).toBeNull();
+  });
+
+  it('sin el permiso de revisar nadie decide desde esta pantalla', () => {
+    const r = dosAreas(['Pendiente', 'Pendiente']);
+    const lector = () => miembro(new Set<string>([SCOPES.expedientesLeer]));
+
+    expect(quienDecide(conRequisitos('EnRevision', [r]), r, areas, lector).puede).toBeNull();
+  });
+
+  it('con el expediente en carga o devuelto al tercero nadie decide todavía; un área aprobada ya no está pendiente', () => {
+    const r = dosAreas(['Aprobado', 'Pendiente']);
+
+    expect(quienDecide(conRequisitos('Abierto', [r]), r, areas, comoMiembroDe('a-cumpl')).puede).toBeNull();
+    expect(quienDecide(conRequisitos('EnRevision', [r]), r, areas, comoMiembroDe()).pendientes).toEqual(['Cumplimiento']);
+  });
+
+  it('usa el código del área si no se conoce su nombre', () => {
+    const r = dosAreas(['Pendiente', 'Pendiente']);
+
+    expect(quienDecide(conRequisitos('EnRevision', [r]), r, new Map(), comoMiembroDe()).pendientes).toEqual(['ACCESO', 'CUMPLIMIENTO']);
+  });
+
+  it('el diálogo de «Aprobar» junto a la conclusión es el mismo del botón del área', () => {
+    const r = dosAreas(['Pendiente', 'Pendiente']);
+
+    expect(dialogoDeVeredicto(r, r.areas[0]!, 'Acceso Total')).toEqual({ tipo: 'veredictoRequisito', requisito: r, areaRequisito: r.areas[0], nombreArea: 'Acceso Total' });
   });
 });

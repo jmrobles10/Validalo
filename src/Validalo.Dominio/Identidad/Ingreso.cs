@@ -7,7 +7,7 @@ namespace Validalo.Dominio.Identidad;
 /// <summary>
 /// Cómo entran las personas de un grupo (ING-1): <see cref="Delegado"/> = identidad delegada desde el sistema integrado
 /// (<c>X-Usuario-Delegado</c>, <c>POST /sesiones-usuario</c>, embebido); <see cref="Directo"/> = ingreso propio de
-/// Valídalo con correo, código y passkey. Un grupo admite uno o ambos; nunca ninguno.
+/// Valídalo con correo y código del correo, y con passkey como forma opcional. Un grupo admite uno o ambos; nunca ninguno.
 /// </summary>
 [Flags]
 public enum ModoDeIngreso
@@ -20,7 +20,7 @@ public enum ModoDeIngreso
 /// <summary>Cómo se autenticó una sesión directa (claim <c>validalo:metodo</c>).</summary>
 public enum MetodoDeIngreso
 {
-    /// <summary>Solo el código del correo: un único factor, no permitido a los roles que exigen passkey.</summary>
+    /// <summary>Solo el código del correo: un único factor. Abre sesión a cualquier persona de un grupo, salvo que el grupo exija passkey a todos.</summary>
     Codigo,
 
     /// <summary>Passkey con verificación de usuario (biometría o PIN): posesión y verificación en un solo gesto (dos factores).</summary>
@@ -31,7 +31,7 @@ public enum MetodoDeIngreso
 
     /// <summary>
     /// Inicio de sesión de la empresa del cliente (SSO, PI-3): su proveedor de identidad verificó a la persona y declaró que ya usó más de un factor
-    /// (<c>amr</c> con <c>mfa</c>, llave o código de un solo uso). Vale por sí solo, también para los roles que exigen passkey (PI-4).
+    /// (<c>amr</c> con <c>mfa</c>, llave o código de un solo uso). Vale por sí solo, también donde el grupo exige passkey (PI-4).
     /// </summary>
     Sso,
 
@@ -44,15 +44,6 @@ public enum TipoDePropietario
 {
     Usuario,
     Operador
-}
-
-/// <summary>
-/// Quién debe tener passkey (P-14-4, ING-2): los roles <c>Administrador</c>, <c>OficialCumplimiento</c> y <c>Auditor</c>, todas las
-/// personas de un grupo que así lo decida y siempre los operadores de Plataforma.
-/// </summary>
-public static class PoliticaDePasskeys
-{
-    public static bool RolExige(Rol rol) => rol is Rol.Administrador or Rol.OficialCumplimiento or Rol.Auditor;
 }
 
 /// <summary>La cuenta con la que se completa un ingreso: un usuario de un grupo o un operador de Plataforma.</summary>
@@ -80,7 +71,7 @@ public enum EtapaDeIngreso
 }
 
 /// <summary>
-/// Ceremonia de un ingreso directo (ING-1): correo → código de 6 dígitos → cuenta → passkey, o solo passkey. Global (esquema
+/// Ceremonia de un ingreso directo (ING-1): correo → código de 6 dígitos → cuenta (→ passkey si la cuenta la exige), o solo passkey. Global (esquema
 /// <c>identidad</c>). Su <see cref="Id"/> es la capacidad que recibe quien la pidió; el código se guarda solo como hash ligado
 /// al desafío. Un correo sin cuenta recibe también un desafío (<see cref="EsSenuelo"/>) que nunca acepta un código, para que la
 /// respuesta de pedir el código no revele si el correo existe. Vence a los 5 minutos y, una vez verificado el código, a los 10
@@ -121,8 +112,8 @@ public sealed class DesafioDeIngreso
     public bool EsSenuelo { get; set; }
 
     /// <summary>
-    /// Desafío de una reautenticación con passkey (step-up, PI-13): solo sirve para confirmar una acción sensible en la sesión <see cref="SesionId"/>, nunca
-    /// para abrir una sesión.
+    /// Desafío de una reautenticación (step-up, PI-13): con la passkey o con un código enviado al correo de la cuenta (PI-20). Solo sirve para confirmar una acción
+    /// sensible en la sesión <see cref="SesionId"/>, nunca para abrir una sesión.
     /// </summary>
     public bool EsReautenticacion { get; set; }
 
@@ -149,10 +140,12 @@ public sealed class DesafioDeIngreso
             Dispositivo = Recortar(dispositivo, 300),
             EsSenuelo = !conCuenta
         };
-        var codigo = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6", System.Globalization.CultureInfo.InvariantCulture);
+        var codigo = NuevoCodigo();
         desafio.CodigoHash = desafio.HashDe(codigo);
         return (desafio, conCuenta ? codigo : null);
     }
+
+    private static string NuevoCodigo() => RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Desafío para registrar una passkey estando ya dentro (Mi cuenta): nace en la etapa posterior al código, con la cuenta fijada.</summary>
     public static DesafioDeIngreso ParaRegistro(CuentaDeIngreso cuenta, string correo, DateTimeOffset ahora, string? ip, string? dispositivo) => new()
@@ -195,6 +188,47 @@ public sealed class DesafioDeIngreso
         Ip = Recortar(ip, 64),
         Dispositivo = Recortar(dispositivo, 300)
     };
+
+    /// <summary>
+    /// Código para confirmar con el correo una acción sensible de una sesión ya abierta (step-up, PI-20): nace en la etapa del código enviado, con la cuenta y la
+    /// sesión fijadas, y no abre ninguna sesión. Tiene la misma mecánica que el código de ingreso: 6 dígitos guardados solo como hash, 5 minutos y 5 intentos.
+    /// </summary>
+    public static (DesafioDeIngreso Desafio, string Codigo) ParaCodigoDeReautenticacion(CuentaDeIngreso cuenta, string correo, Guid sesionId, DateTimeOffset ahora, string? ip,
+        string? dispositivo)
+    {
+        var desafio = new DesafioDeIngreso
+        {
+            Id = Guid.NewGuid(),
+            Correo = correo,
+            Etapa = EtapaDeIngreso.CodigoEnviado,
+            Cuenta = cuenta,
+            EsReautenticacion = true,
+            SesionId = sesionId,
+            CreadoEn = ahora,
+            Expira = ahora + VigenciaDelCodigo,
+            Ip = Recortar(ip, 64),
+            Dispositivo = Recortar(dispositivo, 300)
+        };
+        var codigo = NuevoCodigo();
+        desafio.CodigoHash = desafio.HashDe(codigo);
+        return (desafio, codigo);
+    }
+
+    /// <summary>
+    /// Verifica el código de una reautenticación con el correo: <c>true</c> si es correcto (el desafío queda consumido: no vuelve a servir); <c>false</c> si no lo es
+    /// (cuenta un intento, que el llamador debe guardar antes de responder). Vencido ⇒ 410 <c>codigo-vencido</c>; agotado ⇒ 429 <c>codigo-bloqueado</c>; un desafío que no es
+    /// de una reautenticación con código o que ya se usó ⇒ 410 <c>desafio-usado</c>.
+    /// </summary>
+    public bool VerificarCodigoDeReautenticacion(string? codigo, DateTimeOffset ahora)
+    {
+        if (!EsReautenticacion || Etapa != EtapaDeIngreso.CodigoEnviado)
+            throw ReglaDeNegocioException.Expirado("desafio-usado", "Esta confirmación ya se usó o no espera un código. Pide uno nuevo.");
+        if (!VerificarCodigo(codigo, ahora))
+            return false;
+
+        Etapa = EtapaDeIngreso.Consumido;
+        return true;
+    }
 
     /// <summary>
     /// Inicio de sesión con el proveedor de identidad de un grupo (SSO, PI-3). Devuelve el desafío, el <c>state</c> que viaja a ese proveedor (<c>{id}.{secreto}</c>,

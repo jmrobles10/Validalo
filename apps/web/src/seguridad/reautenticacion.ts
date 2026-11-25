@@ -2,9 +2,9 @@ import type { ErrorApi } from '@validalo/api-client';
 import { create } from 'zustand';
 
 /**
- * Reautenticación (step-up) para acciones sensibles (PI-13). La API responde 403 `reautenticacion-requerida` a quien tiene una sesión directa sin una
- * confirmación reciente; el cliente de la API llama a `solicitarReautenticacion`, la app abre el diálogo y, si la persona confirma con su passkey,
- * repite la petición una vez. Este módulo guarda lo que el diálogo muestra y cuida que haya un solo diálogo abierto a la vez.
+ * Reautenticación (step-up) para acciones sensibles (PI-13, PI-20). La API responde 403 `reautenticacion-requerida` a quien tiene una sesión directa sin una
+ * confirmación reciente; el cliente de la API llama a `solicitarReautenticacion`, la app abre el diálogo y, si la persona confirma con su passkey o con un código
+ * que le llega al correo, repite la petición una vez. Este módulo guarda lo que el diálogo muestra y cuida que haya un solo diálogo abierto a la vez.
  */
 
 export interface PeticionDeReautenticacion {
@@ -12,8 +12,13 @@ export interface PeticionDeReautenticacion {
   accion: string;
   /** Cuánto dura la confirmación: durante ese tiempo no se vuelve a pedir. */
   minutos: number;
-  /** Sin passkey no hay con qué confirmar: se manda a registrar una en Mi cuenta. */
+  /** Sin passkey (y sin la opción del código) no hay con qué confirmar: se manda a registrar una en Mi cuenta. */
   tienePasskey: boolean;
+  /**
+   * También se puede confirmar con un código que llega al correo de la cuenta. Los operadores de Plataforma y los grupos que exigen passkey a todos confirman solo
+   * con la passkey: la API lo dice con `puedeConCodigo: false`, y sin esa señal la web no ofrece el código.
+   */
+  puedeConCodigo: boolean;
 }
 
 interface EstadoDeReautenticacion {
@@ -24,13 +29,14 @@ export const useReautenticacion = create<EstadoDeReautenticacion>()(() => ({ pet
 
 const MINUTOS_POR_OMISION = 5;
 
-/** Lo que el diálogo necesita, de las extensiones del ProblemDetails (`accion`, `minutos`, `tienePasskey`). */
+/** Lo que el diálogo necesita, de las extensiones del ProblemDetails (`accion`, `minutos`, `tienePasskey`, `puedeConCodigo`). */
 export function peticionDesde(error: ErrorApi): PeticionDeReautenticacion {
-  const { accion, minutos, tienePasskey } = error.extensiones;
+  const { accion, minutos, tienePasskey, puedeConCodigo } = error.extensiones;
   return {
     accion: typeof accion === 'string' ? accion : '',
     minutos: typeof minutos === 'number' && Number.isFinite(minutos) && minutos > 0 ? minutos : MINUTOS_POR_OMISION,
     tienePasskey: tienePasskey !== false,
+    puedeConCodigo: puedeConCodigo === true,
   };
 }
 
@@ -51,7 +57,7 @@ export function solicitarReautenticacion(error: ErrorApi): Promise<boolean> {
   return promesa;
 }
 
-/** El diálogo terminó: `true` si la persona confirmó con su passkey, `false` si cerró o canceló. */
+/** El diálogo terminó: `true` si la persona confirmó (con su passkey o con el código del correo), `false` si cerró o canceló. */
 export function resolverReautenticacion(confirmada: boolean): void {
   const actual = enCurso;
   enCurso = null;

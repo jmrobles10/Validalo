@@ -2,6 +2,7 @@ import type {
   AntiguedadDocumentoDto,
   AreaDeRequisitoDto,
   AreaExpedienteDto,
+  ConclusionDeRevisionDto,
   DatoDeclaradoDto,
   ExpedienteDto,
   RequisitoExpedienteDto,
@@ -184,4 +185,9 @@ export function antiguedad(cambios: Partial<AntiguedadDocumentoDto> = {}): Antig
 export function requisitoConAntiguedad(antiguedadDelDocumento: AntiguedadDocumentoDto | null, cambios: Partial<RequisitoExpedienteDto> = {}): RequisitoExpedienteDto {
   const base = requisito(cambios);
   return { ...base, versionActual: base.versionActual ? { ...base.versionActual, antiguedad: antiguedadDelDocumento } : null };
+}
+
+/** Lo que la IA concluye de un documento en cualquier nivel (el servidor la manda en `requisito.conclusionDeRevision`): por omisión, «Aprobar» sin motivos y cruzado con lo declarado. */
+export function conclusionDeRevision(cambios: Partial<ConclusionDeRevisionDto> = {}): ConclusionDeRevisionDto {
+  return { sugerencia: 'Aprobar', nivel: 'Manual', motivos: [], cruzadoConLoDeclarado: true, antiguedadVerificada: false, sinVerificar: [], umbral: 0.85, diferencias: [], persona: null, ...cambios };
 }

@@ -339,6 +339,28 @@ public static class CruceConDocumento
         return campos;
     }
 
+    /// <summary>
+    /// El documento de una persona relacionada (cédula, pasaporte o certificado de antecedentes, ADR-0010) frente a lo que de ella se declaró (la ficha legal la registra y la
+    /// relación la lleva al requisito): el <b>número de identificación</b> (exacto, sin tipo ni ceros a la izquierda) y los <b>nombres y apellidos</b> (sin tildes ni mayúsculas
+    /// y sin importar el orden de las palabras) son críticos, con las mismas comparaciones de la cédula frente a la ficha. Si el documento no es legible, todo queda
+    /// <see cref="ResultadoDeCruce.NoVerificable"/>. Nulo si no hay nada declarado ni leído que comparar. Es evidencia, como todo cruce: no decide nada. Función pura.
+    /// </summary>
+    /// <param name="identificacionDeclarada">El número (sin el tipo ni el país: «1073250322»), no la clave.</param>
+    public static CruceDeSeccion? CruzarPersona(string? nombreDeclarado, string? identificacionDeclarada, string tipoDocumento, Guid documentoId, int versionDocumento,
+        IReadOnlyDictionary<string, JsonElement> extraidos, decimal confianza, bool legible, DateTimeOffset fecha)
+    {
+        var numero = LecturaDeHechos.Texto(extraidos, "numero");
+        var nombre = NombreCompleto(LecturaDeHechos.Texto(extraidos, "nombres"), LecturaDeHechos.Texto(extraidos, "apellidos")) ?? LecturaDeHechos.Texto(extraidos, "nombre");
+        var campos = new List<CampoCruzado>();
+        Agregar(campos, "numero", "Número de identificación", identificacionDeclarada, numero, Comparador.Identificacion, true);
+        Agregar(campos, "nombres", "Nombres y apellidos", nombreDeclarado, nombre, Comparador.Nombre, true);
+        if (campos.Count == 0)
+            return null;
+        if (!legible)
+            campos = [.. campos.Select(c => c with { Resultado = ResultadoDeCruce.NoVerificable, Detalle = "El documento no se lee con seguridad." })];
+        return new CruceDeSeccion(documentoId, versionDocumento, tipoDocumento.ToUpperInvariant(), confianza, legible, campos, fecha);
+    }
+
     private static string RolLegible(RolPersonaRelacionada rol) => rol switch
     {
         RolPersonaRelacionada.RepresentanteLegal => "Representante legal",

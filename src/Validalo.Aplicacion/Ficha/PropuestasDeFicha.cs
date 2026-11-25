@@ -24,7 +24,14 @@ namespace Validalo.Aplicacion.Ficha;
 /// </summary>
 public static class PropuestasDeFichaEndpoints
 {
+    /// <summary>Sin lectura automática y sin una razón conocida: el análisis aún no termina, la empresa no tiene plan o cupo, o el tipo no se lee.</summary>
     public const string MotivoSinLectura = "sin-lectura-automatica";
+
+    /// <summary>La IA leyó el documento y dijo que no se lee con seguridad (borroso, cortado, incompleto): el tercero sube una copia más clara (FD-10).</summary>
+    public const string MotivoIlegible = "documento-ilegible";
+
+    /// <summary>El análisis falló (fail-closed, IA-6) y la versión no se vuelve a analizar: el tercero diligencia con el documento a la vista (FD-10).</summary>
+    public const string MotivoLecturaFallida = "lectura-fallida";
 
     /// <summary>Resumen para «Mi información»: una fila por documento y sección con cambios (o sin lectura automática y más nuevo que la sección).</summary>
     [WolverineGet("/public/v1/ficha/propuestas")]
@@ -91,7 +98,7 @@ public static class PropuestasDeFichaEndpoints
                     // Sin lectura automática: solo se avisa si el documento es más nuevo que la sección y no la respalda ya.
                     var yaLaRespalda = vigente?.Soportes.Any(s => s.DocumentoId == documento.Id && s.Version == numero) == true;
                     if (!yaLaRespalda && (vigente is null || vigente.Fecha < version.CargadaEn))
-                        propuestas.Add(new PropuestaDeSeccionDto(codigo, definicion.Nombre, periodoDelDocumento, referencia, false, MotivoSinLectura, []));
+                        propuestas.Add(new PropuestaDeSeccionDto(codigo, definicion.Nombre, periodoDelDocumento, referencia, false, MotivoDeSinLectura(version), []));
                     continue;
                 }
 
@@ -106,6 +113,13 @@ public static class PropuestasDeFichaEndpoints
 
         return propuestas;
     }
+
+    /// <summary>
+    /// Por qué no hay lectura de la versión: ilegible (la IA la leyó y no se alcanza), fallida (el análisis falló) o, sin más datos, <see cref="MotivoSinLectura"/>
+    /// (todavía no termina o no hay quién lo pague: el tercero no sabe quién paga el análisis y nunca se le dice).
+    /// </summary>
+    private static string MotivoDeSinLectura(VersionDocumento version) =>
+        version.Ia is { Legible: false } ? MotivoIlegible : version.FalloIa is not null ? MotivoLecturaFallida : MotivoSinLectura;
 
     /// <summary>
     /// La propuesta sin lo que no pasaría la regla única de la sección (FM-16): cada campo propuesto que produce un error de

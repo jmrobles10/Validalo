@@ -24,6 +24,7 @@ import { exenciones } from './es-CO-exenciones';
 import { personasRelacionadas } from './es-CO-personas';
 import { erroresFuentesOficiales, fuentesOficiales } from './es-CO-fuentes-oficiales';
 import { evaluaciones } from './es-CO-evaluaciones';
+import { flujoRequisitos } from './es-CO-flujo-requisitos';
 import { erroresVigencias, flujoVigencia, vigenciaVinculo } from './es-CO-vigencias';
 import { matrizRiesgo } from './es-CO-matriz-riesgo';
 import { erroresSla, sla } from './es-CO-sla';
@@ -461,6 +462,7 @@ export const esCO = {
   condicionDeFicha,
   origenDelFlujo,
   flujoVigencia,
+  flujoRequisitos,
   vigenciaVinculo,
   informes,
   expedientes,

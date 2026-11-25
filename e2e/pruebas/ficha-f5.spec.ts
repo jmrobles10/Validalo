@@ -2,13 +2,14 @@ import { expect, test, type Page } from '@playwright/test';
 import { pdf } from '../soporte/archivos';
 import { abrirEmbebido } from '../soporte/embebido';
 import { abrirDesdeBandeja, aprobarArea, irASector, regionDeArea } from '../soporte/empresa';
-import { abrirEmpresa, aceptarInvitacion, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, subirVersionDesdeLaBoveda } from '../soporte/proveedor';
+import { abrirEmpresa, aceptarInvitacion, cerrarDialogoDeSubida, elegirArchivo, entrarPorInvitacion, esperarEstadoDelTercero, subirDocumento, subirVersionDesdeLaBoveda } from '../soporte/proveedor';
 import { activarIa, crearEscenario, invitar, nuevoTercero, publicarFlujoConFicha } from '../soporte/semilla';
 
 /**
  * Ficha maestra, F5 (docs/14 §5.2, §5.3, §6; registro FM-48…FM-55): el RUT exigido sirve de soporte de la ficha y se cruza con
  * ella; un RUT nuevo le propone al tercero los cambios (nunca se guardan solos) y, con la actualización ya abierta por ese RUT, la
- * sección que el tercero confirma entra a la misma actualización.
+ * sección que el tercero confirma entra a la misma actualización. «Subir un soporte» en la sección (FD-10): el tercero elige qué documento es y
+ * lo que sube es el RUT de su bóveda: queda marcado como soporte, la IA lo lee y la sección propone los valores.
  */
 
 const RUT = 'Registro Único Tributario';
@@ -70,7 +71,7 @@ test('el tercero sube un RUT nuevo, acepta la propuesta en el wizard y la empres
   }).toPass({ timeout: 45_000 });
   await expect(cruceInicial.getByRole('table', { name: /^Cruce con Registro Único Tributario · versión 1/ })).toBeVisible();
   await irASector(sofia, 'Información tributaria');
-  await expect(sofia.getByRole('region', { name: 'Soporte de la información' })).toContainText('Información general (versión 1)');
+  await expect(sofia.getByRole('region', { name: 'Soporte de la información' })).toContainText('Información general · versión 1');
   await aprobarArea(sofia, 'Revisión');
 
   // El tercero sube un RUT nuevo (otra dirección): la plataforma le ofrece actualizar su información desde él.
@@ -123,7 +124,7 @@ test('el tercero sube un RUT nuevo, acepta la propuesta en el wizard y la empres
   await paginaSofia.keyboard.press('Escape');
   await expect(sofia.getByRole('dialog')).toHaveCount(0);
   await irASector(sofia, 'Información tributaria');
-  await expect(sofia.getByRole('region', { name: 'Soporte de la información' })).toContainText('Información general (versión 2)');
+  await expect(sofia.getByRole('region', { name: 'Soporte de la información' })).toContainText('Información general · versión 2');
   await paginaSofia.screenshot({ path: 'test-results/ficha-f5-actualizacion.png', fullPage: true });
   await irASector(sofia, 'Aprobaciones');
 
@@ -131,6 +132,58 @@ test('el tercero sube un RUT nuevo, acepta la propuesta en el wizard y la empres
   await regionDeArea(sofia, 'Revisión').getByRole('button', { name: /^Aprobar área \(2 documentos\)/ }).click();
   await sofia.getByRole('dialog', { name: /^Aprobar Revisión/ }).getByRole('button', { name: /^Aprobar/ }).last().click();
   await expect(sofia.getByText(/Todas las áreas aprobaron el |Expediente .* aprobado/).first()).toBeVisible();
+});
+
+test('el tercero sube su RUT desde «Información general» diciendo qué documento es: queda como soporte, la IA lo lee y la sección propone los valores', async ({ page }) => {
+  const e = await crearEscenario();
+  await activarIa(e, e.sur);
+  await publicarFlujoConFicha(e, e.sur, 'CLIENTES_FICHA', e.sur.areas.revision!, [{ tipoDocumento: 'RUT' }, { seccion: 'FICHA_GENERAL' }]);
+  const tercero = { ...nuevoTercero(RAZON_SOCIAL) };
+  const invitacion = await invitar(e, e.sur, tercero, 'CLIENTE');
+  const nit = tercero.identificacion.numero;
+
+  await entrarPorInvitacion(page, invitacion);
+  await aceptarInvitacion(page, invitacion);
+  await page.getByRole('link', { name: /^Completar/ }).first().click();
+  await diligenciarGeneral(page, 'Calle 45 # 12-08');
+
+  // En la general de una jurídica «Subir un soporte» pregunta qué documento es (el RUT, la Cámara u otro): no se supone cuál. La lista de documentos es el grupo
+  // «Documento que respalda esta información»; la pregunta y el botón van debajo, en el mismo recuadro pero fuera de ese grupo.
+  const soporte = page.getByRole('group', { name: 'Documento que respalda esta información' });
+  const subirSoporte = page.getByRole('button', { name: 'Subir un soporte' });
+  await expect(subirSoporte).toBeDisabled();
+  await page.getByRole('combobox', { name: '¿Qué documento vas a subir?' }).click();
+  await expect(page.getByRole('option')).toHaveText(['Registro Único Tributario (RUT)', 'Cámara de comercio', 'Otro documento']);
+  await page.getByRole('option', { name: 'Registro Único Tributario (RUT)' }).click();
+  await subirSoporte.click();
+
+  // Se sube como el RUT de la bóveda (versión 1) y el diálogo se cierra con «Listo»: el tercero no sale de su sección.
+  await expect(page.getByRole('dialog', { name: 'Subir Registro Único Tributario' })).toBeVisible();
+  await elegirArchivo(page, rut(nit, 'Cl 80 # 10-20', 'v1'), `Es tu versión 1 de ${RUT}`);
+  await cerrarDialogoDeSubida(page);
+
+  // Queda marcado como soporte de la sección con su nombre real y la IA lo lee: la sección propone los valores (nada se guarda solo).
+  await expect(soporte.getByRole('checkbox', { name: new RegExp(`^${RUT} · versión 1`) })).toBeChecked();
+  const propuesta = page.getByRole('alert', { name: 'Tienes documentos más nuevos que esta sección' });
+  await expect(propuesta).toContainText('Tu RUT · versión 1', { timeout: 45_000 });
+  await propuesta.getByRole('button', { name: 'Ver los cambios de mi RUT' }).click();
+  await expect(propuesta.getByRole('table', { name: 'Datos que cambian según tu RUT' })).toContainText('Cl 80 # 10-20');
+  await page.screenshot({ path: 'test-results/ficha-f5-soporte-subido.png', fullPage: true });
+  await expect(page.getByRole('textbox', { name: 'Dirección', exact: true })).toHaveValue('Calle 45 # 12-08');
+
+  await propuesta.getByRole('button', { name: 'Usar los valores de mi RUT' }).click();
+  await expect(page.getByRole('textbox', { name: 'Dirección', exact: true })).toHaveValue('Cl 80 # 10-20');
+  const barra = page.getByRole('group', { name: 'Guardar la sección' });
+  await expect(barra.getByText('Lista: puedes continuar')).toBeVisible();
+  await barra.getByRole('button', { name: 'Guardar', exact: true }).click();
+  await expect(page.getByText('Guardaste Información general: está completa.')).toBeVisible();
+
+  // Es el mismo RUT que si lo hubiera subido desde la bóveda: el expediente que lo pide lo da por cargado y pasa a revisión.
+  await page.goto('/boveda');
+  await expect(page.getByRole('article', { name: RUT })).toBeVisible();
+  await page.goto('/empresas');
+  await abrirEmpresa(page, e.sur.nombre, 'CLIENTE');
+  await esperarEstadoDelTercero(page, 'EnRevision');
 });
 
 test('un RUT cuya razón social difiere de la general: la empresa no aprueba sin justificación y con ella queda escrita', async ({ page, browser }) => {

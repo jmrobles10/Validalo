@@ -8,7 +8,7 @@ import { IconoCarga } from '../shared/componentes';
 import { FormularioDeRecuperacion } from './FormularioDeRecuperacion';
 import type { OpcionesJson } from './estado';
 import { mensajeDeIngreso } from './mensajes';
-import { crearPasskey, firmarConPasskey, nombreSugeridoDePasskey } from './passkeys';
+import { crearPasskey, firmarConPasskeyConReintento, nombreSugeridoDePasskey } from './passkeys';
 
 const SIN_CREDENCIAL = { token: null, empresa: null } as const;
 
@@ -40,7 +40,7 @@ export interface PasoPasskeyProps {
 export function PasoVerificarPasskey({ desafio, opciones, alResultado, alVolver }: PasoPasskeyProps) {
   const { t } = useTranslation();
   const verificar = useMutation({
-    mutationFn: async () => verificarPasskeyIngreso({ desafio, respuesta: await firmarConPasskey(opciones) }, SIN_CREDENCIAL),
+    mutationFn: async () => verificarPasskeyIngreso({ desafio, respuesta: await firmarConPasskeyConReintento(opciones) }, SIN_CREDENCIAL),
     onSuccess: alResultado,
   });
   const intentada = useRef(false);

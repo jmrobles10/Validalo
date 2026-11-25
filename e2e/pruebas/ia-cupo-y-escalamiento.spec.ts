@@ -120,8 +120,9 @@ test('al agotar el cupo de IA el documento nuevo cae a una persona de inmediato,
   await expect(sofia.getByRole('heading', { level: 1, name: segundo.nombre })).toBeVisible();
   await irASector(sofia, 'Información tributaria');
   const documento = tarjetaDeDocumento(sofia, RUT);
-  // El aviso del documento sin lectura de IA: «Sin análisis automático: revísalo manualmente.» o, en la tarjeta nueva, «Sin lectura automática: revísalo y compáralo a mano…».
-  await expect(documento).toContainText(/Sin (análisis automático|lectura automática): revísalo/);
+  // El documento sin lectura de IA dice que se revisa a mano: con la empresa usando IA, la conclusión del bloque lo dice («La IA no pudo analizarlo; revísalo a mano.»); antes era el aviso
+  // «Sin análisis automático: revísalo manualmente.» o «Sin lectura automática: revísalo y compáralo a mano…».
+  await expect(documento.getByRole('region', { name: 'Conclusión de la IA' })).toContainText('La IA no pudo analizarlo; revísalo a mano.');
   await expect(documento.getByRole('region', { name: 'Revisión automática', exact: true })).toHaveCount(0);
   await expect(sofia.getByRole('region', { name: 'Decisión automática' })).toContainText('Requiere una persona');
   await expect(sofia.getByRole('region', { name: 'Decisión automática' })).toContainText('Sin análisis de IA');
@@ -177,9 +178,9 @@ test('un documento dudoso escala al modelo superior: la revisora ve la confianza
   await expect(async () => {
     await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
     await irASector(sofia, 'Información tributaria');
-    await expect(tarjetaDeDocumento(sofia, RUT).getByRole('region', { name: 'Decisión automática' })).toContainText('La IA sugiere revisar', { timeout: 1500 });
+    await expect(tarjetaDeDocumento(sofia, RUT).getByRole('region', { name: 'Conclusión de la IA' })).toContainText('Revisa antes de aprobar', { timeout: 1500 });
     await irASector(sofia, 'Cuenta bancaria');
-    await expect(tarjetaDeDocumento(sofia, BANCARIA).getByRole('region', { name: 'Decisión automática' })).toContainText('La IA sugiere aprobar', { timeout: 1500 });
+    await expect(tarjetaDeDocumento(sofia, BANCARIA).getByRole('region', { name: 'Conclusión de la IA' })).toContainText('Se sugiere aprobar', { timeout: 1500 });
   }).toPass({ timeout: 60_000 });
 
   // La certificación limpia la resolvió el modelo por omisión, sin escalar.
@@ -195,7 +196,8 @@ test('un documento dudoso escala al modelo superior: la revisora ve la confianza
   await expect(panelRut).toContainText(/Confianza 55\s?%/);
   await expect(tarjetaDeDocumento(sofia, RUT)).toContainText('Revisado por un modelo de mayor capacidad');
   await expect(tarjetaDeDocumento(sofia, RUT)).toContainText('gpt-6.1-terra');
-  await expect(tarjetaDeDocumento(sofia, RUT).getByRole('region', { name: 'Decisión automática' })).toContainText('Confianza baja');
+  // La conclusión dice por qué hay que revisarlo: la confianza (55 %) bajo el umbral.
+  await expect(tarjetaDeDocumento(sofia, RUT).getByRole('region', { name: 'Conclusión de la IA' })).toContainText(/La confianza del análisis \(55\s?%\) está bajo el umbral/);
   await capturar(paginaSofia, 'ia-escalamiento-expediente');
   await irASector(sofia, 'Aprobaciones');
   await expect(regionDeArea(sofia, 'Revisión').getByRole('button', { name: /^Aprobar área/ })).toBeVisible();

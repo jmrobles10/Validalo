@@ -89,8 +89,8 @@ Las palabras de esta página son las que usan la aplicación, la API y los docum
 | Permiso (scope) | Una capacidad concreta, por ejemplo `vinculos:escribir`. Los roles y las llaves son conjuntos de permisos. |
 | Identidad delegada | El sistema integrado actúa en nombre de una persona suya con una aserción firmada (`X-Usuario-Delegado`). |
 | Aserción | Un JWT firmado con la clave privada del sistema: vale 5 minutos y una sola vez. |
-| Passkey | Credencial WebAuthn de una persona; Administrador, Oficial y Auditor deben tenerla. |
-| Confirmar con passkey (reautenticación) | Repetir la passkey para acciones sensibles; vale 5 minutos. |
+| Passkey | Credencial WebAuthn de una persona; es opcional (la exigen solo los operadores de Plataforma y el grupo que lo active). |
+| Confirmar con passkey o con un código del correo (reautenticación) | Repetir la passkey o escribir el código que llega al correo para acciones sensibles; vale 5 minutos. |
 | Idempotency-Key | Cabecera que identifica una operación de creación para que un reintento nunca la duplique. |
 | Evento público | Lo que pasó (`certificado.emitido`, `vinculo.bloqueado`…): llega por webhook firmado, por pull o en pantalla. |
 | Cursor | Posición creciente de un evento en el grupo; sirve para leer por pull sin saltarse ninguno. |

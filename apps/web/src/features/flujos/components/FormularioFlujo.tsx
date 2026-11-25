@@ -196,7 +196,7 @@ export function FormularioFlujo({ borrador, onCambiar, areas, tipos, tiposDocume
         />
       </Tarjeta>
 
-      <Tarjeta titulo={t('flujos.editor.documentos')}>
+      <Tarjeta titulo={t('flujoRequisitos.titulo')}>
         <EditorRequisitos
           requisitos={borrador.requisitos}
           etapas={borrador.etapas}

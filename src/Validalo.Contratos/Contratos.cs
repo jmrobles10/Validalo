@@ -133,7 +133,7 @@ public sealed record CrearUsuarioDto(
 
 public sealed record AsignarRolesDto(IReadOnlyList<RolAsignadoDto> Roles);
 
-/// <param name="ExigePasskey">Un rol suyo (o el grupo) le exige passkey para entrar directo.</param>
+/// <param name="ExigePasskey">Su grupo exige passkey a todas sus personas (opción explícita del grupo): sin ella el código del correo basta para entrar. Ningún rol la exige.</param>
 /// <param name="Passkeys">Passkeys activas que tiene registradas.</param>
 /// <param name="Grupos">Grupos de acceso propios que tiene asignados (los grupos predefinidos son sus <see cref="Roles"/>).</param>
 public sealed record UsuarioDto(

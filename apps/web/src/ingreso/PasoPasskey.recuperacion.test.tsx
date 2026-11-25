@@ -10,22 +10,25 @@ import { PasoVerificarPasskey } from './PasoPasskey';
 let navegador: NavegadorSimulado | null = null;
 
 afterEach(() => {
+  vi.restoreAllMocks();
   navegador?.restaurar();
   navegador = null;
   reiniciarCliente();
 });
 
-function montar(alResultado: (paso: PasoDeIngresoDto) => void = () => undefined) {
-  navegador = simularNavegadorConPasskeys();
-  // La passkey del navegador no está a la mano: la petición se rechaza, como si la persona no la tuviera.
-  navegador.get.mockRejectedValue(new DOMException('cancelada', 'NotAllowedError'));
+async function montar(alResultado: (paso: PasoDeIngresoDto) => void = () => undefined) {
+  // La passkey del navegador no está a la mano: la persona cierra la ventana pasado un rato (más que el umbral de los reintentos), como si no la tuviera.
+  navegador = simularNavegadorConPasskeys({ falloDeLaModal: 'NotAllowedError', demoraDelFallo: 500, repetirElFallo: true });
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   montarPantalla(<PasoVerificarPasskey desafio="d1" opciones={OPCIONES_DE_FIRMA} alResultado={alResultado} alVolver={() => undefined} />);
+  // Mientras espera la passkey los botones están ocupados: se sigue cuando ya explicó que no se completó.
+  await screen.findByText('No se completó el paso de la passkey. Inténtalo de nuevo cuando quieras.');
   return userEvent.setup();
 }
 
 describe('recuperar el acceso sin la passkey (PI-18)', () => {
   it('ofrece usar un código de recuperación y volver a la passkey', async () => {
-    const usuario = montar();
+    const usuario = await montar();
 
     await usuario.click(await screen.findByRole('button', { name: 'No tengo mi passkey' }));
     expect(screen.getByRole('heading', { name: 'Usa un código de recuperación' })).toBeInTheDocument();
@@ -38,7 +41,7 @@ describe('recuperar el acceso sin la passkey (PI-18)', () => {
     const siguiente: PasoDeIngresoDto = { estado: 'RegistrarPasskey', desafio: 'd1', opciones: OPCIONES_DE_FIRMA };
     const peticiones = simularApi({ 'POST /api/v1/ingreso/recuperacion': siguiente });
     const alResultado = vi.fn();
-    const usuario = montar(alResultado);
+    const usuario = await montar(alResultado);
     await usuario.click(await screen.findByRole('button', { name: 'No tengo mi passkey' }));
     const campo = screen.getByLabelText('Código de recuperación');
     const usar = screen.getByRole('button', { name: 'Usar el código' });
@@ -60,7 +63,7 @@ describe('recuperar el acceso sin la passkey (PI-18)', () => {
     simularApi({
       'POST /api/v1/ingreso/recuperacion': new ProblemaSimulado(422, 'codigo-de-recuperacion-invalido', 'Ese código de recuperación no es válido o ya se usó. Te quedan 2 intentos.'),
     });
-    const usuario = montar();
+    const usuario = await montar();
     await usuario.click(await screen.findByRole('button', { name: 'No tengo mi passkey' }));
 
     await usuario.type(screen.getByLabelText('Código de recuperación'), 'AB3CDEFGH2');
@@ -72,7 +75,7 @@ describe('recuperar el acceso sin la passkey (PI-18)', () => {
 
   it('con los intentos agotados pide empezar de nuevo', async () => {
     simularApi({ 'POST /api/v1/ingreso/recuperacion': new ProblemaSimulado(429, 'recuperacion-bloqueada', 'agotados') });
-    const usuario = montar();
+    const usuario = await montar();
     await usuario.click(await screen.findByRole('button', { name: 'No tengo mi passkey' }));
 
     await usuario.type(screen.getByLabelText('Código de recuperación'), 'AB3CDEFGH2');

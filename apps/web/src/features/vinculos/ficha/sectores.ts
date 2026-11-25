@@ -25,8 +25,13 @@ export const SECTORES = [
 
 export type Sector = (typeof SECTORES)[number];
 
-/** Sectores donde van los requisitos del expediente (y las secciones de la ficha). */
-export type SectorDeRequisito = 'general' | 'sst' | 'cuenta' | 'tributaria' | 'financiera' | 'documentos' | 'autorizacion' | 'legal' | 'cumplimiento';
+/**
+ * Sectores donde van los requisitos del expediente (y las secciones de la ficha), en el orden del menú lateral: los de información que
+ * reciben requisitos (Datos de contacto no) y, al final, «documentos» (los adjuntos que no tienen sector).
+ */
+export const SECTORES_DE_REQUISITO = ['general', 'sst', 'cuenta', 'tributaria', 'financiera', 'autorizacion', 'legal', 'cumplimiento', 'documentos'] as const;
+
+export type SectorDeRequisito = (typeof SECTORES_DE_REQUISITO)[number];
 
 export const ICONO_SECTOR: Record<Sector, LucideIcon> = {
   general: Landmark,
@@ -92,6 +97,16 @@ export function sectorDeSeccion(seccion: string): SectorDeRequisito {
 }
 
 /**
+ * El sector de un documento por su tipo canónico; un tipo propio (sin canónico en el mapa) va con la primera sección que respalda
+ * (`seccionRespaldada`) y, si no respalda ninguna, en «Documentos adjuntos requeridos».
+ */
+export function sectorDeDocumento(tipoCanonico: string | null | undefined, seccionRespaldada?: string): SectorDeRequisito {
+  const porTipo = tipoCanonico ? SECTOR_DE_TIPO[tipoCanonico] : undefined;
+  if (porTipo) return porTipo;
+  return seccionRespaldada ? sectorDeSeccion(seccionRespaldada) : 'documentos';
+}
+
+/**
  * Dónde va un requisito: los documentos de las personas relacionadas (socios, representantes), en Información legal como en el SRM;
  * una sección de la ficha, en su sector; un documento, por su tipo canónico; un tipo propio, con la primera sección que respalda y, si no
  * respalda ninguna, en «Documentos adjuntos requeridos».
@@ -99,11 +114,7 @@ export function sectorDeSeccion(seccion: string): SectorDeRequisito {
 export function sectorDeRequisito(r: RequisitoExpedienteDto): SectorDeRequisito {
   if (r.persona) return 'legal';
   if (r.seccion) return sectorDeSeccion(r.seccion.seccion);
-  const canonico = r.tipoDocumento.tipoCanonico;
-  const porTipo = canonico ? SECTOR_DE_TIPO[canonico] : undefined;
-  if (porTipo) return porTipo;
-  const respaldada = r.soporteDeSecciones?.secciones[0];
-  return respaldada ? sectorDeSeccion(respaldada.seccion) : 'documentos';
+  return sectorDeDocumento(r.tipoDocumento.tipoCanonico, r.soporteDeSecciones?.secciones[0]?.seccion);
 }
 
 const RESUELTOS = new Set(['Aprobado', 'Eximido', 'NoAplica']);

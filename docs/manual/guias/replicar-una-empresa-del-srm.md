@@ -26,7 +26,7 @@ Cada paso dice si es **Obligatorio** (sin él el flujo no avanza) u **Opcional**
 
 Tres cosas que conviene saber antes:
 
-- **No hay contraseñas.** Las personas de la empresa entran con su correo y un código de 6 dígitos que llega a Mailpit. El **Administrador**, el **Oficial de cumplimiento** y el **Auditor** además deben registrar una **passkey** la primera vez (huella, rostro o PIN de Windows Hello). El **Revisor** no la necesita. Si tu equipo no tiene Windows Hello, en Chrome puedes usar *DevTools › More tools › WebAuthn › Enable virtual authenticator environment*, pero esa passkey se pierde al cerrar DevTools: prefiere Windows Hello.
+- **No hay contraseñas.** Las personas de la empresa entran con su correo y un código de 6 dígitos que llega a Mailpit. Ningún rol exige una **passkey**: el código basta, aun para el **Administrador**, el **Oficial de cumplimiento** y el **Auditor**; si quieres entrar más rápido, registra una desde Mi cuenta (huella, rostro o PIN de Windows Hello). Si tu equipo no tiene Windows Hello, en Chrome puedes usar *DevTools › More tools › WebAuthn › Enable virtual authenticator environment*, pero esa passkey se pierde al cerrar DevTools: prefiere Windows Hello.
 - **Usarás varias personas a la vez.** La sesión vive en una cookie del navegador, así que para tener a dos personas abiertas al tiempo usa **perfiles distintos de Chrome** (o Chrome y Edge), o una ventana de incógnito. El tercero va en el puerto 5181, que es otro sitio, y no choca con la app.
 - **Los correos pueden ser inventados.** Mailpit atrapa cualquier dirección. Usa el dominio `.test` para no confundirte con correos reales.
 
@@ -34,9 +34,9 @@ Tres cosas que conviene saber antes:
 
 | Quién | Nombre | Correo | Rol |
 |---|---|---|---|
-| Administrador del grupo | Ana Administradora | `ana@andina.test` | Administrador de todo el grupo (passkey) |
+| Administrador del grupo | Ana Administradora | `ana@andina.test` | Administrador de todo el grupo (passkey opcional) |
 | Revisora de compras | Rita Revisora | `rita@andina.test` | Revisor en la empresa (sin passkey) |
-| Oficial de cumplimiento | Óscar Oficial | `oscar@andina.test` | Oficial de cumplimiento en la empresa (passkey) |
+| Oficial de cumplimiento | Óscar Oficial | `oscar@andina.test` | Oficial de cumplimiento en la empresa (passkey opcional) |
 | Proveedor (tercero) | Ferretería El Tornillo S.A.S., NIT 900777888 | `compras@tornillo.test` | — |
 
 ## Parte 1. Los conceptos, en lenguaje llano
@@ -196,7 +196,7 @@ Sin plan de IA los documentos se revisan **a mano** (nivel Manual), que es como 
 
 1. En otro perfil del navegador abre `http://localhost:5173`, escribe `ana@andina.test` y pulsa **Continuar**.
 2. En Mailpit abre el correo «Tu código para ingresar a Valídalo» y escribe el código (vale 5 minutos y admite 5 intentos).
-3. Como Ana es Administradora, Valídalo le pide **registrar una passkey**: acepta y usa tu huella, rostro o PIN de Windows Hello. Sin passkey el código solo sirve para registrarla.
+3. Valídalo abre la sesión con el código y te **sugiere registrar una passkey** (es opcional): si quieres, acéptala desde Mi cuenta y usa tu huella, rostro o PIN de Windows Hello.
 
 **Comprueba:** entras a `Inicio` de Constructora Andina con la barra lateral de Administrador y el engranaje de **Configuración**. Si recargas, no pide código otra vez.
 
@@ -432,9 +432,9 @@ El recorrido completo, con todos los hitos y sus eventos, está en [Del vínculo
 |---|---|---|
 | No llega el código a Mailpit | El correo no tiene cuenta: Valídalo responde igual para no revelar quién existe, pero no envía nada. | Revisa que el correo esté bien escrito y que la persona exista en Usuarios y roles. |
 | El código ya no sirve | Vence a los 5 minutos y admite 5 intentos. | Pide otro desde la pantalla de ingreso. |
-| Después del código pide registrar una passkey | El rol (Administrador, Oficial, Auditor) la exige. | Regístrala con Windows Hello; sin ella no se entra. |
-| «Tu rol ahora exige passkey» y la sesión se cierra | Le diste a alguien un rol que exige passkey. | Que entre de nuevo y la registre. |
-| Al cambiar roles pide confirmar con la passkey | Cambiar roles, desactivar personas o crear API keys piden reautenticación de los últimos 5 minutos. | Confirma con la passkey. |
+| Después del código pide registrar una passkey | El grupo activó «Exigir passkey a todas las personas» (o eres operador de Plataforma). | Regístrala con Windows Hello, o apaga la opción en Configuración › Ingreso. |
+| «Tu grupo ahora exige passkey» y la sesión se cierra | Activaste «Exigir passkey a todas las personas» y la sesión se abrió solo con el código. | Que entre de nuevo y la registre. |
+| Al cambiar roles pide confirmar con la passkey o con un código | Cambiar roles, desactivar personas o crear API keys piden reautenticación de los últimos 5 minutos. | Confirma con la passkey o con el código que te llega al correo (Mailpit). |
 | El tercero ve «aún no publica sus textos» | Faltan la autorización o los términos de la empresa. | Paso 4. |
 | El tercero aceptó, pero no hay expediente («aperturas pendientes») | No hay flujo publicado por defecto para Proveedor. | Paso 10: publica y marca por defecto. |
 | El flujo no se publica | Hay un área sin requisitos, más aprobadores que miembros, un área inactiva o repetida, o cambios sin guardar. | Corrige lo que el editor marca en rojo y guarda el borrador antes de publicar. |

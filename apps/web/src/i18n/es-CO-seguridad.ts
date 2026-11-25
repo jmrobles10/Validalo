@@ -1,15 +1,20 @@
 /**
- * Textos es-CO de la seguridad del ingreso (PI-13, PI-18): reautenticación con la passkey para acciones sensibles y los errores nuevos del inicio de sesión único
- * y de la consola. Se integran en `es-CO.ts`.
+ * Textos es-CO de la seguridad del ingreso (PI-13, PI-18, PI-20): reautenticación con la passkey o con un código del correo para acciones sensibles y los errores
+ * nuevos del inicio de sesión único y de la consola. Se integran en `es-CO.ts`.
  */
 
 export const reautenticacion = {
   titulo: 'Confirma que eres tú',
   texto: 'Para {{accion}}, confirma con tu passkey.',
+  textoConCodigo: 'Para {{accion}}, confirma con tu passkey o con un código que te enviamos al correo.',
   ayuda_one: 'Con esto no te lo volvemos a pedir durante {{count}} minuto.',
   ayuda_other: 'Con esto no te lo volvemos a pedir durante {{count}} minutos.',
   confirmar: 'Usar mi passkey',
   esperando: 'Esperando tu passkey…',
+  conCodigo: 'Enviarme un código al correo',
+  codigoTexto: 'Para {{accion}}, escribe el código de 6 dígitos que te enviamos al correo de tu cuenta.',
+  codigoEnviado: 'Te enviamos el código. Vence a las {{hora}} y sirve una sola vez.',
+  enviandoCodigo: 'Enviando el código a tu correo…',
   sinPasskeyTitulo: 'Registra una passkey',
   sinPasskeyTexto: 'Para {{accion}} necesitas una passkey: es la forma de confirmar que eres tú. Regístrala en Mi cuenta y vuelve a intentarlo.',
   irAMiCuenta: 'Ir a Mi cuenta',
@@ -63,6 +68,8 @@ export const erroresSeguridad = {
   'sso-sin-dominios': 'Verifica al menos un dominio de correo antes de activar el inicio de sesión único (y no quites el último mientras esté activo).',
   'sso-error-interno': 'No pudimos terminar el ingreso con tu empresa. Inténtalo de nuevo o usa el código de tu correo.',
   'recuperacion-bloqueada': 'Se agotaron los intentos con códigos de recuperación. Empieza de nuevo.',
+  'limite-de-envios': 'Ya pediste varios códigos en la última hora. Espera un poco o confirma con tu passkey.',
+  'reautenticacion-solo-con-passkey': 'Tu cuenta confirma las acciones sensibles solo con una passkey: úsala para continuar.',
   'sin-passkey': 'Registra una passkey en Mi cuenta para hacer esto.',
   'sin-operadores-con-passkey': 'No puedes dejar la consola sin ningún operador con passkey: registra una antes de seguir.',
   'auto-desactivacion': 'No puedes desactivarte a ti mismo: pídeselo a otro operador.',

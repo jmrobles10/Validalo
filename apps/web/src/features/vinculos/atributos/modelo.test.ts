@@ -1,6 +1,6 @@
 import type { AtributoPermitidoDto } from '@validalo/api-client';
 import { describe, expect, it } from 'vitest';
-import { cuerpoDeAtributos, validarAtributos, valoresIniciales } from './modelo';
+import { cuerpoDeAtributos, etiquetaDeAtributo, validarAtributos, valoresIniciales } from './modelo';
 
 const ATRIBUTOS: AtributoPermitidoDto[] = [
   { clave: 'nivelRiesgo', tipo: 'Opcion', obligatorio: true, opciones: ['Bajo', 'Medio', 'Alto'] },
@@ -39,5 +39,19 @@ describe('atributos del vínculo en un formulario', () => {
     expect(cuerpoDeAtributos(ATRIBUTOS, { nivelRiesgo: 'Bajo', categorias: [], montoEstimado: '', vigencia: '', critico: '', nota: '   ' })).toEqual({ nivelRiesgo: 'Bajo' });
     // Un atributo que el formulario no conoce no viaja.
     expect(cuerpoDeAtributos(ATRIBUTOS, { nivelRiesgo: 'Bajo', otro: 'x' })).toEqual({ nivelRiesgo: 'Bajo' });
+  });
+
+  it('la etiqueta es el código del atributo en texto legible: separa las palabras, respeta las siglas y capitaliza la primera', () => {
+    expect(etiquetaDeAtributo('montoEstimado')).toBe('Monto estimado');
+    expect(etiquetaDeAtributo('nivelRiesgo')).toBe('Nivel riesgo');
+    expect(etiquetaDeAtributo('categorias')).toBe('Categorias');
+    expect(etiquetaDeAtributo('nivel_riesgo')).toBe('Nivel riesgo');
+    expect(etiquetaDeAtributo('nivel-de-riesgo')).toBe('Nivel de riesgo');
+    expect(etiquetaDeAtributo('MONTO_ESTIMADO')).toBe('Monto estimado');
+    expect(etiquetaDeAtributo('valorCOP')).toBe('Valor COP');
+    expect(etiquetaDeAtributo('NITProveedor')).toBe('NIT proveedor');
+    expect(etiquetaDeAtributo('plazo30Dias')).toBe('Plazo30 dias');
+    expect(etiquetaDeAtributo('  nota ')).toBe('Nota');
+    expect(etiquetaDeAtributo('')).toBe('');
   });
 });

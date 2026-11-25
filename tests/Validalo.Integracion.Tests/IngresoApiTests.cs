@@ -9,7 +9,8 @@ namespace Validalo.Integracion.Tests;
 
 /// <summary>
 /// Ingreso directo sin contraseñas (ING-1…ING-7): código por correo (vencimiento, un solo uso, límites, sin revelar si el correo existe), modos por
-/// grupo, passkeys obligatorias por rol, ingreso solo con passkey, renovación con inactividad, Mi cuenta, gestión por administradores y auditoría.
+/// grupo, passkey opcional (el código basta para cualquier rol; solo la exige el grupo que activa «passkey para todos» y los operadores de Plataforma, PI-20),
+/// ingreso solo con passkey, renovación con inactividad, Mi cuenta, gestión por administradores y auditoría.
 /// </summary>
 [Collection(Colecciones.Api4)]
 [Trait("Requiere", "Docker")]
@@ -58,7 +59,7 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task Un_codigo_correcto_sin_rol_que_exija_passkey_abre_la_sesion_con_cookie_y_los_permisos_de_sus_roles()
+    public async Task Un_codigo_correcto_abre_la_sesion_con_cookie_y_los_permisos_de_sus_roles()
     {
         var g = await GrupoAsync();
         var revisor = await UsuarioAsync(g, "Revisor");
@@ -183,16 +184,56 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
         await Anonimo("/api/v1/ingreso/codigo", new SolicitarCodigoDto(CorreoNuevo()), 200); // otra IP no se afecta
     }
 
-    // ---------- passkeys: obligatoria por rol, solo passkey, revocación ----------
+    // ---------- passkeys: opcional salvo que el grupo la pida a todos, solo passkey, revocación ----------
 
     [Theory]
     [InlineData("Administrador")]
     [InlineData("OficialCumplimiento")]
     [InlineData("Auditor")]
-    public async Task Los_roles_que_exigen_passkey_no_entran_con_solo_el_codigo_y_la_registran_en_el_mismo_ingreso(string rol)
+    public async Task Ningun_rol_exige_passkey_el_codigo_basta_para_entrar_sin_que_se_le_pida_registrarla_y_solo_se_le_sugiere(string rol)
     {
         var g = await GrupoAsync();
         var usuario = await UsuarioAsync(g, rol);
+        usuario.ExigePasskey.ShouldBeFalse();
+
+        var (paso, _) = await IngresarConCodigoAsync(usuario.Correo);
+
+        paso.Estado.ShouldBe("Sesion");
+        paso.Opciones.ShouldBeNull();
+        paso.Sesion!.Metodo.ShouldBe("Codigo");
+        paso.Sesion.SugerirPasskey.ShouldBeTrue();
+        var yo = await ObtenerAsync<MiCuentaDto>("/api/v1/mi-cuenta", paso.Sesion.Token);
+        (yo.ExigePasskey, yo.Roles.Single().Rol).ShouldBe((false, rol));
+    }
+
+    [Fact]
+    public async Task Un_administrador_con_passkey_registrada_entra_con_solo_el_codigo_y_la_passkey_sigue_siendo_otra_forma_de_entrar()
+    {
+        var g = await GrupoAsync();
+        var admin = await UsuarioAsync(g, "Administrador", deTodoElGrupo: true);
+        var autenticador = await RegistrarPasskeyAsync(admin.Correo);
+
+        // El código solo abre la sesión aunque tenga passkeys: no hay segundo paso, y ya no se le sugiere registrar otra.
+        var (paso, _) = await IngresarConCodigoAsync(admin.Correo, numero: 2);
+
+        (paso.Estado, paso.Opciones).ShouldBe(("Sesion", null));
+        (paso.Sesion!.Metodo, paso.Sesion.SugerirPasskey).ShouldBe(("Codigo", false));
+        (await ObtenerAsync<YoDto>("/api/v1/yo", paso.Sesion.Token)).ActorId.ShouldBe(admin.Id.ToString());
+        (await ObtenerAsync<YoDto>("/api/v1/yo", paso.Sesion.Token, g.Empresa.Id)).Permisos.ShouldContain("usuarios:administrar");
+
+        // Y entrar solo con la passkey sigue funcionando.
+        (await EntrarConPasskeyAsync(autenticador)).Metodo.ShouldBe("Passkey");
+    }
+
+    [Theory]
+    [InlineData("Administrador")]
+    [InlineData("OficialCumplimiento")]
+    [InlineData("Auditor")]
+    public async Task Un_grupo_con_passkey_para_todos_no_deja_entrar_con_solo_el_codigo_y_la_registran_en_el_mismo_ingreso(string rol)
+    {
+        var g = await GrupoAsync(passkeyParaTodos: true);
+        var usuario = await UsuarioAsync(g, rol);
+        usuario.ExigePasskey.ShouldBeTrue();
 
         var paso = (await VerificarCodigoAsync(await PedirCodigoAsync(usuario.Correo), await CodigoDelCorreoAsync(usuario.Correo))).Paso;
 
@@ -222,13 +263,13 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
         (await ObtenerAsync<YoDto>("/api/v1/yo", sesion.Token, g.Empresa.Id)).Permisos.ShouldContain("usuarios:administrar");
         var usuarios = await ObtenerAsync<List<UsuarioDto>>("/api/v1/usuarios", sesion.Token);
         usuarios.Single(u => u.Id == admin.Id).Passkeys.ShouldBe(1);
-        usuarios.Single(u => u.Id == admin.Id).ExigePasskey.ShouldBeTrue();
+        usuarios.Single(u => u.Id == admin.Id).ExigePasskey.ShouldBeFalse(); // la tiene, pero ningún rol se la exige
     }
 
     [Fact]
-    public async Task Con_passkey_el_codigo_solo_no_abre_sesion_y_pide_la_passkey_como_segundo_paso()
+    public async Task Con_passkey_para_todos_el_codigo_solo_no_abre_sesion_y_pide_la_passkey_como_segundo_paso()
     {
-        var g = await GrupoAsync();
+        var g = await GrupoAsync(passkeyParaTodos: true);
         var admin = await UsuarioAsync(g, "Administrador");
         var autenticador = await RegistrarPasskeyAsync(admin.Correo);
 
@@ -244,13 +285,13 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task Un_grupo_puede_exigir_passkey_a_todos_y_un_revisor_con_passkey_registrada_ya_no_entra_con_solo_el_codigo()
+    public async Task Un_grupo_puede_exigir_passkey_a_todos_a_proposito_y_en_uno_que_no_la_exige_tener_una_no_quita_el_codigo()
     {
         var g = await GrupoAsync(passkeyParaTodos: true);
         var revisor = await UsuarioAsync(g, "Revisor");
         (await VerificarCodigoAsync(await PedirCodigoAsync(revisor.Correo), await CodigoDelCorreoAsync(revisor.Correo))).Paso.Estado.ShouldBe("RegistrarPasskey");
 
-        // Un revisor de un grupo que no la exige puede registrarla desde Mi cuenta; desde entonces el código solo ya no lo deja entrar.
+        // Un revisor de un grupo que no la exige puede registrarla desde Mi cuenta; el código solo sigue abriéndole la sesión.
         var libre = await GrupoAsync();
         var otro = await UsuarioAsync(libre, "Revisor");
         var (paso, _) = await IngresarConCodigoAsync(otro.Correo);
@@ -260,8 +301,23 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
         await PostJsonAsync<PasskeyDto>("/api/v1/mi-cuenta/passkeys", new RegistrarPasskeyDto(opciones.Desafio, autenticador.Registrar(opciones.Opciones), "Llave"), token);
 
         var siguiente = (await VerificarCodigoAsync(await PedirCodigoAsync(otro.Correo), await CodigoDelCorreoAsync(otro.Correo, 2))).Paso;
-        siguiente.Estado.ShouldBe("PasskeyRequerida");
-        siguiente.Sesion.ShouldBeNull();
+        (siguiente.Estado, siguiente.Sesion!.Metodo, siguiente.Sesion.SugerirPasskey).ShouldBe(("Sesion", "Codigo", false));
+    }
+
+    [Fact]
+    public async Task La_opcion_passkey_para_todos_nace_apagada_y_un_grupo_que_la_activa_la_exige_hasta_que_la_apaga()
+    {
+        var g = await GrupoAsync();
+        (await ApiAsync<ConfiguracionDeIngresoDto>("GET", "/api/v1/configuracion/ingreso", g.Admin, null, null, 200)).PasskeyParaTodos.ShouldBeFalse();
+        var persona = await UsuarioAsync(g, "Administrador", deTodoElGrupo: true);
+        (await IngresarConCodigoAsync(persona.Correo)).Paso.Estado.ShouldBe("Sesion");
+
+        await ApiAsync<ConfiguracionDeIngresoDto>("PUT", "/api/v1/configuracion/ingreso", g.Admin, null, new ConfiguracionDeIngresoDto(["Directo"], 8, 30, true), 200);
+        (await UsuariosDelGrupoAsync(g)).Single(u => u.Id == persona.Id).ExigePasskey.ShouldBeTrue();
+        (await VerificarCodigoAsync(await PedirCodigoAsync(persona.Correo), await CodigoDelCorreoAsync(persona.Correo, 2))).Paso.Estado.ShouldBe("RegistrarPasskey");
+
+        await ApiAsync<ConfiguracionDeIngresoDto>("PUT", "/api/v1/configuracion/ingreso", g.Admin, null, new ConfiguracionDeIngresoDto(["Directo"], 8, 30, false), 200);
+        (await IngresarConCodigoAsync(persona.Correo, numero: 3)).Paso.Estado.ShouldBe("Sesion");
     }
 
     [Fact]
@@ -337,7 +393,7 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
         (await CodigoDeErrorAsync(await Anonimo("/api/v1/ingreso/passkey/verificar", new VerificarPasskeyDto(o.Desafio, perdida.Firmar(o.Opciones)), 401))).ShouldBe("passkey-revocada");
         (await ApiAsync<List<PasskeyDto>>("GET", $"/api/v1/usuarios/{admin.Id}/passkeys", g.Admin, null, null, 200)).ShouldHaveSingleItem().Activa.ShouldBeFalse();
 
-        // Recuperación: el código del correo solo sirve para registrar otra (el rol la exige).
+        // Recuperación: la persona entra con el código del correo (ningún rol exige passkey) y registra otra desde Mi cuenta.
         var nueva = await RegistrarPasskeyAsync(admin.Correo);
         (await EntrarConPasskeyAsync(nueva)).Metodo.ShouldBe("Passkey");
         (await ApiAsync<List<PasskeyDto>>("GET", $"/api/v1/usuarios/{admin.Id}/passkeys", g.Admin, null, null, 200)).Count(p => p.Activa).ShouldBe(1);
@@ -519,10 +575,12 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
         var revisor = await UsuarioAsync(g, "Revisor");
         var (paso, resultado) = await IngresarConCodigoAsync(revisor.Correo);
 
-        // Un rol que exige passkey cierra la sesión que solo tenía el código.
+        // Un rol distinto se aplica a los permisos del token renovado y ya no cierra la sesión que solo tenía el código (ningún rol exige passkey).
         await ApiAsync<UsuarioDto>("PUT", $"/api/v1/usuarios/{revisor.Id}/roles", g.Admin, null,
             new AsignarRolesDto([new RolAsignadoDto("Auditor", g.Empresa.Id)]), 200);
-        (await CodigoDeErrorAsync(await RenovarAsync(ValorCookie(resultado), 401))).ShouldBe("passkey-requerida");
+        var renovada = (await (await RenovarAsync(ValorCookie(resultado), 200)).ReadAsJsonAsync<SesionDirectaDto>())!;
+        renovada.Metodo.ShouldBe("Codigo");
+        (await ObtenerAsync<YoDto>("/api/v1/yo", renovada.Token)).Roles.ShouldHaveSingleItem().Rol.ShouldBe("Auditor");
 
         var otro = await UsuarioAsync(g, "Revisor");
         var (sesion, cookie) = await IngresarConCodigoAsync(otro.Correo);
@@ -535,12 +593,36 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
         _ = paso;
     }
 
+    [Fact]
+    public async Task Activar_passkey_para_todos_cierra_en_su_siguiente_renovacion_las_sesiones_abiertas_con_solo_el_codigo()
+    {
+        var g = await GrupoAsync();
+        var admin = await UsuarioAsync(g, "Administrador", deTodoElGrupo: true);
+        var (sesionConCodigo, resultado) = await IngresarConCodigoAsync(admin.Correo);
+        var autenticador = await RegistrarPasskeyAsync(admin.Correo);
+        var conPasskey = await EntrarConPasskeyAsync(autenticador);
+        _ = sesionConCodigo;
+
+        // Mientras el grupo no la exija, la sesión abierta con el código se renueva aunque ya tenga passkeys.
+        var cookieCodigo = ValorCookie(await RenovarAsync(ValorCookie(resultado), 200));
+        await ApiAsync<ConfiguracionDeIngresoDto>("PUT", "/api/v1/configuracion/ingreso", g.Admin, null, new ConfiguracionDeIngresoDto(["Directo"], 8, 30, true), 200);
+
+        // El grupo la pide a todos: la que solo tenía el código se cierra al renovar, con el aviso de que ahora debe registrar una.
+        var cerrada = await RenovarAsync(cookieCodigo, 401);
+        (await CodigoDeErrorAsync(cerrada)).ShouldBe("passkey-requerida");
+        var problema = await cerrada.ReadAsJsonAsync<JsonElement>();
+        problema.GetProperty("detail").GetString().ShouldNotBeNull().ShouldContain("grupo");
+
+        // La sesión abierta con la passkey sigue.
+        (await ObtenerAsync<YoDto>("/api/v1/yo", conPasskey.Token)).ActorId.ShouldBe(admin.Id.ToString());
+    }
+
     // ---------- Mi cuenta ----------
 
     [Fact]
-    public async Task Mi_cuenta_lista_registra_renombra_y_elimina_passkeys_y_no_deja_a_un_rol_obligado_sin_ninguna()
+    public async Task Mi_cuenta_lista_registra_renombra_y_elimina_passkeys_y_no_deja_sin_ninguna_a_quien_su_grupo_se_la_exige()
     {
-        var g = await GrupoAsync();
+        var g = await GrupoAsync(passkeyParaTodos: true);
         var admin = await UsuarioAsync(g, "Administrador");
         var primero = await RegistrarPasskeyAsync(admin.Correo);
         var sesion = await EntrarConPasskeyAsync(primero);
@@ -584,6 +666,23 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task Sin_passkey_para_todos_se_puede_eliminar_hasta_la_ultima_passkey_y_se_sigue_entrando_con_el_codigo()
+    {
+        var g = await GrupoAsync();
+        var admin = await UsuarioAsync(g, "Administrador");
+        var autenticador = await RegistrarPasskeyAsync(admin.Correo);
+        var token = (await EntrarConPasskeyAsync(autenticador)).Token;
+        (await ObtenerAsync<MiCuentaDto>("/api/v1/mi-cuenta", token)).ExigePasskey.ShouldBeFalse();
+
+        var unica = (await ObtenerAsync<List<PasskeyDto>>("/api/v1/mi-cuenta/passkeys", token)).ShouldHaveSingleItem();
+        await Anonimo($"/api/v1/mi-cuenta/passkeys/{unica.Id}", null, 204, bearer: token, metodo: "DELETE");
+        (await ObtenerAsync<List<PasskeyDto>>("/api/v1/mi-cuenta/passkeys", token)).ShouldBeEmpty();
+
+        var (paso, _) = await IngresarConCodigoAsync(admin.Correo, numero: 2);
+        (paso.Estado, paso.Sesion!.Metodo, paso.Sesion.SugerirPasskey).ShouldBe(("Sesion", "Codigo", true));
+    }
+
+    [Fact]
     public async Task Mi_cuenta_lista_y_cierra_mis_sesiones_y_no_toca_las_de_otras_personas()
     {
         var g = await GrupoAsync();
@@ -622,7 +721,8 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
         var invitacion = await Correos.EsperarAsync(correo, c => c.Asunto.Contains("te invitó a Valídalo"));
         invitacion.Texto.ShouldContain("Auditor");
         invitacion.Texto.ShouldContain($"{ApiFixture.UrlPublica}/app/");
-        persona.ExigePasskey.ShouldBeTrue();
+        invitacion.Texto.ShouldNotContain("si tu rol lo exige"); // la passkey es opcional: la invitación no dice que un rol la exija
+        persona.ExigePasskey.ShouldBeFalse();
 
         var autenticador = await RegistrarPasskeyAsync(correo, numero: 1);
         var sesion = await EntrarConPasskeyAsync(autenticador);
@@ -840,15 +940,25 @@ public sealed partial class IngresoApiTests(ApiFixture fixture)
     }
 
     /// <summary>
-    /// Registra una passkey con el código del correo (alta o recuperación de un rol que la exige). <paramref name="numero"/> es el orden del código
-    /// que se espera: cada llamada pide uno nuevo.
+    /// Registra una passkey con el código del correo (alta o recuperación). Donde la cuenta la exige (operador de Plataforma, grupo con «passkey para todos») se registra
+    /// en el mismo ingreso; si no, la persona entra con el código y la agrega desde Mi cuenta. <paramref name="numero"/> es el orden del código que se espera: cada
+    /// llamada pide uno nuevo.
     /// </summary>
     private async Task<AutenticadorVirtual> RegistrarPasskeyAsync(string correo, int? numero = null)
     {
         var siguiente = numero ?? Correos.Para(correo).Count(c => c.Asunto == AsuntoCodigo) + 1;
         var paso = (await VerificarCodigoAsync(await PedirCodigoAsync(correo), await CodigoDelCorreoAsync(correo, siguiente))).Paso;
         var autenticador = new AutenticadorVirtual(ApiFixture.OrigenDeLaApp);
-        (await RegistrarEnIngresoAsync(paso, autenticador, "Mi teléfono")).Sesion.ShouldNotBeNull();
+        if (paso.Estado == "RegistrarPasskey")
+        {
+            (await RegistrarEnIngresoAsync(paso, autenticador, "Mi teléfono")).Sesion.ShouldNotBeNull();
+            return autenticador;
+        }
+
+        paso.Estado.ShouldBe("Sesion");
+        var token = paso.Sesion!.Token;
+        var opciones = await PostJsonAsync<OpcionesDePasskeyDto>("/api/v1/mi-cuenta/passkeys/opciones", null, token);
+        await PostJsonAsync<PasskeyDto>("/api/v1/mi-cuenta/passkeys", new RegistrarPasskeyDto(opciones.Desafio, autenticador.Registrar(opciones.Opciones), "Mi teléfono"), token);
         return autenticador;
     }
 

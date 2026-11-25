@@ -645,7 +645,6 @@ export const flujos = {
       reconsultaMeses: 'Reconsultar cada (meses)',
       reconsultaAyuda: 'Vacío: cada 12 meses.',
     },
-    documentos: 'Documentos que pide',
     requisitos: {
       vacio: 'Sin documentos, cada área aprueba u observa el expediente completo. Agrega los documentos que el tercero debe cargar para que cada área decida documento por documento.',
       ayuda: 'Cada área revisa los documentos que tiene asignados; sin áreas elegidas, lo revisan todas. Toda área debe revisar al menos uno.',
@@ -657,7 +656,6 @@ export const flujos = {
       losDelArea: 'Los del área',
       obligatorio: 'Obligatorio',
       quitar: 'Quitar documento',
-      agregar: 'Agregar documento',
       sePideA: 'Se pide a',
       atajos: {
         siempre: 'Todos',

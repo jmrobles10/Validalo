@@ -36,6 +36,9 @@ function Valor({ valor }: { valor: ValorIa }) {
  * Lo que leyó la IA, en la misma lista que `previas` (las filas que no cuentan para el límite, como «Legible» y «Tipo detectado»): con «Ver n datos más» si hay límite.
  * Con `plegados` (hay un cruce que ya cuenta lo importante) solo quedan las `previas` y el resto va tras «Ver lo que leyó la IA».
  * Los valores largos (listas y objetos) ocupan todo el ancho; los cortos comparten fila de a dos si el contenedor es ancho.
+ *
+ * `alPie` (el bloque «Revisión automática»): solo el enlace «Ver lo que leyó la IA», en gris, y la lista únicamente cuando se despliega; lo de `previas` ya va en la línea
+ * de la lectura (`LecturaAlPie`).
  */
 export function CamposIa({
   campos,
@@ -43,12 +46,14 @@ export function CamposIa({
   limite,
   previas = [],
   plegados = false,
+  alPie = false,
 }: {
   campos: readonly CampoIa[];
   titulo: string;
   limite?: number;
   previas?: readonly FilaDeDato[];
   plegados?: boolean;
+  alPie?: boolean;
 }) {
   const { t } = useTranslation();
   const [todos, setTodos] = useState(false);
@@ -60,6 +65,29 @@ export function CamposIa({
     ...previas,
     ...visibles.map((campo) => ({ clave: campo.clave, etiqueta: campo.etiqueta, valor: <Valor valor={campo.valor} />, ancho: campo.valor.tipo !== 'texto' })),
   ];
+
+  if (alPie) {
+    return (
+      <Box>
+        {campos.length > 0 && (
+          <Button
+            variant="text"
+            color="inherit"
+            onClick={() => setTodos((v) => !v)}
+            aria-expanded={todos}
+            sx={{ px: 0, minWidth: 0, color: 'text.secondary', textDecoration: 'underline', '&:hover': { color: 'text.primary', bgcolor: 'transparent', textDecoration: 'underline' } }}
+          >
+            {textoDelBoton}
+          </Button>
+        )}
+        {todos && (
+          <Box sx={{ mt: 0.5 }}>
+            <ListaDeDatos filas={filas} etiqueta={titulo} />
+          </Box>
+        )}
+      </Box>
+    );
+  }
 
   return (
     <Box>

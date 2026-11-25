@@ -4,12 +4,14 @@ import {
   falloDeSubida,
   subirDocumento,
   validarArchivo,
+  versionSubida,
   type DestinoCarga,
   type FalloSubida,
   type FaseSubida,
   type ProblemaArchivo,
   type ReglasArchivo,
   type ResultadoSubida,
+  type VersionSubida,
 } from './subida';
 
 /** Reglas del tipo (para validar en el navegador) y campos de un `ArchivoYFormulario` (van en el paso 1). */
@@ -30,9 +32,10 @@ export type EstadoSubida =
 /**
  * Estado de una subida: valida en el navegador, sube en dos pasos y refresca la bóveda al terminar. Solo la última subida manda
  * sobre la pantalla: al empezar otra (aunque el archivo nuevo no pase la validación), al cancelar o al desmontar, la anterior se
- * aborta y, si aun así termina, su resultado no se muestra.
+ * aborta y, si aun así termina, su resultado no se muestra. `alSubir` recibe la versión que quedó en la bóveda (también si el archivo ya estaba) y solo se
+ * llama si la subida sigue siendo la de la pantalla: quien abrió el diálogo usa el documento (el soporte de la ficha, FD-10) apenas termina.
  */
-export function useSubida() {
+export function useSubida(alSubir?: (subida: VersionSubida) => void) {
   const [estado, setEstado] = useState<EstadoSubida>({ fase: 'inicio' });
   const control = useRef<AbortController | null>(null);
   const alTerminar = useAlTerminarSubida();
@@ -75,6 +78,8 @@ export function useSubida() {
         // La versión quedó creada en el servidor aunque la pantalla ya no la muestre: la bóveda se vuelve a pedir igual.
         if (!reemplazada()) setEstado({ fase: 'resultado', archivo, resultado });
         alTerminar();
+        const subida = versionSubida(resultado);
+        if (subida && !reemplazada()) alSubir?.(subida);
       },
       (error: unknown) => {
         if (reemplazada()) return;

@@ -13,6 +13,7 @@ import { AvisoCambiosNuevos, fondoDelContenedor } from '@validalo/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
+import type { VersionSubida } from '../boveda/subida';
 import { CabeceraPagina } from '../shared/componentes';
 import { mensajeDeError } from '../shared/errores';
 import { ALCANCES_PUBLICO } from '../notificaciones/tiempoReal';
@@ -26,7 +27,7 @@ import { ObservacionesDeEmpresas } from './ObservacionesDeEmpresas';
 import { PropuestaDesdeDocumento } from './PropuestaDesdeDocumento';
 import { RatificacionesDeSeccion } from './RatificacionesDeSeccion';
 import { DialogoSalidaSinGuardar } from './SalidaSinGuardar';
-import { enlaceSeccion, esFaltanteDeSoporte, periodosElegibles, type DefinicionSeccion } from './secciones';
+import { documentosParaSubir, enlaceSeccion, esFaltanteDeSoporte, periodosElegibles, SOPORTE_FICHA, type DefinicionSeccion, type DocumentoDeSoporte } from './secciones';
 import { SelectorSoporte } from './SelectorSoporte';
 import { DescargaDeDeclaracionDisponible } from './pep/descargaPdf';
 import { useEditorSeccion } from './useEditorSeccion';
@@ -70,6 +71,14 @@ export function EditorSeccion({ definicion, periodo, estado, inicial, onReinicia
   useEdicionEnCurso(ALCANCES_PUBLICO.ficha, editor.sinGuardar);
   const hayCambiosNuevos = useCambiosPendientes(ALCANCES_PUBLICO.ficha);
   const evaluacion = useEvaluacionSeccion(definicion.codigo, periodo, editor.cuerpo);
+
+  // «Subir un soporte» terminó (FD-10): el documento queda marcado como soporte y, si es de los que la IA lee, la sección espera lo que proponga de él.
+  // Nadie lo lee si ninguna empresa lo recibió (no hay quién pague el análisis); «Otro documento» nunca se lee.
+  const alSubirSoporte = (subida: VersionSubida, tipo: DocumentoDeSoporte) =>
+    editor.registrarSubida(
+      { documentoId: subida.documentoId, version: subida.version },
+      tipo === SOPORTE_FICHA ? null : { tipo, esperaLectura: subida.compartida !== false },
+    );
 
   const alGuardar = (continuar: boolean) => (respuesta: SeccionGuardadaDto) => {
     const completa = respuesta.completitud.completa;
@@ -167,8 +176,10 @@ export function EditorSeccion({ definicion, periodo, estado, inicial, onReinicia
             codigo={definicion.codigo}
             periodo={periodo}
             soportes={editor.soportes}
+            subido={editor.subido}
             onUsarValores={editor.cambiar}
             onCambiarSoportes={editor.cambiarSoportes}
+            onOlvidarSubido={editor.olvidarSubido}
             deshabilitado={editor.guardando}
           />
           <Faltantes faltantes={editor.faltantes} senal={senalFaltantes} />
@@ -181,6 +192,8 @@ export function EditorSeccion({ definicion, periodo, estado, inicial, onReinicia
             soportes={editor.soportes}
             retirados={editor.soportesRetirados}
             onCambiar={editor.cambiarSoportes}
+            subibles={documentosParaSubir(definicion, estado.tipoPersona, estado.perfil?.pais)}
+            onSubido={alSubirSoporte}
             faltaSoporte={faltaSoporte}
             error={editor.errorEn('soportes')}
             deshabilitado={editor.guardando}

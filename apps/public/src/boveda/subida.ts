@@ -51,8 +51,26 @@ export function validarArchivo(archivo: Pick<File, 'size' | 'type'>, reglas: Reg
 
 export type ResultadoSubida =
   | { tipo: 'lista'; version: VersionDocumentoDto; compartidos: CompartidoDto[] }
-  | { tipo: 'duplicado'; numero: number }
+  | { tipo: 'duplicado'; numero: number; documentoId: string }
   | { tipo: 'devuelta'; version: VersionDocumentoDto };
+
+/**
+ * La versión del documento de la bóveda a la que quedó (o ya estaba) el archivo subido: lo que necesita una pantalla que sube un documento para
+ * usarlo (un soporte de la ficha, FD-10) sin volver a pedir la bóveda. `compartida` dice si la API lo compartió con alguna empresa al subirlo:
+ * solo así hay quien pague su lectura con IA; `null` si no se sabe (el archivo ya estaba y no se volvió a compartir).
+ */
+export interface VersionSubida {
+  documentoId: string;
+  version: number;
+  compartida: boolean | null;
+}
+
+/** La versión que sirve de documento tras la subida; nula si se devolvió (no hay versión que usar). */
+export function versionSubida(resultado: ResultadoSubida): VersionSubida | null {
+  if (resultado.tipo === 'devuelta') return null;
+  if (resultado.tipo === 'duplicado') return { documentoId: resultado.documentoId, version: resultado.numero, compartida: null };
+  return { documentoId: resultado.version.documentoId, version: resultado.version.n, compartida: resultado.compartidos.length > 0 };
+}
 
 export type FaseSubida = 'preparando' | 'subiendo' | 'confirmando';
 
@@ -124,7 +142,7 @@ export async function subirDocumento({ archivo, destino, datos, alFase, alProgre
     undefined,
     senal,
   );
-  if (inicio.duplicado || !inicio.carga) return { tipo: 'duplicado', numero: inicio.version };
+  if (inicio.duplicado || !inicio.carga) return { tipo: 'duplicado', numero: inicio.version, documentoId: inicio.documentoId };
 
   senal?.throwIfAborted();
   alFase?.('subiendo');
@@ -132,7 +150,7 @@ export async function subirDocumento({ archivo, destino, datos, alFase, alProgre
 
   alFase?.('confirmando');
   const confirmacion = await confirmarCargaDocumento(inicio.documentoId, inicio.version, undefined, senal);
-  if (confirmacion.duplicado) return { tipo: 'duplicado', numero: confirmacion.version.n };
+  if (confirmacion.duplicado) return { tipo: 'duplicado', numero: confirmacion.version.n, documentoId: confirmacion.version.documentoId };
   if (confirmacion.version.estado === 'Devuelta') return { tipo: 'devuelta', version: confirmacion.version };
   return { tipo: 'lista', version: confirmacion.version, compartidos: confirmacion.compartidos };
 }

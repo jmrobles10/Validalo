@@ -53,16 +53,16 @@ recorrido(
     await abrirDesdeBandeja(sofia, cliente.nombre, 'Revisión', 'Cliente');
     await irASector(sofia, 'Información tributaria');
     await expect(sofia.getByRole('heading', { level: 1, name: cliente.nombre })).toBeVisible();
-    const decision = sofia.getByRole('region', { name: 'Decisión automática' });
-    await expect(decision).toContainText('La IA sugiere revisar');
-    await expect(decision).toContainText('Confianza baja');
+    const conclusion = sofia.getByRole('region', { name: 'Conclusión de la IA' });
+    await expect(conclusion).toContainText('Revisa antes de aprobar');
+    await expect(conclusion).toContainText('La confianza del análisis');
     const aprobar = regionDeArea(sofia, 'Revisión').getByRole('button', { name: /^Aprobar área/ });
     await paso(paginaSofia, {
       titulo: 'Abre el expediente con la sugerencia de la IA',
       explicacion:
-        'En Asistido, la IA lee el documento y deja en cada expediente su sugerencia y su confianza. Cuando la lectura es dudosa, el bloque «Decisión automática» dice «La IA sugiere revisar» y el motivo, por ejemplo «Confianza baja». La IA nunca aprueba sola: la decisión es de quien revisa.',
-      resaltar: [decision, sofia.getByRole('region', { name: 'Revisión automática', exact: true }).first()],
-      variantes: [{ cuando: 'La lectura es limpia', entonces: 'La sugerencia aparece igual, pero la aprobación sigue siendo de una persona.' }],
+        'En Asistido, la IA lee el documento y abre su bloque «Revisión automática» con su conclusión. Cuando la lectura es dudosa, la conclusión dice «Revisa antes de aprobar» y el motivo concreto, por ejemplo que la confianza del análisis está bajo el umbral. Es una sugerencia: la IA nunca aprueba sola y la decisión es de quien revisa.',
+      resaltar: [conclusion, sofia.getByRole('region', { name: 'Revisión automática', exact: true }).first()],
+      variantes: [{ cuando: 'La lectura es limpia', entonces: 'La conclusión dice «Se sugiere aprobar» y, si puedes decidir en tu área, trae el botón «Aprobar»; la aprobación sigue siendo de una persona.' }],
     });
 
     await irASector(sofia, 'Aprobaciones');

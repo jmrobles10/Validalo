@@ -45,7 +45,7 @@ recorrido(
       titulo: 'Exige passkey a todas las personas',
       explicacion:
         'Activa «Exigir passkey a todas las personas del grupo» para que cada persona registre una passkey en su próximo ingreso. ' +
-        'Los administradores, oficiales de cumplimiento y auditores ya la necesitan siempre; esta opción extiende la regla a revisores y demás personas.',
+        'La passkey es opcional: sin esta opción, cualquier persona entra con el código de su correo, sea cual sea su rol. Esta opción, apagada por omisión, la exige a todas.',
       resaltar: page.getByLabel('Exigir passkey a todas las personas del grupo'),
       configuracion: {
         ajuste: 'Exigir passkey a todas las personas del grupo',

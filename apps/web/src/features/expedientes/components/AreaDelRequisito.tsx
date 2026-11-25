@@ -5,7 +5,7 @@ import { Clock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { etiquetaDeRuta } from '../../terceros/ficha/secciones';
 import type { ContextoRevisor, DialogoExpediente } from '../reglas';
-import { bloqueoRequisito, veredictosInvalidados, veredictosRevertidos, veredictosVigentesDeRequisito, type BloqueoRequisito } from '../requisitos';
+import { bloqueoRequisito, dialogoDeVeredicto, veredictosInvalidados, veredictosRevertidos, veredictosVigentesDeRequisito, type BloqueoRequisito } from '../requisitos';
 
 /** Bloqueos que se explican a quien revisa (los demás no dicen nada útil: sin permiso, cerrado). */
 const BLOQUEOS_EXPLICADOS = ['expediente-en-carga', 'expediente-observado', 'vinculo-bloqueado', 'sin-version', 'area-esperando', 'no-es-miembro', 'ya-voto'] as const;
@@ -95,7 +95,7 @@ function AreaDelRequisito({
           <Button
             size="small"
             variant="contained"
-            onClick={() => onAccion({ tipo: 'veredictoRequisito', requisito, areaRequisito, nombreArea })}
+            onClick={() => onAccion(dialogoDeVeredicto(requisito, areaRequisito, nombreArea))}
             aria-label={t('expedientes.requisitos.decidirAccesible', { documento: requisito.tipoDocumento.nombre, area: nombreArea })}
             sx={{ ml: 'auto' }}
           >

@@ -12,8 +12,8 @@ const tonoDeLaLinea = (campo: Pick<CampoCruzadoDto, 'resultado' | 'critico'>) =>
 
 /**
  * La antigüedad del documento frente al máximo que pide su tipo, en una línea con el tono de su resultado: «Antigüedad: 860 días, máximo 30» (error si la pasa y es crítico),
- * «Antigüedad: 12 días, máximo 30» (éxito) o «Antigüedad: sin fecha de expedición, máximo 30 días» (advertencia, no se pudo verificar). El detalle de la API («Expedida el
- * 17/07/2024: 860 días; el máximo es 30.») va en el `title`. Sin regla de antigüedad en el tipo (la API no manda el campo), no se pinta.
+ * «Antigüedad: 12 días, máximo 30» (neutra, con un check gris: lo que está bien no lleva verde) o «Antigüedad: sin fecha de expedición, máximo 30 días» (advertencia, no se pudo
+ * verificar). El detalle de la API («Expedida el 17/07/2024: 860 días; el máximo es 30.») va en el `title`. Sin regla de antigüedad en el tipo (la API no manda el campo), no se pinta.
  */
 export function LineaDeAntiguedad({ antiguedad }: { antiguedad: VersionRequisitoDto['antiguedad'] }) {
   const { t } = useTranslation();
@@ -25,7 +25,7 @@ export function LineaDeAntiguedad({ antiguedad }: { antiguedad: VersionRequisito
       : t('cruce.antiguedad.linea', { count: antiguedad.dias, maximo: String(antiguedad.maximoDias) });
   return (
     <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', minWidth: 0 }} data-antiguedad="" title={campo.detalle ?? antiguedad.detalle}>
-      <IconoDelResumen tono={tonoDeLaLinea(campo)} />
+      <IconoDelResumen tono={tonoDeLaLinea(campo)} sobrio />
       <Typography variant="body2" sx={{ minWidth: 0 }}>
         {texto}
       </Typography>

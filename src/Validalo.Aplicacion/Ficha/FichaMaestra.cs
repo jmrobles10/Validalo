@@ -27,12 +27,16 @@ public static class MapeosFicha
 
     /// <summary>
     /// El soporte como lo ve quien consulta. Con <paramref name="documentos"/> (la bóveda del tercero) trae el nombre legible del
-    /// tipo y si el tercero retiró esa versión (RT-4); sin ellos, solo la referencia.
+    /// tipo y si el tercero retiró esa versión (RT-4); sin ellos, la referencia con el nombre del tipo canónico (FD-10: la empresa que no
+    /// recibió el documento igual lee «Registro Único Tributario» u «Otro soporte» y no un «soporte del tercero» sin más).
     /// </summary>
     public static SoporteSeccionDto ADto(this SoporteDeSeccion s, IReadOnlyDictionary<Guid, Documento>? documentos = null) =>
         documentos is not null && documentos.TryGetValue(s.DocumentoId, out var documento)
             ? new SoporteSeccionDto(s.DocumentoId, s.Version, s.TipoDocumento, documento.Buscar(s.Version)?.Estado == EstadoVersion.Retirada, documento.NombreTipo)
-            : new SoporteSeccionDto(s.DocumentoId, s.Version, s.TipoDocumento);
+            : new SoporteSeccionDto(s.DocumentoId, s.Version, s.TipoDocumento, Nombre: NombreDelTipo(s.TipoDocumento));
+
+    /// <summary>Nombre legible de un tipo canónico de soporte; nulo si el código no está en el catálogo (un tipo de la empresa).</summary>
+    private static string? NombreDelTipo(string? tipoCanonico) => CatalogoCanonico.Buscar(tipoCanonico)?.Nombre;
 
     /// <summary>Los campos que cambiaron sin un documento nuevo, para el DTO (FD-4).</summary>
     public static SinSoporteDto ADto(this SinSoporteDelCambio s) =>

@@ -27,7 +27,7 @@ La política por omisión de toda la API exige una credencial; solo lo marcado c
 ## Ingreso directo, passkeys y SSO
 
 - **Código por correo:** vale 5 minutos y admite 5 intentos; pedir otro no reinicia los fallos. Un correo sin cuenta recibe un desafío señuelo, para no revelar quién existe.
-- **Passkeys (WebAuthn, FIDO2):** se registran por persona (hasta 10), se pueden revocar (lo que cierra todas sus sesiones y le avisa por correo) y el ingreso en un dispositivo ya conocido las ofrece de forma condicional. El Administrador, el Oficial de cumplimiento, el Auditor y los operadores de Plataforma **deben** tener una; el grupo puede exigirla a todos. Sin passkey, el código del correo solo sirve para registrar una.
+- **Passkeys (WebAuthn, FIDO2):** se registran por persona (hasta 10), se pueden revocar (lo que cierra todas sus sesiones y le avisa por correo) y el ingreso en un dispositivo ya conocido las ofrece de forma condicional. Es **opcional**: ningún rol la exige y el código del correo basta para entrar; solo la exigen los operadores de Plataforma y el grupo que lo active a propósito («Exigir passkey a todas las personas»), y ahí el código solo sirve para registrar la primera. A quien entra con el código sin tener passkey se le sugiere registrar una.
 - **Códigos de recuperación:** diez, de un solo uso, para quien pierde sus dispositivos; generarlos pide confirmar con la passkey.
 - **SSO:** un grupo configura un proveedor (OIDC con PKCE o WorkOS), verifica los dominios de correo de sus personas publicando un archivo `.well-known`, y decide si convive con el código (`Complementario`) o lo reemplaza (`Exclusivo`). Puede crear a las personas en su primer ingreso y asignarles roles según los grupos del proveedor. El cliente HTTP del SSO no entra a redes internas.
 - **Modos de ingreso del grupo:** Delegado y/o Directo; la duración de la sesión (hasta 24 horas) y la inactividad (de 5 a 480 minutos) se fijan por grupo ([Configuración del grupo](configuracion-del-grupo.md#ingreso)).
@@ -53,9 +53,9 @@ Cada operación exige un **permiso** (*scope*) con nombre `recurso:acción`, por
 
 Para que un sistema actúe como una persona suya, cada petición lleva su API key y la cabecera `X-Usuario-Delegado` con una **aserción**: un JWT firmado (RS256 o ES256) con la clave **privada** del sistema, que Valídalo verifica con la **pública** registrada. Vale 5 minutos (`exp`) y **una sola vez** (`jti`); `iss` es el código del sistema y `aud` es `validalo`. Rotar la clave del sistema invalida de inmediato las aserciones anteriores. La primera vez que llega una persona nueva, se crea o se enlaza con quien ya tiene ese correo. Los errores y el detalle están en la [guía de integración](guia-de-integracion.md#identidad-delegada-y-pantallas-embebidas).
 
-## Confirmar con passkey
+## Confirmar con passkey o con un código del correo
 
-Las acciones sensibles piden una confirmación con la passkey dentro de los últimos **5 minutos**: cambiar roles, desactivar a una persona, revocar una passkey, crear o rotar llaves, rotar la clave de un sistema, guardar el SSO y, en Plataforma, operadores, clave de arranque y listas. Solo aplica a quien entró de forma directa; las sesiones delegadas y las llaves no la piden. Sin confirmación reciente la API responde 403 `reautenticacion-requerida` y la web abre el diálogo y repite la petición.
+Las acciones sensibles piden una confirmación dentro de los últimos **5 minutos**, con la passkey o con un código de 6 dígitos que llega al correo de la cuenta (los operadores de Plataforma y los grupos que exigen passkey a todos confirman solo con la passkey; quien no tiene passkeys va directo al código): cambiar roles, desactivar a una persona, revocar una passkey, crear o rotar llaves, rotar la clave de un sistema, guardar el SSO y, en Plataforma, operadores, clave de arranque y listas. Solo aplica a quien entró de forma directa; las sesiones delegadas y las llaves no la piden. Sin confirmación reciente la API responde 403 `reautenticacion-requerida` y la web abre el diálogo y repite la petición.
 
 ## Embeber Valídalo en otro sistema
 

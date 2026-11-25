@@ -85,12 +85,12 @@ test('la general llega prellenada y la ficha aceptada separa lo aceptado de lo q
   }).toPass({ timeout: 45_000 });
 
   // Antes de aprobar, «Lo que declaró el tercero» dice qué pasa con la sección: el expediente la pide y se acepta al aprobarse. El RUT que la respalda no está compartido con
-  // la empresa (el flujo no lo pide): su fila lo dice en lugar de quedarse sin botón.
+  // la empresa (el flujo no lo pide): su fila lo dice en lugar de quedarse sin botón y lleva el nombre real del documento (FD-13), no «Soporte del tercero».
   await irASector(sofia, 'Información general');
   const validacion = sofia.getByRole('region', { name: 'Validación de la empresa' });
   await expect(validacion).toContainText(/aún no acepta esta versión\. Se acepta al aprobarse el expediente \S+, que la pide como requisito «Información general»\./);
   await expect(validacion.getByRole('link', { name: /^Ver el requisito «Información general» del expediente / })).toBeVisible();
-  const soporte = sofia.getByText('Soporte del tercero · versión 1', { exact: true }).locator('xpath=ancestor::li[1]');
+  const soporte = sofia.getByText(`${RUT} · versión 1`, { exact: true }).locator('xpath=ancestor::li[1]');
   await expect(soporte).toContainText('no lo compartió con');
   await expect(soporte.getByRole('button')).toHaveCount(0);
   await capturar(paginaSofia, 'ficha-validacion-pedida');

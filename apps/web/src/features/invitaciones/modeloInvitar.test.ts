@@ -15,7 +15,8 @@ const COMPLETO: BorradorInvitacion = {
 
 describe('modelo de «Invitar tercero»', () => {
   it('arranca en Colombia con NIT, como el alta de una empresa', () => {
-    expect(borradorInvitacionNuevo()).toMatchObject({ pais: 'CO', tipoIdentificacion: 'NIT', numero: '', tipoPersona: '', tipoVinculo: '', flujo: '' });
+    expect(borradorInvitacionNuevo()).toMatchObject({ pais: 'CO', tipoIdentificacion: 'NIT', numero: '', tipoVinculo: '', flujo: '' });
+    expect(borradorInvitacionNuevo()).not.toHaveProperty('tipoPersona'); // el tipo de persona no se elige: se deriva del tipo de identificación
   });
 
   it('valida lo mismo que una fila del lote y dice los errores en el orden del formulario', () => {
@@ -33,8 +34,8 @@ describe('modelo de «Invitar tercero»', () => {
       { campo: 'nombre', codigo: 'texto-demasiado-largo' },
       { campo: 'telefono', codigo: 'texto-demasiado-largo' },
     ]);
-    // Un número de un tipo sin patrón conocido lo decide la API; el tipo de persona y el flujo son opcionales.
-    expect(validarInvitacion({ ...COMPLETO, tipoPersona: 'Natural', flujo: 'FLU' }, undefined)).toEqual([]);
+    // Un número de un tipo sin patrón conocido lo decide la API; el flujo es opcional.
+    expect(validarInvitacion({ ...COMPLETO, flujo: 'FLU' }, undefined)).toEqual([]);
   });
 
   it('el correo: algo, arroba, algo, punto y algo, sin espacios', () => {
@@ -46,7 +47,7 @@ describe('modelo de «Invitar tercero»', () => {
   });
 
   it('arma el cuerpo de POST /invitaciones: lo vacío va como null y el DV solo viaja con un tipo que lo tiene', () => {
-    expect(cuerpoInvitacion({ ...COMPLETO, digito: '8', nombreComercial: ' Aceros ', contacto: 'Laura', telefono: '3001234567', tipoPersona: 'Juridica', flujo: 'FLU-1' }, NIT)).toEqual({
+    expect(cuerpoInvitacion({ ...COMPLETO, digito: '8', nombreComercial: ' Aceros ', contacto: 'Laura', telefono: '3001234567', flujo: 'FLU-1' }, NIT)).toEqual({
       pais: 'CO',
       tipoIdentificacion: 'NIT',
       numeroIdentificacion: '900.123.456-8',
@@ -63,12 +64,18 @@ describe('modelo de «Invitar tercero»', () => {
     expect(cuerpoInvitacion({ ...COMPLETO, tipoIdentificacion: 'CC', numero: '1020304050', digito: '9' }, CC)).toMatchObject({
       tipoIdentificacion: 'CC',
       digitoVerificacion: null,
-      tipoPersona: null,
+      tipoPersona: 'Natural',
       nombreComercial: null,
       flujo: null,
       contacto: null,
       telefono: null,
     });
+  });
+
+  it('el tipo de persona que viaja sale del tipo de identificación: Jurídica con NIT, Natural con la cédula; sin catálogo lo deduce la API', () => {
+    expect(cuerpoInvitacion(COMPLETO, NIT)).toMatchObject({ tipoPersona: 'Juridica' });
+    expect(cuerpoInvitacion({ ...COMPLETO, tipoIdentificacion: 'CC', numero: '1020304050' }, CC)).toMatchObject({ tipoPersona: 'Natural' });
+    expect(cuerpoInvitacion(COMPLETO, undefined)).toMatchObject({ tipoPersona: null });
   });
 
   it('lleva los errores por campo de la API a los campos del formulario', () => {
@@ -77,9 +84,16 @@ describe('modelo de «Invitar tercero»', () => {
         numeroIdentificacion: ['El número no tiene el formato.'],
         digitoVerificacion: ['El dígito no corresponde.'],
         tipoVinculo: ['El tipo no existe.', 'otro'],
+        tipoPersona: ['Cédula de ciudadanía no aplica a una persona jurídica.'],
         desconocido: ['ignorado'],
       }),
-    ).toEqual({ numero: 'El número no tiene el formato.', digito: 'El dígito no corresponde.', tipoVinculo: 'El tipo no existe.' });
+    ).toEqual({
+      numero: 'El número no tiene el formato.',
+      digito: 'El dígito no corresponde.',
+      tipoVinculo: 'El tipo no existe.',
+      // Sin campo de tipo de persona, lo que la API diga de él se ve junto al tipo de identificación.
+      tipoIdentificacion: 'Cédula de ciudadanía no aplica a una persona jurídica.',
+    });
   });
 
   it('los atributos del tipo elegido viajan con el tipo de cada uno y solo si alguno tiene valor', () => {

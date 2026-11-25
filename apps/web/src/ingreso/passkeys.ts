@@ -4,7 +4,17 @@
  * navegador a causas que la pantalla sabe explicar. No guarda nada: la clave privada nunca sale del autenticador.
  */
 
-export type CausaDePasskey = 'cancelada' | 'no-soportada' | 'ya-registrada' | 'otra';
+/**
+ * `conflicto`: el navegador rechazó la petición porque aún tenía otra de passkey abierta («A request is already pending»); no la decidió la persona y,
+ * pasado un momento, se puede repetir.
+ */
+export type CausaDePasskey = 'cancelada' | 'no-soportada' | 'ya-registrada' | 'conflicto' | 'otra';
+
+/** Lo que dijo el navegador (el nombre y el mensaje de su error), para diagnosticar sin perderlo al traducirlo a una causa. */
+export interface OrigenDelFalloDePasskey {
+  nombre: string;
+  mensaje: string;
+}
 
 /** Fallo de la ceremonia en el navegador (no de la API): la persona canceló, el dispositivo no puede o ya tenía la passkey. */
 export class ErrorDePasskey extends Error {
@@ -13,6 +23,8 @@ export class ErrorDePasskey extends Error {
   constructor(
     readonly causa: CausaDePasskey,
     mensaje: string,
+    /** El error original del navegador (`null` si el fallo no vino de él, p. ej. unas opciones incompletas del servidor). */
+    readonly origen: OrigenDelFalloDePasskey | null = null,
   ) {
     super(mensaje);
   }
@@ -148,14 +160,31 @@ export function respuestaDeFirma(credencial: PublicKeyCredential): RespuestaDeFi
   };
 }
 
-/** Traduce el fallo del navegador: cancelar o agotar el tiempo (`NotAllowedError`), passkey repetida (`InvalidStateError`), sin soporte. */
+/**
+ * Traduce el fallo del navegador: cancelar o agotar el tiempo (`NotAllowedError`), passkey repetida (`InvalidStateError`), sin soporte. Un mensaje con
+ * «pending» es el navegador diciendo que aún tiene otra petición abierta: es un conflicto, no una cancelación, se llame como se llame el error (Chrome
+ * lo ha enviado como `OperationError` y como `NotAllowedError`). El error original queda en `origen`.
+ */
 export function traducirFalloDelNavegador(error: unknown): ErrorDePasskey {
   if (esErrorDePasskey(error)) return error;
   const nombre = error instanceof DOMException || error instanceof Error ? error.name : '';
-  if (nombre === 'NotAllowedError' || nombre === 'AbortError') return new ErrorDePasskey('cancelada', 'La persona canceló o se agotó el tiempo.');
-  if (nombre === 'InvalidStateError') return new ErrorDePasskey('ya-registrada', 'El dispositivo ya tiene una passkey de esta cuenta.');
-  if (nombre === 'NotSupportedError' || nombre === 'SecurityError') return new ErrorDePasskey('no-soportada', 'El navegador o el dispositivo no admiten passkeys para este sitio.');
-  return new ErrorDePasskey('otra', error instanceof Error ? error.message : 'No se pudo completar la passkey.');
+  // `DOMException` no siempre es un `Error` (en jsdom no lo es): el mensaje se lee de la propiedad, no del tipo.
+  const mensaje = typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' ? error.message : '';
+  const origen: OrigenDelFalloDePasskey = { nombre, mensaje };
+  if (/pending/i.test(mensaje)) return new ErrorDePasskey('conflicto', 'El navegador todavía tiene otra petición de passkey abierta.', origen);
+  if (nombre === 'NotAllowedError' || nombre === 'AbortError') return new ErrorDePasskey('cancelada', 'La persona canceló o se agotó el tiempo.', origen);
+  if (nombre === 'InvalidStateError') return new ErrorDePasskey('ya-registrada', 'El dispositivo ya tiene una passkey de esta cuenta.', origen);
+  if (nombre === 'NotSupportedError' || nombre === 'SecurityError') return new ErrorDePasskey('no-soportada', 'El navegador o el dispositivo no admiten passkeys para este sitio.', origen);
+  return new ErrorDePasskey('otra', mensaje || 'No se pudo completar la passkey.', origen);
+}
+
+/**
+ * Deja constancia en la consola de lo que dijo el navegador (nombre y mensaje de su error: nada de la passkey ni de la persona) para poder diagnosticar un
+ * fallo que la pantalla solo explica con una causa. Abortar (salir de la pantalla, usar el botón) es normal y no se registra.
+ */
+function registrarFalloDelNavegador(operacion: string, fallo: ErrorDePasskey): void {
+  if (fallo.origen === null || fallo.origen.nombre === 'AbortError') return;
+  console.warn(`[passkeys] ${operacion}: ${fallo.origen.nombre}: ${fallo.origen.mensaje} (causa: ${fallo.causa})`);
 }
 
 /** `navigator.credentials.create` con las opciones del servidor; devuelve la respuesta lista para enviar. */
@@ -166,7 +195,9 @@ export async function crearPasskey(opciones: Json): Promise<RespuestaDeRegistro>
     if (!(credencial instanceof PublicKeyCredential)) throw new ErrorDePasskey('otra', 'El navegador no devolvió una passkey.');
     return respuestaDeRegistro(credencial);
   } catch (error) {
-    throw traducirFalloDelNavegador(error);
+    const fallo = traducirFalloDelNavegador(error);
+    registrarFalloDelNavegador('crear', fallo);
+    throw fallo;
   }
 }
 
@@ -181,8 +212,89 @@ export async function firmarConPasskey(opciones: Json, senal?: AbortSignal, cond
     if (!(credencial instanceof PublicKeyCredential)) throw new ErrorDePasskey('otra', 'El navegador no devolvió una passkey.');
     return respuestaDeFirma(credencial);
   } catch (error) {
-    throw traducirFalloDelNavegador(error);
+    const fallo = traducirFalloDelNavegador(error);
+    registrarFalloDelNavegador(condicional ? 'firmar (condicional)' : 'firmar', fallo);
+    throw fallo;
   }
+}
+
+/** Cuánto tarda, como máximo, un rechazo del navegador para entenderse como «no hubo ventana ni decisión»: una persona no decide en menos de esto. */
+export const UMBRAL_SIN_DECISION_MS = 400;
+/** Cuánto se espera antes de cada reintento (uno por valor): crece, porque el navegador tarda en liberar la petición anterior. */
+export const ESPERAS_DE_REINTENTO_MS: readonly number[] = [150, 300, 600];
+
+/** El reloj y la espera de los reintentos; las pruebas inyectan uno propio en vez de esperar de verdad. */
+export interface RelojDePasskeys {
+  ahora: () => number;
+  /** Espera `ms` (o menos, si `senal` se aborta antes). */
+  esperar: (ms: number, senal?: AbortSignal) => Promise<void>;
+}
+
+const RELOJ_REAL: RelojDePasskeys = {
+  ahora: () => performance.now(),
+  esperar: (ms, senal) =>
+    new Promise<void>((resolver) => {
+      if (senal?.aborted === true) {
+        resolver();
+        return;
+      }
+      const alAbortar = () => {
+        clearTimeout(temporizador);
+        resolver();
+      };
+      const temporizador = setTimeout(() => {
+        senal?.removeEventListener('abort', alAbortar);
+        resolver();
+      }, ms);
+      senal?.addEventListener('abort', alAbortar, { once: true });
+    }),
+};
+
+export interface AjustesDelReintento {
+  /** Si se aborta, no se reintenta más (la persona salió de la pantalla o eligió otro camino). */
+  senal?: AbortSignal;
+  reloj?: RelojDePasskeys;
+  esperas?: readonly number[];
+}
+
+/**
+ * ¿El navegador rechazó la petición sin que la persona decidiera nada? Un conflicto («A request is already pending») nunca lo decide ella. Un
+ * `NotAllowedError` o `InvalidStateError` que llega casi al instante tampoco: no hubo ventana que cerrar. Si llega tarde, la persona la cerró.
+ */
+function fallaSinDecision(fallo: ErrorDePasskey, transcurridoMs: number): boolean {
+  if (fallo.causa === 'conflicto') return true;
+  const nombre = fallo.origen?.nombre;
+  return (nombre === 'NotAllowedError' || nombre === 'InvalidStateError') && transcurridoMs < UMBRAL_SIN_DECISION_MS;
+}
+
+/**
+ * Repite `operacion` cuando el navegador la rechaza sin que la persona decida nada (ver `fallaSinDecision`), con una espera creciente. Chrome rechaza
+ * la promesa de una petición abortada antes de liberarla por dentro: la siguiente (la del botón tras la condicional del autocompletado) choca con
+ * «A request is already pending» y solo necesita unos milisegundos. Si la persona cierra la ventana, o el fallo es otro, no se reintenta; al agotar los
+ * reintentos se lanza el último fallo.
+ */
+export async function conReintentoSiNoHuboDecision<T>(operacion: () => Promise<T>, ajustes: AjustesDelReintento = {}): Promise<T> {
+  const { senal, reloj = RELOJ_REAL, esperas = ESPERAS_DE_REINTENTO_MS } = ajustes;
+  // Una función y no la propiedad: la señal puede abortarse mientras se espera y TypeScript no lo sabe.
+  const abortada = () => senal?.aborted === true;
+  for (let intento = 0; ; intento += 1) {
+    const inicio = reloj.ahora();
+    try {
+      return await operacion();
+    } catch (error) {
+      const fallo = traducirFalloDelNavegador(error);
+      const espera = esperas[intento];
+      if (espera === undefined || abortada() || !fallaSinDecision(fallo, reloj.ahora() - inicio)) throw fallo;
+      await reloj.esperar(espera, senal);
+      if (abortada()) throw fallo;
+    }
+  }
+}
+
+/** `firmarConPasskey` con reintento si el navegador la rechaza sin que la persona decida (ver `conReintentoSiNoHuboDecision`). Es la que usan los botones. */
+export function firmarConPasskeyConReintento(opciones: Json, ajustes: AjustesDelReintento & { condicional?: boolean } = {}): Promise<RespuestaDeFirma> {
+  const { condicional, ...reintento } = ajustes;
+  return conReintentoSiNoHuboDecision(() => firmarConPasskey(opciones, reintento.senal, condicional), reintento);
 }
 
 /** El navegador sabe ofrecer las passkeys dentro del campo del correo (WebAuthn condicional, PI-14). */

@@ -210,7 +210,8 @@ public static class MapeosDeValidacion
                     new AreaDeRequisitoDto(x.Id, x.Area!.Codigo, EstadoEnArea(r, x.Area, e), r.AprobadoresPara(x.Area), r.AprobacionesDe(x.Area),
                         [.. r.Veredictos.Where(v => v.AreaId == x.Id).Select(ADto)]))
             ], r.TipoRequisito.ToString(), r.DetalleDeSeccion(documentacion), documentacion?.Cruces?.DeDocumento(r.Id),
-            r.Retiro is { } retiro ? new RetiroDeVersionDto(retiro.Numero, retiro.Motivo, retiro.Fecha) : null, r.RevisionesDto(e), r.Persona?.ADto(), r.PorQue.ADto());
+            r.Retiro is { } retiro ? new RetiroDeVersionDto(retiro.Numero, retiro.Motivo, retiro.Fecha) : null, r.RevisionesDto(e), r.Persona?.ADto(), r.PorQue.ADto(),
+            documentacion?.Conclusiones?.De(r.Id));
 
     /// <summary>Lo que la revisión automática registró del documento para su versión vigente (nulo si no registró nada, ADR-0012).</summary>
     private static IReadOnlyList<RevisionAutomaticaDto>? RevisionesDto(this RequisitoDeExpediente r, Expediente e)

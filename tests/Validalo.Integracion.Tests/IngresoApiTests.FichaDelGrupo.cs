@@ -108,7 +108,7 @@ public sealed partial class IngresoApiTests
         var lista = await ApiAsync<List<UsuarioDto>>("GET", RutaDeGrupo(g.TenantId, "/administradores"), ApiFixture.ClavePlataforma, null, null, 200);
         lista.Select(u => u.Id).ShouldBe([ana.Id, bruno.Id], ignoreOrder: true);
         var deAna = lista.Single(u => u.Id == ana.Id);
-        (deAna.Correo, deAna.Activo, deAna.ExigePasskey, deAna.Passkeys).ShouldBe((ana.Correo, true, true, 0));
+        (deAna.Correo, deAna.Activo, deAna.ExigePasskey, deAna.Passkeys).ShouldBe((ana.Correo, true, false, 0)); // ningún rol exige passkey: solo la pide el grupo si lo activa
         deAna.Identidades.ShouldBeEmpty();
 
         // Corrige nombre, correo (en mayúsculas: se normaliza) y el id con que el sistema integrado la reconoce.
@@ -206,7 +206,7 @@ public sealed partial class IngresoApiTests
         var correoNuevo = CorreoNuevo();
         var corregido = await ApiAsync<UsuarioDto>("PUT", RutaDeGrupo(g.TenantId, $"/usuarios/{a.Usuario.Id}"), ApiFixture.ClavePlataforma, null,
             new CorregirUsuarioDto(a.Usuario.Nombre, correoNuevo, Invitar: true), 200);
-        (corregido.Correo, corregido.Passkeys, corregido.ExigePasskey).ShouldBe((correoNuevo, 0, true));
+        (corregido.Correo, corregido.Passkeys, corregido.ExigePasskey).ShouldBe((correoNuevo, 0, false));
         corregido.InvitadoEn.ShouldNotBeNull();
 
         // La sesión que ya tenía deja de valer, su passkey queda revocada por Plataforma y no vuelve a entrar con ella.
@@ -217,10 +217,11 @@ public sealed partial class IngresoApiTests
         var opciones = (await (await Anonimo("/api/v1/ingreso/passkey/opciones", null, 200)).ReadAsJsonAsync<OpcionesDePasskeyDto>())!;
         (await CodigoDeErrorAsync(await Anonimo("/api/v1/ingreso/passkey/verificar", new VerificarPasskeyDto(opciones.Desafio, a.Autenticador.Firmar(opciones.Opciones)), 401))).ShouldBe("passkey-revocada");
 
-        // La persona del correo nuevo recibe la invitación y entra con su código: como su rol exige passkey, registra otra.
+        // La persona del correo nuevo recibe la invitación y entra con su código (la passkey es opcional: solo se le sugiere registrar una).
         var invitacion = await Correos.EsperarAsync(correoNuevo, c => c.Asunto.Contains("te invitó a Valídalo"));
         invitacion.Texto.ShouldContain("Administrador");
-        (await IngresarConCodigoAsync(correoNuevo)).Paso.Estado.ShouldBe("RegistrarPasskey");
+        var nueva = (await IngresarConCodigoAsync(correoNuevo)).Paso;
+        (nueva.Estado, nueva.Sesion!.SugerirPasskey).ShouldBe(("Sesion", true));
 
         // Quedó todo a nombre de Plataforma en la auditoría de identidad.
         await using var consulta = Almacen.QuerySession();
@@ -234,7 +235,7 @@ public sealed partial class IngresoApiTests
     [Fact]
     public async Task Un_correo_mal_digitado_que_cayo_en_otro_buzon_deja_de_servir_al_corregirlo_aunque_tuviera_un_ingreso_a_medias()
     {
-        var g = await GrupoAsync();
+        var g = await GrupoAsync(passkeyParaTodos: true); // en un grupo que exige passkey el ingreso queda a mitad de registrarla
         var admin = await UsuarioAsync(g, "Administrador", deTodoElGrupo: true);
         var correoMalo = admin.Correo;
 

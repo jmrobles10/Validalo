@@ -193,14 +193,17 @@ test('en Asistido la antigüedad excedida solo se sugiere revisar: el tercero le
     await expect(tarjeta(vieja.pagina, CAMARA)).toContainText(MENSAJE, { timeout: 1500 });
   }).toPass(BARRIDO);
 
-  // La IA no decide, sugiere revisar; el hallazgo crítico queda a la vista.
+  // La IA no decide, concluye «Revisa antes de aprobar» con el hallazgo crítico (los días y el máximo); el hallazgo queda a la vista.
   const sofia = await abrirEmbebido(await paginaDe(browser), e, e.sofia, e.sur);
   await expect(async () => {
     await abrirDesdeBandeja(sofia, vieja.tercero.nombre, 'Revisión', 'Cliente');
     await irASector(sofia, 'Información legal');
-    await expect(tarjetaDeDocumento(sofia, CAMARA).getByRole('region', { name: 'Decisión automática' })).toContainText('La IA sugiere revisar', { timeout: 1500 });
+    await expect(tarjetaDeDocumento(sofia, CAMARA).getByRole('region', { name: 'Conclusión de la IA' })).toContainText('Revisa antes de aprobar', { timeout: 1500 });
   }).toPass(BARRIDO);
   const tarjetaVieja = tarjetaDeDocumento(sofia, CAMARA);
+  await expect(tarjetaVieja.getByRole('region', { name: 'Conclusión de la IA' })).toContainText('860 días; el máximo es 30');
+  // Es una sugerencia de la IA: sin «Aprobar» junto a la conclusión (la persona decide desde el área, con justificación).
+  await expect(tarjetaVieja.getByRole('region', { name: 'Conclusión de la IA' }).getByRole('button')).toHaveCount(0);
   await expect(tarjetaVieja).toContainText('Antigüedad: 860 días, máximo 30');
   await expect(tarjetaVieja.getByRole('alert').filter({ hasText: 'Antigüedad del documento' })).toContainText('Aprobarlo pide una justificación.');
 
@@ -239,7 +242,7 @@ test('una Cámara expedida hace 5 días no se observa; aprobada, vence un año d
   await expect(async () => {
     await abrirDesdeBandeja(sofia, reciente.tercero.nombre, 'Revisión', 'Cliente');
     await irASector(sofia, 'Información legal');
-    await expect(tarjetaDeDocumento(sofia, CAMARA).getByRole('region', { name: 'Decisión automática' })).toContainText('La IA sugiere aprobar', { timeout: 1500 });
+    await expect(tarjetaDeDocumento(sofia, CAMARA).getByRole('region', { name: 'Conclusión de la IA' })).toContainText('Se sugiere aprobar', { timeout: 1500 });
   }).toPass(BARRIDO);
   const tarjetaReciente = tarjetaDeDocumento(sofia, CAMARA);
   await expect(tarjetaReciente).toContainText('Antigüedad: 5 días, máximo 30');

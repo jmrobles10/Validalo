@@ -1,11 +1,12 @@
-import { Alert, Button, Checkbox, FormControl, FormControlLabel, FormGroup, FormLabel, Skeleton, Typography } from '@mui/material';
+import { Alert, Checkbox, FormControl, FormControlLabel, FormGroup, FormLabel, Skeleton, Typography } from '@mui/material';
 import type { DocumentoBovedaDto, SoporteSeccionDto } from '@validalo/api-client';
 import { formatearFecha, SeccionPlana, visualmenteOculto } from '@validalo/ui';
-import { FileCheck, Upload } from 'lucide-react';
+import { FileCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useDialogoSubir } from '../boveda/useDialogoSubir';
+import type { VersionSubida } from '../boveda/subida';
 import { useBoveda } from '../shared/api';
-import { documentosDeSoporte, SOPORTE_FICHA, type DefinicionSeccion } from './secciones';
+import { documentosDeSoporte, type DefinicionSeccion, type DocumentosParaSubir, type DocumentoDeSoporte } from './secciones';
+import { SubirSoporte } from './SubirSoporte';
 
 interface Props {
   definicion: DefinicionSeccion;
@@ -13,6 +14,10 @@ interface Props {
   /** Soportes de la versión guardada que el tercero retiró de su bóveda (RT-4): no se pueden elegir ni se reenvían. */
   retirados?: readonly SoporteSeccionDto[];
   onCambiar: (soportes: SoporteSeccionDto[]) => void;
+  /** Los documentos que se pueden elegir al subir un soporte de esta sección (`documentosParaSubir`); «Otro documento» va siempre. */
+  subibles: DocumentosParaSubir['natural'];
+  /** Un documento terminó de subirse con «Subir un soporte»: la sección lo marca como soporte y, si se lee, espera su lectura. */
+  onSubido: (subida: VersionSubida, tipo: DocumentoDeSoporte) => void;
   /** «Falta el soporte del cambio» (FM-20), tal como lo devolvió el servidor. */
   faltaSoporte: string | null;
   /** Error 422 del soporte (`soporte-invalido`, `soporte-tipo-invalido`…). */
@@ -29,13 +34,12 @@ const mismo = (a: SoporteSeccionDto, b: SoporteSeccionDto) => a.documentoId === 
 
 /**
  * «Documento que respalda esta información»: los documentos globales de la bóveda del tercero de los tipos que admite la
- * sección (FM-20), en su versión vigente, más los soportes que ya tenía la versión guardada. «Subir un soporte» abre el diálogo de
- * subida con el canónico `SOPORTE_FICHA`: no saca al tercero de la sección, así que sus cambios sin guardar siguen ahí.
+ * sección (FM-20), en su versión vigente, más los soportes que ya tenía la versión guardada. «Subir un soporte» pregunta qué documento es y abre el diálogo
+ * de subida con ese tipo (FD-10): no saca al tercero de la sección, así que sus cambios sin guardar siguen ahí, y lo que sube queda marcado.
  */
-export function SelectorSoporte({ definicion, soportes, retirados = [], onCambiar, faltaSoporte, error, deshabilitado }: Props) {
+export function SelectorSoporte({ definicion, soportes, retirados = [], onCambiar, subibles, onSubido, faltaSoporte, error, deshabilitado }: Props) {
   const { t } = useTranslation();
   const boveda = useBoveda();
-  const abrirSubida = useDialogoSubir((s) => s.abrir);
   const documentos = boveda.data?.documentos ?? [];
   const tipoDe = (documentoId: string) => documentos.find((d) => d.id === documentoId)?.tipo.nombre ?? null;
 
@@ -96,10 +100,7 @@ export function SelectorSoporte({ definicion, soportes, retirados = [], onCambia
           </Alert>
         )}
       </FormControl>
-      <Button onClick={() => abrirSubida({ tipo: SOPORTE_FICHA, nombre: t('ficha.soporte.nombreCanonico') })} variant="text" startIcon={<Upload size={18} aria-hidden />} sx={{ mt: 1 }}>
-        {t('ficha.soporte.subir')}
-      </Button>
-      <Typography sx={{ color: 'text.secondary' }}>{t('ficha.soporte.subirAyuda')}</Typography>
+      <SubirSoporte documentos={subibles} deshabilitado={deshabilitado} onSubido={onSubido} />
     </SeccionPlana>
   );
 }

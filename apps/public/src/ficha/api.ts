@@ -19,17 +19,29 @@ import {
   type SeccionGuardadaDto,
 } from '@validalo/api-client';
 import { useDiferido } from '../shared/useDiferido';
+import { lecturaDelSoporte, MOTIVO_SIN_LECTURA, TIEMPOS_DE_LECTURA, type SoporteSubido } from './propuestas';
 
-/** Cada cuánto se vuelve a preguntar mientras la IA lee el documento nuevo, y cuántas veces como máximo (≈ 30 s). */
-const ESPERA_DE_LECTURA_MS = 3000;
-const MAXIMO_ESPERAS_DE_LECTURA = 10;
+type ConsultaDePropuestas = Query<PropuestaDeSeccionDto[], ErrorApi>;
 
 /**
  * Una propuesta «sin lectura automática» puede ser solo que el análisis del documento aún no termina (corre en segundo plano al
  * subirlo): se vuelve a consultar unas veces y se deja de insistir (sin plan de IA nunca llegará).
  */
-function esperarLectura(consulta: Query<PropuestaDeSeccionDto[], ErrorApi>): number | false {
-  return consulta.state.data?.some((p) => !p.disponible) && consulta.state.dataUpdateCount < MAXIMO_ESPERAS_DE_LECTURA ? ESPERA_DE_LECTURA_MS : false;
+function esperarLectura(consulta: ConsultaDePropuestas): number | false {
+  return consulta.state.data?.some((p) => !p.disponible && p.motivo === MOTIVO_SIN_LECTURA) && consulta.state.dataUpdateCount < TIEMPOS_DE_LECTURA.maximoDeEsperas
+    ? TIEMPOS_DE_LECTURA.cadaMs
+    : false;
+}
+
+/**
+ * El documento que el tercero acaba de subir desde la sección se espera más: hasta que su lectura llegue (o la API diga que no hay nada que proponer, ya
+ * con una consulta posterior a la subida) o se agote `trasSubirMs`. Una lectura ilegible o fallida es definitiva y no se espera.
+ */
+function esperarLecturaDelSoporte(consulta: ConsultaDePropuestas, subido: SoporteSubido): number | false {
+  if (!subido.esperaLectura) return esperarLectura(consulta);
+  const { data, dataUpdatedAt } = consulta.state;
+  const lectura = lecturaDelSoporte(subido, data, dataUpdatedAt, Date.now());
+  return lectura.estado === 'leyendo' ? TIEMPOS_DE_LECTURA.cadaMs : esperarLectura(consulta);
 }
 
 /**
@@ -38,9 +50,16 @@ function esperarLectura(consulta: Query<PropuestaDeSeccionDto[], ErrorApi>): num
  */
 export const usePropuestasDeFicha = () => useQuery({ ...getListarPropuestasFichaQueryOptions(), staleTime: 0, refetchInterval: esperarLectura });
 
-/** Las propuestas para una sección (y periodo), con los datos de la sección ya cambiados para prellenar el formulario. */
-export const usePropuestasDeSeccion = (codigo: string, periodo: number | null) =>
-  useQuery({ ...getObtenerPropuestasSeccionQueryOptions(codigo, parametrosPeriodo(periodo)), staleTime: 0, refetchInterval: esperarLectura });
+/**
+ * Las propuestas para una sección (y periodo), con los datos de la sección ya cambiados para prellenar el formulario. Con `subido` (el documento que el
+ * tercero acaba de subir desde la sección, FD-10) vuelve a preguntar hasta que su lectura llegue.
+ */
+export const usePropuestasDeSeccion = (codigo: string, periodo: number | null, subido: SoporteSubido | null = null) =>
+  useQuery({
+    ...getObtenerPropuestasSeccionQueryOptions(codigo, parametrosPeriodo(periodo)),
+    staleTime: 0,
+    refetchInterval: (consulta) => (subido ? esperarLecturaDelSoporte(consulta, subido) : esperarLectura(consulta)),
+  });
 
 export type Catalogo = 'ciudades' | 'actividades-economicas' | 'bancos' | 'responsabilidades-dian' | 'especialidades';
 

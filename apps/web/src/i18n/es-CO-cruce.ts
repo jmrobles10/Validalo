@@ -53,6 +53,13 @@ export const cruce = {
     seccionSinDiligenciarCorta: '{{seccion}} (sin diligenciar)',
     seccionSinCruce: '{{seccion}} (versión {{n}}): sin cruce.',
     seccion: '{{seccion}} (versión {{n}})',
+    // La línea de resumen de una sección con cruce («Información general · versión 1», chip y conteos que no son cero).
+    seccionResumen: '{{seccion}} · versión {{n}}',
+    conteoCoinciden_one: '{{count}} coincide',
+    conteoCoinciden_other: '{{count}} coinciden',
+    conteoDifieren_one: '{{count}} difiere',
+    conteoDifieren_other: '{{count}} difieren',
+    conteoSinVerificar: '{{count}} sin verificar',
     sinCruce: 'Sin cruce con esta versión.',
     coincide: 'Coincide',
     criticas: 'Difiere en campos críticos',

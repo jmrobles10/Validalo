@@ -1,6 +1,7 @@
 import type { AtributoPermitidoDto, InvitarTerceroDto, TipoIdentificacionDto } from '@validalo/api-client';
 import { numeroValido, PAIS_POR_DEFECTO, TIPO_POR_DEFECTO } from '../configuracion/empresas/modelo';
 import { cuerpoDeAtributos, type ValoresDeAtributos } from '../vinculos/atributos/modelo';
+import { tipoDePersonaDe } from './tipoDePersona';
 
 /**
  * Invitar a un tercero a mano (decisión IM): los mismos datos que una fila del lote, con la misma validación que `ValidacionDeLote` para avisar antes de enviar; la API decide
@@ -10,17 +11,12 @@ import { cuerpoDeAtributos, type ValoresDeAtributos } from '../vinculos/atributo
 /** `ValidacionDeLote.LongitudMaximaTexto`. */
 export const LONGITUD_MAXIMA_TEXTO = 200;
 
-/** Lo que admite el campo «Tipo de persona»; vacío = que la API la deduzca del documento (Jurídica con NIT, Natural con los demás). */
-export const TIPOS_DE_PERSONA = ['Natural', 'Juridica', 'Consorcio'] as const;
-export type TipoDePersona = (typeof TIPOS_DE_PERSONA)[number];
-
 export interface BorradorInvitacion {
   pais: string;
   tipoIdentificacion: string;
   numero: string;
   /** Solo para los tipos con dígito de verificación; vacío = la API lo calcula. */
   digito: string;
-  tipoPersona: TipoDePersona | '';
   nombre: string;
   nombreComercial: string;
   correo: string;
@@ -58,7 +54,6 @@ export function borradorInvitacionNuevo(): BorradorInvitacion {
     tipoIdentificacion: TIPO_POR_DEFECTO,
     numero: '',
     digito: '',
-    tipoPersona: '',
     nombre: '',
     nombreComercial: '',
     correo: '',
@@ -111,7 +106,8 @@ export function cuerpoInvitacion(b: BorradorInvitacion, tipo: TipoIdentificacion
     numeroIdentificacion: b.numero.trim(),
     // El dígito solo viaja si el tipo lo tiene (el campo no se ve de otro modo).
     digitoVerificacion: tipo?.tieneDv ? aNulo(b.digito) : null,
-    tipoPersona: b.tipoPersona || null,
+    // El tipo de persona no se elige: sale del tipo de identificación (y, en el RUC de Panamá y el RNC dominicano, del número). `null` solo si aún no se sabe: la API lo deduce igual.
+    tipoPersona: tipoDePersonaDe(tipo, b.numero),
     nombre: b.nombre.trim(),
     nombreComercial: aNulo(b.nombreComercial),
     correo: b.correo.trim(),
@@ -129,7 +125,8 @@ export const CAMPO_DE_LA_API: Readonly<Record<string, CampoInvitacion>> = {
   tipoIdentificacion: 'tipoIdentificacion',
   numeroIdentificacion: 'numero',
   digitoVerificacion: 'digito',
-  tipoPersona: 'tipoPersona',
+  // Ya no hay campo de tipo de persona: lo que la API diga de él (el tipo de identificación no aplica a ese tipo de persona) se ve en el tipo de identificación.
+  tipoPersona: 'tipoIdentificacion',
   nombre: 'nombre',
   nombreComercial: 'nombreComercial',
   correo: 'correo',

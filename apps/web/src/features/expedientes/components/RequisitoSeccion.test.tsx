@@ -88,6 +88,14 @@ describe('Requisito de sección en el expediente (F2)', () => {
     expect(await screen.findByRole('dialog')).toHaveTextContent('RUT · Versión 2');
   });
 
+  it('un soporte que la empresa no recibió dice qué documento es, con el nombre del tipo que trae la API (FD-10)', () => {
+    const tarjeta = montar(requisitoSeccion({}, { soportes: [{ documentoId: 'd8', version: 3, tipoDocumento: 'RUT', nombre: 'Registro Único Tributario' }, { documentoId: 'd9', version: 1, tipoDocumento: 'SOPORTE_FICHA', nombre: 'Otro soporte' }] }));
+
+    expect(tarjeta.getByText('Registro Único Tributario · versión 3 (no compartido con este vínculo)')).toBeInTheDocument();
+    expect(tarjeta.getByText('Otro soporte · versión 1 (no compartido con este vínculo)')).toBeInTheDocument();
+    expect(tarjeta.queryByText(/Soporte del tercero/)).not.toBeInTheDocument();
+  });
+
   it('con «Lo que declaró el tercero» en la misma pantalla no repite los datos de la versión, pero deja la completitud y los soportes', () => {
     const tarjeta = montar(requisitoSeccion({}, { soportes: [{ documentoId: 'd1', version: 2, tipoDocumento: 'RUT' }] }), 'EnRevision', true);
 
@@ -194,8 +202,10 @@ describe('Cruce con el documento en el requisito (F5)', () => {
     expect(soporte).not.toHaveTextContent('Respalda:');
     const filas = within(soporte).getAllByRole('listitem');
     expect(filas).toHaveLength(1);
-    expect(filas[0]).toHaveTextContent('Información general (versión 3)');
+    expect(filas[0]).toHaveTextContent('Información general · versión 3');
     expect(filas[0]).toHaveTextContent('Difiere en campos críticos');
+    // Algo difiere: la comparación va abierta sola.
+    expect(within(filas[0]!).getByRole('button', { name: /Información general · versión 3/ })).toHaveAttribute('aria-expanded', 'true');
     expect(within(filas[0]!).getByRole('table', { name: 'Cruce con Registro Único Tributario · versión 2' })).toBeInTheDocument();
   });
 

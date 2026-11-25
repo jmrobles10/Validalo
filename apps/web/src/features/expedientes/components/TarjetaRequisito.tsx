@@ -5,15 +5,17 @@ import { ClipboardList, FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { textoDelRequisito } from '../../personas/modelo';
 import { RevisionesAutomaticasDelRequisito } from '../../revisionAutomatica/components/RevisionesAutomaticasDelRequisito';
+import { numeroDe } from '../../revisionAutomatica/modelo';
 import { ResumenVersion } from '../../documentos/ResumenVersion';
 import type { DocumentoEnVisor } from '../../documentos/VisorDocumento';
 import { ChipVigencia } from '../../documentos/VigenciaDocumento';
 import type { ContextoRevisor, DialogoExpediente } from '../reglas';
-import { documentoEnVisor, puedeEximir } from '../requisitos';
+import { documentoEnVisor, dialogoDeVeredicto, puedeEximir, quienDecide } from '../requisitos';
 import { aparienciaParaElRevisor } from '../requisitosAgrupados';
 import { AreasDelRequisito } from './AreaDelRequisito';
 import { avisoDelRequisito, soporteSinCruce } from './avisoDelRequisito';
 import { BotonVerVersion } from './BotonVerVersion';
+import { ConclusionDeLaIa } from './ConclusionDeLaIa';
 import { DetalleSeccionRequisito } from './DetalleSeccionRequisito';
 import { RevisionDelDocumento } from './RevisionDelDocumento';
 
@@ -71,6 +73,9 @@ export function TarjetaRequisito({
   const vigencia = visor?.vigencia ?? null;
   const persona = textoDelRequisito(requisito.persona, t);
   const apariencia = aparienciaParaElRevisor(requisito);
+  // Lo que la IA concluye del documento (en cualquier nivel): lo primero del bloque de la máquina, con «Aprobar» si quien mira puede decidir ahora en su área.
+  const conclusion = !seccion ? (requisito.conclusionDeRevision ?? null) : null;
+  const decide = conclusion ? quienDecide(expediente, requisito, areas, contexto) : null;
 
   return (
     <MarcoDeTarjetaDeEstado
@@ -125,10 +130,16 @@ export function TarjetaRequisito({
               antiguedad={version?.antiguedad}
               sinCruce={soporteSinCruce(requisito, visor)}
               cuentasEnSuTarjeta={cuentasEnSuTarjeta}
+              umbral={numeroDe(conclusion?.umbral) ?? undefined}
+              conclusion={
+                conclusion && decide ? (
+                  <ConclusionDeLaIa conclusion={conclusion} requisito={requisito} decide={decide} onAprobar={(area) => onAccion(dialogoDeVeredicto(requisito, area.areaRequisito, area.nombre))} />
+                ) : null
+              }
             />
           )}
           {/* Lo que decidió la revisión automática en cada área (ADR-0012): sugerencia, aprobación del sistema o pase a una persona. */}
-          {!seccion && <RevisionesAutomaticasDelRequisito expediente={expediente} requisito={requisito} areas={areas} contexto={contexto} nombres={nombres} />}
+          {!seccion && <RevisionesAutomaticasDelRequisito expediente={expediente} requisito={requisito} areas={areas} contexto={contexto} nombres={nombres} sinSugerencias={conclusion !== null} />}
           {seccion && (
             <DetalleSeccionRequisito
               requisito={requisito}

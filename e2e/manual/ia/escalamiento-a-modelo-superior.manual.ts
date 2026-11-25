@@ -45,7 +45,7 @@ recorrido(
     await expect(async () => {
       await abrirDesdeBandeja(sofia, tercero.nombre, 'Revisión', 'Cliente');
       await irASector(sofia, 'Información tributaria');
-      await expect(sofia.getByRole('region', { name: 'Decisión automática' }).first()).toContainText('La IA sugiere revisar', { timeout: 1500 });
+      await expect(sofia.getByRole('region', { name: 'Conclusión de la IA' }).first()).toContainText('Revisa antes de aprobar', { timeout: 1500 });
     }).toPass({ timeout: 60_000 });
 
     const panelRut = sofia.getByRole('region', { name: 'Revisión automática', exact: true }).first();
@@ -53,7 +53,7 @@ recorrido(
     await paso(paginaSofia, {
       titulo: 'Revisa la confianza final del análisis',
       explicacion:
-        'La confianza del análisis aparece junto al documento. Cuando la lectura es dudosa, el sistema la analiza de nuevo con un modelo de mayor capacidad y lo indica con «Revisado por un modelo de mayor capacidad». Aun así, si la confianza sigue baja, el bloque de decisión dice «Confianza baja» y la decisión es de una persona.',
+        'La confianza del análisis aparece junto al documento. Cuando la lectura es dudosa, el sistema la analiza de nuevo con un modelo de mayor capacidad y lo indica con «Revisado por un modelo de mayor capacidad». Aun así, si la confianza sigue baja, la conclusión de la IA dice «Revisa antes de aprobar» y explica que la confianza está bajo el umbral: la decisión es de una persona.',
       resaltar: panelRut,
       configuracion: {
         ajuste: 'Confianza mínima de la revisión automática',
@@ -62,7 +62,7 @@ recorrido(
       },
     });
 
-    await expect(sofia.getByRole('region', { name: 'Decisión automática' }).first()).toContainText('Confianza baja');
+    await expect(sofia.getByRole('region', { name: 'Conclusión de la IA' }).first()).toContainText(/La confianza del análisis \(55\s?%\) está bajo el umbral/);
     await irASector(sofia, 'Aprobaciones');
     await expect(regionDeArea(sofia, 'Revisión').getByRole('button', { name: /^Aprobar área/ })).toBeVisible();
     await paso(paginaSofia, {

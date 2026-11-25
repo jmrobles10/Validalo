@@ -52,6 +52,9 @@ public enum PlantillaCorreo
     /// <summary>Invitación a entrar directo a Valídalo con el correo (ING-5): sin enlace ni secreto, remite a la app.</summary>
     InvitacionDeUsuario,
 
+    /// <summary>Código de 6 dígitos con el que una persona que ya entró confirma una acción sensible (reautenticación con el correo, PI-20).</summary>
+    CodigoDeReautenticacion,
+
     /// <summary>
     /// Aviso a un contacto del tercero de que una empresa invitó a otro correo (acceso aislado): con el enlace entra a su cuenta y lo aprueba o lo
     /// rechaza. <c>Empresa</c> es quien invitó y <c>CorreoInvitado</c>, a quién.
@@ -177,6 +180,13 @@ public sealed class RedactorDeCorreos(IConfiguration configuracion)
                 $"<p>Tu código para ingresar es</p><p style=\"font-size:24px;letter-spacing:4px\"><b>{secreto}</b></p>" +
                 $"<p>Vence el {WebUtility.HtmlEncode(vence)} y solo sirve una vez.</p>" +
                 "<p>Si no pediste ingresar, ignora este correo: sin este código nadie entra a tu cuenta.</p>"),
+            PlantillaCorreo.CodigoDeReautenticacion => new MensajeDeCorreo(correo.Para,
+                "Tu código para confirmar una acción en Valídalo",
+                $"Tu código para confirmar la acción que pediste en Valídalo es {secreto}. Vence el {vence} y solo sirve una vez.\n\n" +
+                "Si no fuiste tú, ignora este correo y revisa tus sesiones abiertas en Mi cuenta: alguien con tu sesión abierta pidió confirmar una acción sensible.",
+                $"<p>Tu código para confirmar la acción que pediste en Valídalo es</p><p style=\"font-size:24px;letter-spacing:4px\"><b>{secreto}</b></p>" +
+                $"<p>Vence el {WebUtility.HtmlEncode(vence)} y solo sirve una vez.</p>" +
+                "<p>Si no fuiste tú, ignora este correo y revisa tus sesiones abiertas en Mi cuenta: alguien con tu sesión abierta pidió confirmar una acción sensible.</p>"),
             PlantillaCorreo.InvitacionDeUsuario => Invitar(correo),
             PlantillaCorreo.CodigoOtp => new MensajeDeCorreo(correo.Para,
                 "Tu código de acceso a Valídalo",
@@ -200,12 +210,12 @@ public sealed class RedactorDeCorreos(IConfiguration configuracion)
         return new MensajeDeCorreo(correo.Para,
             $"{correo.Empresa} te invitó a Valídalo",
             $"{correo.Empresa} te dio acceso a Valídalo{rol}.\n\nEntra a {url} con este mismo correo: te enviaremos un código de 6 dígitos cada vez que ingreses. " +
-            "No hay contraseña que crear; si tu rol lo exige, te guiaremos para registrar una passkey (tu huella, tu rostro o una llave de seguridad).\n\n" +
+            "No hay contraseña que crear; después puedes registrar una passkey (tu huella, tu rostro o una llave de seguridad) para entrar más rápido.\n\n" +
             "Si no esperabas esta invitación, ignora este correo.",
             $"<p>{WebUtility.HtmlEncode(correo.Empresa ?? "Una empresa")} te dio acceso a Valídalo{WebUtility.HtmlEncode(rol)}.</p>" +
             MarcoDeCorreo.Boton(url, "Entrar a Valídalo") +
-            "<p>Usa este mismo correo: te enviaremos un código de 6 dígitos cada vez que ingreses. No hay contraseña que crear; si tu rol lo exige, " +
-            "te guiaremos para registrar una passkey (tu huella, tu rostro o una llave de seguridad).</p>" +
+            "<p>Usa este mismo correo: te enviaremos un código de 6 dígitos cada vez que ingreses. No hay contraseña que crear; después puedes registrar " +
+            "una passkey (tu huella, tu rostro o una llave de seguridad) para entrar más rápido.</p>" +
             "<p>Si no esperabas esta invitación, ignora este correo.</p>");
     }
 

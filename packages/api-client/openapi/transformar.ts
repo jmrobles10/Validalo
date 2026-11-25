@@ -200,6 +200,8 @@ const NOMBRES: Record<string, string> = {
   'GET /api/v1/mi-cuenta/reautenticacion': 'obtenerEstadoReautenticacion',
   'POST /api/v1/mi-cuenta/reautenticacion/opciones': 'obtenerOpcionesReautenticacion',
   'POST /api/v1/mi-cuenta/reautenticacion': 'confirmarReautenticacion',
+  'POST /api/v1/mi-cuenta/reautenticacion/codigo': 'enviarCodigoDeReautenticacion',
+  'POST /api/v1/mi-cuenta/reautenticacion/codigo/verificar': 'confirmarReautenticacionConCodigo',
   'GET /api/v1/mi-cuenta/codigos-de-recuperacion': 'obtenerEstadoCodigosRecuperacion',
   'POST /api/v1/mi-cuenta/codigos-de-recuperacion': 'generarCodigosRecuperacion',
   'POST /api/v1/sistemas/{id}/reactivar': 'reactivarSistema',

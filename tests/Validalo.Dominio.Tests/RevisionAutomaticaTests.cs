@@ -71,8 +71,10 @@ public class RevisionAutomaticaTests
         yield return Fila("el cruce con la ficha aún no existe", limpia with { CrucePendiente = true }, Automatica(), ResultadoDeRevision.Excepcion, null, "cruce-pendiente");
         yield return Fila("discrepancia crítica con la ficha (F5)", limpia with { DiscrepanciaCritica = true, ConDiscrepancias = true }, Automatica(),
             ResultadoDeRevision.Excepcion, null, "discrepancia-critica-ficha");
-        yield return Fila("discrepancias con la ficha (F5)", limpia with { ConDiscrepancias = true }, Automatica(), ResultadoDeRevision.Excepcion, null,
-            "discrepancias-con-la-ficha");
+        // Una diferencia solo en campos no críticos (p. ej. las actividades secundarias del RUT) no manda el documento a una persona (IA-16, cambia CU-19).
+        yield return Fila("diferencias solo en campos no críticos: aprueba", limpia with { ConDiscrepancias = true }, Automatica(), ResultadoDeRevision.AprobadaAutomaticamente, null);
+        yield return Fila("asistido con diferencias no críticas sugiere aprobar", limpia with { ConDiscrepancias = true }, Asistida(), ResultadoDeRevision.Sugerida,
+            SugerenciaDeRevision.Aprobar);
         yield return Fila("versión reenviada tras una observación", limpia with { Reenvios = 1 }, Automatica(), ResultadoDeRevision.Excepcion, null, "version-reenviada");
         yield return Fila("varios motivos, en orden", limpia with
             {

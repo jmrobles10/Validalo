@@ -11,14 +11,19 @@ afterEach(() => {
 });
 
 describe('reautenticación para acciones sensibles', () => {
-  it('lee la acción, los minutos y si hay passkey de las extensiones del error', () => {
-    expect(peticionDesde(error())).toEqual({ accion: 'rotar-api-key', minutos: 5, tienePasskey: true });
-    expect(peticionDesde(error({ accion: 'cambiar-roles', minutos: 10, tienePasskey: false }))).toEqual({ accion: 'cambiar-roles', minutos: 10, tienePasskey: false });
+  it('lee la acción, los minutos, si hay passkey y si se puede confirmar con el código de las extensiones del error', () => {
+    expect(peticionDesde(error())).toEqual({ accion: 'rotar-api-key', minutos: 5, tienePasskey: true, puedeConCodigo: false });
+    expect(peticionDesde(error({ accion: 'cambiar-roles', minutos: 10, tienePasskey: false, puedeConCodigo: true }))).toEqual({
+      accion: 'cambiar-roles',
+      minutos: 10,
+      tienePasskey: false,
+      puedeConCodigo: true,
+    });
   });
 
-  it('con extensiones raras usa valores seguros: sin acción, 5 minutos y con passkey', () => {
-    expect(peticionDesde(error({ accion: 7, minutos: -1 }))).toEqual({ accion: '', minutos: 5, tienePasskey: true });
-    expect(peticionDesde(error({}))).toEqual({ accion: '', minutos: 5, tienePasskey: true });
+  it('con extensiones raras usa valores seguros: sin acción, 5 minutos, con passkey y sin ofrecer el código', () => {
+    expect(peticionDesde(error({ accion: 7, minutos: -1, puedeConCodigo: 'si' }))).toEqual({ accion: '', minutos: 5, tienePasskey: true, puedeConCodigo: false });
+    expect(peticionDesde(error({}))).toEqual({ accion: '', minutos: 5, tienePasskey: true, puedeConCodigo: false });
   });
 
   it('abre un solo diálogo: la segunda petición espera la misma confirmación', async () => {

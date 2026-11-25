@@ -1,4 +1,5 @@
 import type { PropuestaDeSeccionDto, SoporteSeccionDto } from '@validalo/api-client';
+import type { DocumentoDeSoporte } from './secciones';
 
 /**
  * Actualizar desde el documento (F5, FM-14): lo que la versión vigente de un documento (RUT, Cámara…) propone para una sección.
@@ -59,4 +60,70 @@ export function agruparPorDocumento(propuestas: readonly PropuestaDeSeccionDto[]
     grupos.set(clave, grupo);
   }
   return [...grupos.values()];
+}
+
+// ---------- Un documento que el tercero acaba de subir desde la sección (FD-10) ----------
+
+/** Por qué no hay lectura de un documento (`PropuestaDeSeccionDto.motivo`). */
+export const MOTIVO_SIN_LECTURA = 'sin-lectura-automatica';
+export const MOTIVO_ILEGIBLE = 'documento-ilegible';
+
+/**
+ * Cuánto se espera la lectura de un documento. Es un objeto (y no constantes) para que las pruebas lo acorten: la lectura corre en segundo plano al
+ * subirlo y, sin plan de IA o sin cupo, nunca llega.
+ */
+export const TIEMPOS_DE_LECTURA = {
+  /** Cada cuánto se vuelve a preguntar mientras la IA lee un documento. */
+  cadaMs: 3000,
+  /** Cuántas veces se pregunta por un documento que ya estaba en la bóveda (≈ 30 s). */
+  maximoDeEsperas: 10,
+  /** Cuánto se espera la lectura de un documento que el tercero acaba de subir desde la sección, antes de decir que no se pudo. */
+  trasSubirMs: 45_000,
+};
+
+/** El documento que el tercero acaba de subir como soporte de la sección y lo que se espera de su lectura. */
+export interface SoporteSubido {
+  documentoId: string;
+  version: number;
+  /** Canónico con el que se subió (`RUT`, `CAMARA_COMERCIO`…). */
+  tipo: DocumentoDeSoporte;
+  /** Cuándo terminó la subida (ms): una consulta anterior no dice nada de este documento. */
+  desde: number;
+  /** ¿Se espera que la IA lo lea? No si ninguna empresa lo recibió (no hay quien pague el análisis) ni si el tercero no es de Colombia. */
+  esperaLectura: boolean;
+}
+
+/** Lo que la sección le dice al tercero de la lectura del documento que acaba de subir. */
+export type LecturaDelSoporte =
+  | { estado: 'leyendo' }
+  | { estado: 'propuesta'; propuesta: PropuestaDeSeccionDto }
+  /** La IA lo leyó y no se alcanza: conviene subir una copia más clara. */
+  | { estado: 'ilegible' }
+  /** Sin lectura automática (sin plan, sin cupo, falló o no terminó a tiempo): se diligencia con el documento a la vista. */
+  | { estado: 'sin-lectura' }
+  /** Se leyó y no trae nada distinto a lo que la sección ya tiene. */
+  | { estado: 'sin-diferencias' };
+
+export const esDelSoporte = (propuesta: Pick<PropuestaDeSeccionDto, 'documento'>, subido: Pick<SoporteSubido, 'documentoId' | 'version'>) =>
+  propuesta.documento.documentoId === subido.documentoId && propuesta.documento.version === subido.version;
+
+/** Cuánto lleva esperándose la lectura del documento subido, y si ya pasó el tiempo. */
+export const lecturaVencida = (subido: Pick<SoporteSubido, 'desde'>, ahora: number) => ahora - subido.desde >= TIEMPOS_DE_LECTURA.trasSubirMs;
+
+/**
+ * Qué mostrar de la lectura del documento recién subido. La API solo propone lo que cambia, así que «no aparece» es «no hay nada distinto» solo cuando la
+ * consulta ya es posterior a la subida (`actualizadaEn`); y una propuesta sin lectura (`sin-lectura-automatica`) es «leyendo» mientras corre el tiempo de espera
+ * y alguien pueda pagar el análisis. Ilegible y fallida son definitivas: no se espera nada.
+ */
+export function lecturaDelSoporte(subido: SoporteSubido, propuestas: readonly PropuestaDeSeccionDto[] | undefined, actualizadaEn: number, ahora: number): LecturaDelSoporte {
+  const propuesta = propuestas?.find((p) => esDelSoporte(p, subido));
+  if (propuesta?.disponible) return { estado: 'propuesta', propuesta };
+  const vencida = lecturaVencida(subido, ahora);
+  if (!propuesta) {
+    if (!subido.esperaLectura) return { estado: 'sin-lectura' };
+    if (actualizadaEn < subido.desde) return vencida ? { estado: 'sin-lectura' } : { estado: 'leyendo' };
+    return { estado: 'sin-diferencias' };
+  }
+  if (propuesta.motivo === MOTIVO_ILEGIBLE) return { estado: 'ilegible' };
+  return propuesta.motivo === MOTIVO_SIN_LECTURA && subido.esperaLectura && !vencida ? { estado: 'leyendo' } : { estado: 'sin-lectura' };
 }

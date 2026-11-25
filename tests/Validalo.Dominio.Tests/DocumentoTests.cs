@@ -31,6 +31,22 @@ public class DocumentoTests
         EstadoVinculo estado = EstadoVinculo.EnValidacion) =>
         new(id ?? Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Tercero, aceptada, estado, exige);
 
+    // ---------- nombre del tipo ----------
+
+    [Fact]
+    public void El_soporte_generico_se_llama_Otro_soporte_y_los_ya_creados_como_Soporte_de_la_ficha_se_leen_igual()
+    {
+        CatalogoCanonico.Requerido("SOPORTE_FICHA").Nombre.ShouldBe("Otro soporte");
+        Documento.Create(Documento.CrearGlobal(Tercero, CatalogoCanonico.Requerido("SOPORTE_FICHA"), Ahora)).NombreTipo.ShouldBe("Otro soporte");
+
+        // Un documento creado antes de FD-10 guardó el nombre de entonces: no se migra, se lee con el de ahora.
+        var creadoAntes = Documento.CrearGlobal(Tercero, CatalogoCanonico.Requerido("SOPORTE_FICHA"), Ahora) with { NombreTipo = "Soporte de la ficha" };
+        Documento.Create(creadoAntes).NombreTipo.ShouldBe("Otro soporte");
+
+        // Los demás tipos conservan su nombre: un RUT subido como soporte de la sección es «Registro Único Tributario».
+        Rut().NombreTipo.ShouldBe("Registro Único Tributario");
+    }
+
     // ---------- versiones ----------
 
     [Fact]

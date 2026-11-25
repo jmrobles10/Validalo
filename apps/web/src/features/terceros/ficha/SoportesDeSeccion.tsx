@@ -78,7 +78,11 @@ function Soporte({ empresaId, soporte, vinculos, onVer }: SoporteProps) {
     >
       <FileText size={16} strokeWidth={1.75} aria-hidden style={{ flex: 'none', opacity: 0.7 }} />
       <Typography variant="body2" sx={{ flex: '1 1 12rem', minWidth: 0 }}>
-        {visible ? t('fichaMaestra.soporteVisible', { tipo: visible.documento.tipo, n: String(soporte.version) }) : t('fichaMaestra.soporteDelTercero', { n: String(soporte.version) })}
+        {visible
+          ? t('fichaMaestra.soporteVisible', { tipo: visible.documento.tipo, n: String(soporte.version) })
+          : soporte.nombre
+            ? t('fichaMaestra.soporteNombrado', { nombre: soporte.nombre, n: String(soporte.version) })
+            : t('fichaMaestra.soporteDelTercero', { n: String(soporte.version) })}
       </Typography>
       {motivo && (
         <Typography variant="caption" sx={{ color: 'text.secondary', flex: '1 1 14rem', minWidth: 0 }}>

@@ -75,3 +75,11 @@ export function textoDelResumen(resumen: ResumenDeCruce, t: TFunction): string {
   if (resumen.otrosQueDifieren.length > 0) partes.push(t('cruce.criticos.tambienDifiere', { campos: lista(resumen.otrosQueDifieren, t) }));
   return partes.length > 0 ? partes.join(' · ') : t('cruce.criticos.sinDiferencias');
 }
+
+/**
+ * ¿La comparación se abre sola? Solo si algo difiere, algo no se pudo verificar, el documento no se lee o la fila de antigüedad que lleva esta tabla no cumple: lo que coincide por
+ * completo no pide atención.
+ */
+export function seAbreSola(cruce: Pick<CruceDeSeccionDto, 'discrepancias' | 'noVerificables' | 'legible'>, campoExtra: Pick<CampoCruzadoDto, 'resultado'> | null): boolean {
+  return cruce.discrepancias > 0 || cruce.noVerificables > 0 || !cruce.legible || (campoExtra !== null && campoExtra.resultado !== 'Coincide');
+}

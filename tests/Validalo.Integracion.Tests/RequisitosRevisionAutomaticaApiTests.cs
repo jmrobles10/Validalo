@@ -283,6 +283,11 @@ public sealed class RequisitosRevisionAutomaticaApiTests(ApiFixture fixture, ITe
             (r.Nivel, r.Resultado, r.Sugerencia, r.PendienteDeAtencion).ShouldBe(("Asistido", "Sugerida", "Aprobar", false));
         }
 
+        // La conclusión que ve el revisor sale de la misma regla: lo que sugiere Asistido es lo que la conclusión dice (y trae el nivel de la empresa).
+        foreach (var codigo in new[] { "RUT", "CAMARA_COMERCIO" })
+            Requisito(sugerido, codigo).ConclusionDeRevision.ShouldNotBeNull().ShouldSatisfyAllConditions(c => c.Sugerencia.ShouldBe("Aprobar"), c => c.Nivel.ShouldBe("Asistido"),
+                c => c.Motivos.ShouldBeEmpty());
+
         // Asistido nunca emite veredictos: el expediente espera a las personas y la bandeja de excepciones no recibe nada.
         sugerido.Estado.ShouldBe("EnRevision");
         sugerido.Requisitos!.SelectMany(r => r.Areas).SelectMany(a => a.Veredictos).ShouldBeEmpty();
@@ -297,6 +302,94 @@ public sealed class RequisitosRevisionAutomaticaApiTests(ApiFixture fixture, ITe
         var sinAnalisis = await EsperarAsync(e.Norte, otroExpediente, x => RevisionDe(x, "CAMARA_COMERCIO", "CUMPLIMIENTO") is not null);
         RevisionDe(sinAnalisis, "CAMARA_COMERCIO", "CUMPLIMIENTO")!.ShouldSatisfyAllConditions(r => r.Sugerencia.ShouldBe("Revisar"),
             r => r.Motivos.Single().Codigo.ShouldBe("sin-analisis-ia"), r => r.Confianza.ShouldBeNull());
+    }
+
+    [Fact]
+    public async Task En_Manual_la_IA_concluye_aprobar_o_revisar_con_la_misma_regla_sin_registrar_nada_ni_decidir()
+    {
+        var e = await PrepararAsync();
+        await PlanParaRevisionAsync(e.Norte);
+        // La empresa nunca configuró la revisión automática: Manual. El sistema no sugiere ni aprueba, pero el revisor ve qué concluye la IA.
+        var (_, sesion, expedienteId) = await TerceroAceptaAsync(e.Norte, "PROVEEDOR");
+        await SubirAsync(sesion, "RUT", Pdf("RUT"));
+
+        var leido = await EsperarAsync(e.Norte, expedienteId, x => Requisito(x, "RUT").ConclusionDeRevision is not null);
+        var rut = Requisito(leido, "RUT");
+        rut.ConclusionDeRevision!.ShouldSatisfyAllConditions(c => c.Sugerencia.ShouldBe("Aprobar"), c => c.Nivel.ShouldBe("Manual"), c => c.Motivos.ShouldBeEmpty(),
+            c => c.Persona.ShouldBeNull());
+        rut.RevisionesAutomaticas.ShouldBeNull();
+        leido.Estado.ShouldNotBe("Aprobado");
+        rut.Areas.SelectMany(a => a.Veredictos).ShouldBeEmpty();
+        (await ExcepcionesAsync(e.Norte)).ShouldBeEmpty();
+        (await ApiAsync<RevisionAutomaticaConfigDto>("GET", UrlRevision, Admin(e.Norte), null, 200)).Uso.Sugerencias.ShouldBe(0);
+
+        // Con baja confianza (bajo el umbral del plan, el que usa Manual) concluye revisar y dice por qué.
+        await PlanParaRevisionAsync(e.Norte, "baja");
+        var (_, otraSesion, otroExpediente) = await TerceroAceptaAsync(e.Norte, "PROVEEDOR");
+        await SubirAsync(otraSesion, "RUT", Pdf("RUT"));
+        var baja = Requisito(await EsperarAsync(e.Norte, otroExpediente, x => Requisito(x, "RUT").ConclusionDeRevision is not null), "RUT").ConclusionDeRevision!;
+        baja.Sugerencia.ShouldBe("Revisar");
+        baja.Motivos.ShouldHaveSingleItem().ShouldBe(new MotivoDeRevisionDto("confianza-baja", "La confianza del análisis (50 %) está bajo el umbral del plan (85 %)."));
+        baja.Umbral.ShouldBe(0.85m);
+    }
+
+    [Fact]
+    public async Task Una_diferencia_solo_en_un_campo_no_critico_se_sugiere_aprobar_con_la_nota_y_la_discrepancia_critica_dice_lo_declarado_y_lo_leido()
+    {
+        var e = await PrepararAsync();
+        await PlanParaRevisionAsync(e.Norte);
+        await FlujoRutYGeneralAsync(e);
+
+        async Task<(Guid ExpedienteId, string Nit)> ConRutAsync(Func<string, byte[]> rut)
+        {
+            var nit = Nit();
+            var correo = CorreoNuevo();
+            var vinculo = await CrearVinculoAsync(e.Norte, "CLIENTE", correo, nit);
+            var sesion = await SesionAsync(correo, e.Norte.Datos.Nombre);
+            await GuardarSeccionAsync(sesion, "FICHA_GENERAL", GeneralCompleta);
+            await AceptarAsync(sesion, vinculo.Id);
+            await SubirAsync(sesion, "RUT", rut(nit));
+            return (await AbiertoEnAsync(e.Norte, vinculo.Id), nit);
+        }
+
+        // La dirección del RUT es otra: no es un campo crítico (lo son el número y la razón social), así que no manda el documento a una persona.
+        var (soloDireccion, _) = await ConRutAsync(nit => RutCon(nit, "Carrera 99 # 1-2"));
+        var conNota = Requisito(await EsperarAsync(e.Norte, soloDireccion, x => Requisito(x, "RUT").ConclusionDeRevision is not null), "RUT").ConclusionDeRevision!;
+        conNota.ShouldSatisfyAllConditions(c => c.Sugerencia.ShouldBe("Aprobar"), c => c.Motivos.ShouldBeEmpty(), c => c.CruzadoConLoDeclarado.ShouldBeTrue());
+        var diferencia = conNota.Diferencias.ShouldHaveSingleItem();
+        (diferencia.Etiqueta, diferencia.Declarado, diferencia.Extraido).ShouldBe(("Dirección", "Calle 45 # 12-08", "Carrera 99 # 1-2"));
+
+        // La razón social sí es crítica: «Revisa antes de aprobar» con el campo, lo declarado y lo que trae el documento (nunca la frase genérica).
+        var (critica, _) = await ConRutAsync(nit => RutCon(nit, "Calle 45 # 12-08", "FERRETERIA OTRA LTDA"));
+        var conMotivo = Requisito(await EsperarAsync(e.Norte, critica, x => Requisito(x, "RUT").ConclusionDeRevision is not null), "RUT").ConclusionDeRevision!;
+        conMotivo.Sugerencia.ShouldBe("Revisar");
+        var motivo = conMotivo.Motivos.ShouldHaveSingleItem();
+        motivo.Codigo.ShouldBe("discrepancia-critica-ficha");
+        motivo.Texto.ShouldBe("El documento difiere de lo declarado en Razón social (declaró Aceros del Norte S.A.S.; el documento trae FERRETERIA OTRA LTDA).");
+    }
+
+    [Fact]
+    public async Task Sin_cupo_de_IA_la_conclusion_dice_que_no_hubo_analisis_y_en_una_empresa_sin_plan_no_hay_conclusion()
+    {
+        var e = await PrepararAsync();
+        // Una sola validación incluida al mes y sin adicional: el primer tercero la consume y el segundo se queda sin cupo (IA-4).
+        await PlanIaAsync(e.Norte, new ActualizarPlanIaEmpresaDto(1, false, ApiKeyOpenAi: LlaveIa()));
+        var (_, primeraSesion, primero) = await TerceroAceptaAsync(e.Norte, "PROVEEDOR");
+        await SubirAsync(primeraSesion, "RUT", Pdf("RUT primero"));
+        await EsperarAsync(e.Norte, primero, x => Requisito(x, "RUT").ConclusionDeRevision is { Sugerencia: "Aprobar" });
+
+        var (_, segundaSesion, segundo) = await TerceroAceptaAsync(e.Norte, "PROVEEDOR");
+        await SubirAsync(segundaSesion, "RUT", Pdf("RUT segundo"));
+        var sinCupo = Requisito(await EsperarAsync(e.Norte, segundo, x => Requisito(x, "RUT").ConclusionDeRevision is not null), "RUT").ConclusionDeRevision!;
+        (sinCupo.Sugerencia, sinCupo.Nivel).ShouldBe(("SinAnalisis", "Manual"));
+        sinCupo.Motivos.Select(m => m.Codigo).ShouldBe(["sin-analisis-ia"]);
+
+        // Sin plan de IA activo la empresa revisa a mano como siempre: no hay conclusión que dar de un documento que la IA nunca iba a leer.
+        await PlanIaAsync(e.Norte, new ActualizarPlanIaEmpresaDto(50, false, Activo: false));
+        var (_, terceraSesion, tercero) = await TerceroAceptaAsync(e.Norte, "PROVEEDOR");
+        await SubirAsync(terceraSesion, "RUT", Pdf("RUT tercero"));
+        var sinPlan = await EsperarAsync(e.Norte, tercero, x => Requisito(x, "RUT").VersionActual is not null);
+        Requisito(sinPlan, "RUT").ConclusionDeRevision.ShouldBeNull();
     }
 
     [Fact]

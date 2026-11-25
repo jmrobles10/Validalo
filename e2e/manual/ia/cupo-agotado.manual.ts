@@ -70,7 +70,7 @@ recorrido(
     await paso(paginaSofia, {
       titulo: 'Revisa el documento que quedó sin análisis',
       explicacion:
-        'El segundo RUT llegó cuando el cupo ya estaba agotado. Su documento dice «Sin análisis automático: revísalo manualmente» y la decisión automática indica que requiere una persona por «Sin análisis de IA». Nada se aprueba solo: el área lo decide como cualquier documento.',
+        'El segundo RUT llegó cuando el cupo ya estaba agotado. La conclusión de la IA del documento dice «La IA no pudo analizarlo; revísalo a mano» y la decisión automática indica que requiere una persona por «Sin análisis de IA». Nada se aprueba solo: el área lo decide como cualquier documento.',
       resaltar: sofia.getByRole('region', { name: 'Decisión automática' }),
       variantes: [{ cuando: 'Se agota el cupo y la empresa tiene adicional', entonces: 'Los documentos se analizan con el adicional, y solo cuando este también se agota quedan sin análisis.' }],
     });

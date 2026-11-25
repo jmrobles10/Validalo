@@ -1,3 +1,5 @@
+import type { VersionSubida } from './subida';
+
 /**
  * Qué se va a subir y desde dónde: lo que cada botón «Subir…» le pide al diálogo de subida. Es el mismo lenguaje que los parámetros de
  * `/boveda/subir` (la página que usan los enlaces de los correos y el modo embebido): de una solicitud salen los parámetros que lee
@@ -9,6 +11,8 @@
  * - `persona` + `tipo` + `nombre`: el documento de una persona relacionada (ADR-0010), que va a la bóveda de la persona.
  * - `expediente` + `requisito`: la revisión que lo pide, para leer las reglas, los campos y la plantilla del tipo.
  * - `volver`: ruta a la que regresa la página; el diálogo no navega, así que la ignora.
+ * - `alSubir`: solo del diálogo (no viaja en la URL): se llama con la versión que quedó en la bóveda cuando la subida termina, para que la pantalla que
+ *   lo abrió use el documento (el soporte de una sección de la ficha, FD-10) sin volver a buscarlo.
  */
 export interface SolicitudDeSubida {
   tipo?: string;
@@ -20,6 +24,7 @@ export interface SolicitudDeSubida {
   expediente?: string;
   requisito?: string;
   volver?: string;
+  alSubir?: (subida: VersionSubida) => void;
 }
 
 /** Los parámetros de URL en un orden fijo (así el enlace es estable), sin los que no vienen. */

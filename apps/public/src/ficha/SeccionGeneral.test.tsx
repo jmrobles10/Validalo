@@ -139,9 +139,14 @@ describe('Mi información: Información general', () => {
     await vi.waitFor(() => expect(guardados).toHaveLength(2));
     expect(guardados[1]?.cuerpo).toMatchObject({ soportes: [{ documentoId: 'd-rut', version: 2 }] });
 
-    // «Subir un soporte» abre el diálogo de subida: no saca al tercero de la sección (sus cambios sin guardar siguen ahí).
+    // «Subir un soporte» pregunta qué documento es (en la general de una jurídica: el RUT o la Cámara, o «Otro documento») y abre el diálogo de subida con ese
+    // tipo: no saca al tercero de la sección (sus cambios sin guardar siguen ahí).
+    expect(screen.getByRole('button', { name: 'Subir un soporte' })).toBeDisabled();
+    await usuario.click(screen.getByRole('combobox', { name: '¿Qué documento vas a subir?' }));
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Registro Único Tributario (RUT)', 'Cámara de comercio', 'Otro documento']);
+    await usuario.click(screen.getByRole('option', { name: 'Registro Único Tributario (RUT)' }));
     await usuario.click(screen.getByRole('button', { name: 'Subir un soporte' }));
-    expect(useDialogoSubir.getState().solicitud).toEqual({ tipo: 'SOPORTE_FICHA', nombre: 'Soporte de mi información' });
+    expect(useDialogoSubir.getState().solicitud).toMatchObject({ tipo: 'RUT', nombre: 'Registro Único Tributario' });
   });
 });
 

@@ -181,12 +181,6 @@ public sealed class Usuario
         Activo = false;
     }
 
-    /// <summary>
-    /// Debe tener passkey: lo exige algún rol (<see cref="PoliticaDePasskeys"/>) o el grupo lo pide a todos (ING-2). Sin passkey, el código
-    /// del correo (un solo factor) no abre sesión: solo sirve para registrar una.
-    /// </summary>
-    public bool ExigePasskey(bool paraTodosEnElGrupo) => paraTodosEnElGrupo || Roles.Any(r => PoliticaDePasskeys.RolExige(r.Rol));
-
     /// <summary>Si tiene algún rol o grupo de acceso en la empresa, directamente o para todo el tenant.</summary>
     public bool TieneRolEn(Guid empresaId) =>
         Roles.Any(r => r.EmpresaId is null || r.EmpresaId == empresaId) || Grupos.Any(g => g.EmpresaId is null || g.EmpresaId == empresaId);

@@ -318,6 +318,26 @@ describe('Tercero 360: los soportes de la sección y su «Ver»', () => {
     expect(general.queryByRole('button', { name: /^Ver / })).not.toBeInTheDocument();
   });
 
+  it('un soporte que la empresa no recibió dice qué documento es (la API trae el nombre del tipo) y sigue sin poder abrirse (FD-10)', async () => {
+    permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer, SCOPES.documentosLeer, SCOPES.documentosDescargar]);
+    // d1: el RUT compartido con el vínculo (se abre en el visor con su nombre); d8: otro RUT que no recibió; d9: un soporte genérico de antes.
+    const soportes = [
+      { documentoId: 'd1', version: 2, tipoDocumento: 'RUT', nombre: 'Registro Único Tributario' },
+      { documentoId: 'd8', version: 3, tipoDocumento: 'CAMARA_COMERCIO', nombre: 'Certificado de existencia y representación legal' },
+      { documentoId: 'd9', version: 1, tipoDocumento: 'SOPORTE_FICHA', nombre: 'Otro soporte' },
+    ];
+    montar(ficha([{ ...GENERAL, soportes }]));
+    const general = within(await screen.findByRole('region', { name: 'Información general' }));
+
+    expect(general.getByRole('button', { name: 'Ver RUT, versión 2' })).toBeInTheDocument();
+    for (const nombre of ['Certificado de existencia y representación legal · versión 3', 'Otro soporte · versión 1']) {
+      const fila = general.getByText(nombre).closest('li');
+      expect(fila).toHaveTextContent('El tercero no lo compartió con Constructora Norte, por eso no se puede abrir aquí.');
+      expect(within(fila as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
+    }
+    expect(general.queryByText(/Soporte del tercero/)).not.toBeInTheDocument();
+  });
+
   it('sin permiso para leer los documentos del vínculo, todos los soportes lo dicen', async () => {
     permisos.scopes = new Set([SCOPES.tercerosLeer, SCOPES.vinculosLeer]);
     const datos = ficha([GENERAL]);

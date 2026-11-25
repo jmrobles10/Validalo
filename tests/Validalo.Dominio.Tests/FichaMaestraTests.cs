@@ -424,6 +424,25 @@ public class FichaMaestraTests
     }
 
     [Fact]
+    public void Lo_que_el_tercero_sube_para_respaldar_una_seccion_sale_del_mapa_de_respaldo_y_Otro_soporte_va_aparte()
+    {
+        // «Subir un soporte» (FD-10) ofrece, por sección, los tipos que respalda el cruce (docs/14 §5.1) y, aparte, el soporte genérico.
+        MapaDeRespaldo.TiposPara(CodigosDeSeccion.General).ShouldBe(["RUT", "CAMARA_COMERCIO", "CEDULA"], ignoreOrder: true);
+        MapaDeRespaldo.TiposPara(CodigosDeSeccion.Tributaria).ShouldBe(["RUT"]);
+        MapaDeRespaldo.TiposPara(CodigosDeSeccion.Legal).ShouldBe(["RUT", "CAMARA_COMERCIO", "CEDULA"], ignoreOrder: true);
+        MapaDeRespaldo.TiposPara(CodigosDeSeccion.Financiera).ShouldBe(["ESTADOS_FINANCIEROS"]);
+        foreach (var codigo in new[] { CodigosDeSeccion.General, CodigosDeSeccion.Tributaria, CodigosDeSeccion.Legal, CodigosDeSeccion.Financiera })
+        {
+            var seccion = CatalogoDeSecciones.Requerida(codigo);
+            // Cada tipo del mapa lo admite la sección como soporte, y el genérico también.
+            MapaDeRespaldo.TiposPara(codigo).ShouldAllBe(tipo => seccion.AdmiteSoporte(tipo));
+            seccion.AdmiteSoporte(CodigosDeSeccion.SoporteFicha).ShouldBeTrue();
+        }
+
+        Documentos.CatalogoCanonico.Requerido(CodigosDeSeccion.SoporteFicha).Nombre.ShouldBe("Otro soporte");
+    }
+
+    [Fact]
     public void Recalcular_refleja_un_codigo_que_salio_del_catalogo_y_es_idempotente()
     {
         var definicion = CatalogoDeSecciones.Requerida(CodigosDeSeccion.General);

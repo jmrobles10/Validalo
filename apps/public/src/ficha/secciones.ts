@@ -1,12 +1,21 @@
 import type { DocumentoBovedaDto, EstadoFichaDto, EstadoSeccionFichaDto, FaltanteSeccionDto } from '@validalo/api-client';
 
-/** Canónico con el que el tercero sube un soporte ad hoc de cualquier sección (FM-20). */
+/** Canónico con el que el tercero sube un soporte que no es ninguno de los documentos de la sección: «Otro documento» al subir, «Otro soporte» en las listas (FM-20, FD-10). */
 export const SOPORTE_FICHA = 'SOPORTE_FICHA';
 
 /** Regla del faltante «Falta el soporte del cambio» (FM-20): se muestra junto al selector de soporte. */
 export const REGLA_SOPORTE = 'soporte-del-cambio';
 
 export type CodigoSeccion = 'FICHA_GENERAL' | 'FICHA_TRIBUTARIA' | 'FICHA_LEGAL' | 'FICHA_FINANCIERA' | 'FICHA_SST' | 'FICHA_ESPECIALIDADES';
+
+/** Los documentos que el tercero puede indicar al subir un soporte de una sección (FD-10): los que la IA lee y `SOPORTE_FICHA`, «Otro documento». */
+export type DocumentoDeSoporte = 'RUT' | 'CAMARA_COMERCIO' | 'CEDULA' | 'ESTADOS_FINANCIEROS' | typeof SOPORTE_FICHA;
+
+/** Los documentos que se ofrecen al subir un soporte de una sección, según el tipo de persona (el primero es el más natural). */
+export interface DocumentosParaSubir {
+  natural: readonly Exclude<DocumentoDeSoporte, typeof SOPORTE_FICHA>[];
+  juridica: readonly Exclude<DocumentoDeSoporte, typeof SOPORTE_FICHA>[];
+}
 
 export interface DefinicionSeccion {
   codigo: CodigoSeccion;
@@ -15,17 +24,35 @@ export interface DefinicionSeccion {
   porPeriodo: boolean;
   /** Tipos de documento que la respaldan (mapa de docs/14 §5.1); `null` = cualquier documento global (opcional). */
   soportes: readonly string[] | null;
+  /**
+   * Qué documentos se ofrecen en «Subir un soporte» (FD-10): los de `soportes` que respalda el cruce (`MapaDeRespaldo`) y que aplican a la persona (la Cámara
+   * es de una jurídica; la cédula, de una natural y, en la Legal, de sus representantes). Vacío: no se pregunta qué documento es, se sube un soporte genérico.
+   */
+  subibles: DocumentosParaSubir;
 }
+
+const SIN_SUBIBLES: DocumentosParaSubir = { natural: [], juridica: [] };
 
 /** Las seis secciones en el orden del wizard (FM-17); el orden que se muestra es el que devuelve la API. */
 export const SECCIONES: readonly DefinicionSeccion[] = [
-  { codigo: 'FICHA_GENERAL', ruta: 'general', porPeriodo: false, soportes: ['RUT', 'CAMARA_COMERCIO', 'CEDULA', SOPORTE_FICHA] },
-  { codigo: 'FICHA_TRIBUTARIA', ruta: 'tributaria', porPeriodo: false, soportes: ['RUT', SOPORTE_FICHA] },
-  { codigo: 'FICHA_LEGAL', ruta: 'legal', porPeriodo: false, soportes: ['CAMARA_COMERCIO', 'RUT', 'CEDULA', SOPORTE_FICHA] },
-  { codigo: 'FICHA_FINANCIERA', ruta: 'financiera', porPeriodo: true, soportes: ['ESTADOS_FINANCIEROS', SOPORTE_FICHA] },
-  { codigo: 'FICHA_SST', ruta: 'sst', porPeriodo: false, soportes: null },
-  { codigo: 'FICHA_ESPECIALIDADES', ruta: 'especialidades', porPeriodo: false, soportes: null },
+  { codigo: 'FICHA_GENERAL', ruta: 'general', porPeriodo: false, soportes: ['RUT', 'CAMARA_COMERCIO', 'CEDULA', SOPORTE_FICHA], subibles: { natural: ['RUT', 'CEDULA'], juridica: ['RUT', 'CAMARA_COMERCIO'] } },
+  { codigo: 'FICHA_TRIBUTARIA', ruta: 'tributaria', porPeriodo: false, soportes: ['RUT', SOPORTE_FICHA], subibles: { natural: ['RUT'], juridica: ['RUT'] } },
+  // La Legal solo la diligencia una jurídica: la Cámara dice quiénes son sus representantes y socios y la cédula es la de ellos.
+  { codigo: 'FICHA_LEGAL', ruta: 'legal', porPeriodo: false, soportes: ['CAMARA_COMERCIO', 'RUT', 'CEDULA', SOPORTE_FICHA], subibles: { natural: [], juridica: ['CAMARA_COMERCIO', 'CEDULA', 'RUT'] } },
+  { codigo: 'FICHA_FINANCIERA', ruta: 'financiera', porPeriodo: true, soportes: ['ESTADOS_FINANCIEROS', SOPORTE_FICHA], subibles: { natural: ['ESTADOS_FINANCIEROS'], juridica: ['ESTADOS_FINANCIEROS'] } },
+  { codigo: 'FICHA_SST', ruta: 'sst', porPeriodo: false, soportes: null, subibles: SIN_SUBIBLES },
+  { codigo: 'FICHA_ESPECIALIDADES', ruta: 'especialidades', porPeriodo: false, soportes: null, subibles: SIN_SUBIBLES },
 ];
+
+/**
+ * Los documentos que el tercero puede elegir en «Subir un soporte» de la sección (FD-10), del más natural al menos. Un consorcio o una unión temporal se
+ * tratan como jurídica, igual que en la API. «Otro documento» (`SOPORTE_FICHA`) no está aquí: se ofrece siempre, al final. El RUT, la Cámara y la cédula son
+ * documentos de Colombia: de un tercero de otro país (`pais`) no se leen ni se cruzan (RG-6), así que ahí solo se ofrece «Otro documento».
+ */
+export function documentosParaSubir(seccion: DefinicionSeccion, tipoPersona: string, pais?: string | null): DocumentosParaSubir['natural'] {
+  if (pais && pais !== 'CO') return [];
+  return tipoPersona === 'Natural' ? seccion.subibles.natural : seccion.subibles.juridica;
+}
 
 export const seccionPorCodigo = (codigo: string | null | undefined) => SECCIONES.find((s) => s.codigo === codigo?.toUpperCase()) ?? null;
 

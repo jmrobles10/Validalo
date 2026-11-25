@@ -24,11 +24,13 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CodigoSolicitadoDto,
   CodigosDeRecuperacionDto,
   EstadoDeReautenticacionDto,
   EstadoDeRecuperacionDto,
   OpcionesDePasskeyDto,
   ReautenticacionDto,
+  VerificarCodigoDto,
   VerificarPasskeyDto
 } from '../../modelos';
 
@@ -263,6 +265,126 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getObtenerOpcionesReautenticacionMutationOptions(options), queryClient);
+    }
+    export const enviarCodigoDeReautenticacion = (
+
+ options?: SecondParameter<typeof clienteValidalo>,signal?: AbortSignal
+) => {
+
+
+      return clienteValidalo<CodigoSolicitadoDto>(
+      {url: `/api/v1/mi-cuenta/reautenticacion/codigo`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getEnviarCodigoDeReautenticacionMutationKey = () => ['enviarCodigoDeReautenticacion'] as const;
+
+export const getEnviarCodigoDeReautenticacionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enviarCodigoDeReautenticacion>>, TError,void, TContext>, request?: SecondParameter<typeof clienteValidalo>}
+): UseMutationOptions<Awaited<ReturnType<typeof enviarCodigoDeReautenticacion>>, TError,void, TContext> => {
+
+const mutationKey = getEnviarCodigoDeReautenticacionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof enviarCodigoDeReautenticacion>>, void> = () => {
+
+
+          return  enviarCodigoDeReautenticacion(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EnviarCodigoDeReautenticacionMutationResult = NonNullable<Awaited<ReturnType<typeof enviarCodigoDeReautenticacion>>>
+
+    export type EnviarCodigoDeReautenticacionMutationError = ErrorType<void>
+
+
+    export const useEnviarCodigoDeReautenticacion = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enviarCodigoDeReautenticacion>>, TError,void, TContext>, request?: SecondParameter<typeof clienteValidalo>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof enviarCodigoDeReautenticacion>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getEnviarCodigoDeReautenticacionMutationOptions(options), queryClient);
+    }
+    export const confirmarReautenticacionConCodigo = (
+    verificarCodigoDto: BodyType<VerificarCodigoDto>,
+ options?: SecondParameter<typeof clienteValidalo>,signal?: AbortSignal
+) => {
+
+
+      return clienteValidalo<ReautenticacionDto>(
+      {url: `/api/v1/mi-cuenta/reautenticacion/codigo/verificar`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: verificarCodigoDto, signal
+    },
+      options);
+    }
+
+
+
+
+export const getConfirmarReautenticacionConCodigoMutationKey = () => ['confirmarReautenticacionConCodigo'] as const;
+
+export const getConfirmarReautenticacionConCodigoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmarReautenticacionConCodigo>>, TError,ConfirmarReautenticacionConCodigoMutationVariables, TContext>, request?: SecondParameter<typeof clienteValidalo>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmarReautenticacionConCodigo>>, TError,ConfirmarReautenticacionConCodigoMutationVariables, TContext> => {
+
+const mutationKey = getConfirmarReautenticacionConCodigoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmarReautenticacionConCodigo>>, ConfirmarReautenticacionConCodigoMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  confirmarReautenticacionConCodigo(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmarReautenticacionConCodigoMutationResult = NonNullable<Awaited<ReturnType<typeof confirmarReautenticacionConCodigo>>>
+    export type ConfirmarReautenticacionConCodigoMutationBody = BodyType<VerificarCodigoDto>
+    export type ConfirmarReautenticacionConCodigoMutationError = ErrorType<void>
+    export type ConfirmarReautenticacionConCodigoMutationVariables = {data: BodyType<VerificarCodigoDto>}
+
+    export const useConfirmarReautenticacionConCodigo = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmarReautenticacionConCodigo>>, TError,ConfirmarReautenticacionConCodigoMutationVariables, TContext>, request?: SecondParameter<typeof clienteValidalo>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof confirmarReautenticacionConCodigo>>,
+        TError,
+        ConfirmarReautenticacionConCodigoMutationVariables,
+        TContext
+      > => {
+      return useMutation(getConfirmarReautenticacionConCodigoMutationOptions(options), queryClient);
     }
     export const obtenerEstadoCodigosRecuperacion = (
 

@@ -35,6 +35,14 @@ const PAISES: PaisDto[] = [
     ],
   },
   { codigo: 'PE', nombre: 'Perú', tiposIdentificacion: [{ pais: 'PE', codigo: 'RUC', nombre: 'Registro Único de Contribuyentes', aplicaA: 'Ambas', patron: '^[0-9]{11}$', tieneDv: false }] },
+  {
+    codigo: 'PA',
+    nombre: 'Panamá',
+    tiposIdentificacion: [
+      { pais: 'PA', codigo: 'RUC', nombre: 'Registro Único de Contribuyente (DGI)', aplicaA: 'Ambas', patron: '^((PE|PI|E|N)?[0-9]{1,2}(AV)?[0-9]{3,9}|[0-9]{12,20})$', tieneDv: false },
+      { pais: 'PA', codigo: 'CIP', nombre: 'Cédula de identidad personal', aplicaA: 'Natural', patron: '^(PE|PI|E|N)?[0-9]{1,2}(AV)?[0-9]{3,9}$', tieneDv: false },
+    ],
+  },
 ];
 
 const tipo = (codigo: string, nombre: string, activo = true): TipoVinculoDto => ({ id: codigo, codigo, nombre, atributosPermitidos: [], exigeCuentaDesignada: false, activo });
@@ -141,7 +149,6 @@ describe('«Invitar tercero»: formulario de una invitación a mano', () => {
     await usuario.type(screen.getByRole('textbox', { name: /Contacto/ }), 'Laura Gómez');
     await usuario.type(screen.getByRole('textbox', { name: /Teléfono/ }), '3001234567');
     await usuario.type(screen.getByRole('textbox', { name: 'DV' }), '8');
-    await elegir(usuario, /Tipo de persona/, 'Jurídica');
     await elegir(usuario, /Flujo/, 'Habilitación de proveedores');
 
     const invitar = screen.getByRole('button', { name: 'Invitar' });
@@ -170,6 +177,51 @@ describe('«Invitar tercero»: formulario de una invitación a mano', () => {
     });
     expect(envio?.clave).toBeTruthy();
     expect(await screen.findByText('Invitación enviada a compras@aceros.co.')).toBeInTheDocument();
+  });
+
+  it('el tipo de persona no se elige: se deriva del tipo de identificación, se muestra junto a él como texto y viaja derivado', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosEscribir, SCOPES.configuracionLeer]);
+    const usuario = userEvent.setup();
+    const peticiones = montar(() => json(RESPUESTA, 201));
+    await llenar(usuario);
+
+    // No hay un campo «Tipo de persona»: solo el texto de lo que resulta del tipo de identificación.
+    expect(screen.queryByRole('combobox', { name: /Tipo de persona/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Tipo de persona/)).not.toBeInTheDocument();
+    expect(screen.getByText('Persona jurídica')).toBeInTheDocument(); // NIT
+
+    await elegir(usuario, /Tipo de identificación/, /CC · Cédula de ciudadanía/);
+    expect(screen.getByText('Persona natural')).toBeInTheDocument();
+    expect(screen.queryByText('Persona jurídica')).not.toBeInTheDocument();
+
+    await usuario.click(screen.getByRole('button', { name: 'Invitar' }));
+    expect(await screen.findByText('Detalle del vínculo')).toBeInTheDocument();
+    expect(peticiones.find((p) => p.metodo === 'POST')?.cuerpo).toMatchObject({ tipoIdentificacion: 'CC', tipoPersona: 'Natural' });
+  });
+
+  it('en el RUC de Panamá el número decide: la cédula es de una persona natural y el RUC largo, de una sociedad', async () => {
+    permisos.scopes = new Set([SCOPES.vinculosEscribir, SCOPES.configuracionLeer]);
+    const usuario = userEvent.setup();
+    const peticiones = montar(() => json(RESPUESTA, 201));
+    await screen.findByRole('dialog');
+    await elegir(usuario, /País/, 'Panamá');
+    await elegir(usuario, /Tipo de identificación/, /RUC · /);
+
+    // Sin número (o con uno que aún no es válido) no se sabe: se dice que depende del número.
+    expect(screen.getByText('Persona natural o jurídica, según el número.')).toBeInTheDocument();
+    const numero = screen.getByRole('textbox', { name: /Número de identificación/ });
+    await usuario.type(numero, '8-123-456');
+    expect(screen.getByText('Persona natural')).toBeInTheDocument();
+    await usuario.clear(numero);
+    await usuario.type(numero, '155612345-2-2019');
+    expect(screen.getByText('Persona jurídica')).toBeInTheDocument();
+
+    await usuario.type(screen.getByRole('textbox', { name: /Razón social o nombres/ }), 'Constructora del Istmo');
+    await usuario.type(screen.getByRole('textbox', { name: /Correo/ }), 'compras@istmo.pa');
+    await elegir(usuario, /Tipo de vínculo/, 'Proveedor');
+    await usuario.click(screen.getByRole('button', { name: 'Invitar' }));
+    expect(await screen.findByText('Detalle del vínculo')).toBeInTheDocument();
+    expect(peticiones.find((p) => p.metodo === 'POST')?.cuerpo).toMatchObject({ pais: 'PA', tipoIdentificacion: 'RUC', numeroIdentificacion: '155612345-2-2019', tipoPersona: 'Juridica' });
   });
 
   it('no deja enviar mientras falta algo y dice qué: número, razón social, correo y tipo de vínculo', async () => {
@@ -342,12 +394,15 @@ describe('«Invitar tercero»: atributos del vínculo del tipo elegido', () => {
 
     await elegir(usuario, /Tipo de vínculo/, 'Proveedor');
     expect(screen.getByText('Atributos del vínculo')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: /nivelRiesgo/ })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: /nivelRiesgo/ }).closest('.MuiFormControl-root')?.querySelector('.MuiFormLabel-asterisk')).not.toBeNull(); // obligatorio
-    expect(screen.getByRole('combobox', { name: 'critico' }).closest('.MuiFormControl-root')?.querySelector('.MuiFormLabel-asterisk')).toBeNull();
-    expect(screen.getByRole('combobox', { name: 'categorias' })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'montoEstimado' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'critico' })).toBeInTheDocument();
+    // Las etiquetas son el código del atributo en texto legible, no el código tal cual.
+    expect(screen.getByRole('combobox', { name: /Nivel riesgo/ })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /Nivel riesgo/ }).closest('.MuiFormControl-root')?.querySelector('.MuiFormLabel-asterisk')).not.toBeNull(); // obligatorio
+    expect(screen.getByRole('combobox', { name: 'Critico' }).closest('.MuiFormControl-root')?.querySelector('.MuiFormLabel-asterisk')).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Categorias' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Monto estimado' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Critico' })).toBeInTheDocument();
+    expect(screen.queryByText('nivelRiesgo')).not.toBeInTheDocument();
+    expect(screen.queryByText('montoEstimado')).not.toBeInTheDocument();
 
     // Con otro tipo sin atributos desaparecen.
     await elegir(usuario, /Tipo de vínculo/, 'Cliente');
@@ -363,14 +418,14 @@ describe('«Invitar tercero»: atributos del vínculo del tipo elegido', () => {
 
     const invitar = screen.getByRole('button', { name: 'Invitar' });
     expect(invitar).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent('Falta el atributo «nivelRiesgo».');
+    expect(screen.getByRole('status')).toHaveTextContent('Falta el atributo «Nivel riesgo».');
 
-    await elegir(usuario, /nivelRiesgo/, 'Alto');
-    await usuario.type(screen.getByRole('textbox', { name: 'montoEstimado' }), '1500000');
-    await usuario.click(screen.getByRole('combobox', { name: 'categorias' }));
+    await elegir(usuario, /Nivel riesgo/, 'Alto');
+    await usuario.type(screen.getByRole('textbox', { name: 'Monto estimado' }), '1500000');
+    await usuario.click(screen.getByRole('combobox', { name: 'Categorias' }));
     await usuario.click(await screen.findByRole('option', { name: 'Servicios' }));
     await usuario.keyboard('{Escape}');
-    await elegir(usuario, 'critico', 'Sí');
+    await elegir(usuario, 'Critico', 'Sí');
     await waitFor(() => expect(invitar).toBeEnabled());
     await usuario.click(invitar);
 
@@ -387,8 +442,8 @@ describe('«Invitar tercero»: atributos del vínculo del tipo elegido', () => {
     const peticiones = montar(() => json(RESPUESTA, 201), [NORTE], CON_ATRIBUTOS);
     await llenarSinTipo(usuario);
     await elegir(usuario, /Tipo de vínculo/, 'Proveedor');
-    await elegir(usuario, /nivelRiesgo/, 'Bajo');
-    await usuario.type(screen.getByRole('textbox', { name: 'montoEstimado' }), '12,5');
+    await elegir(usuario, /Nivel riesgo/, 'Bajo');
+    await usuario.type(screen.getByRole('textbox', { name: 'Monto estimado' }), '12,5');
     expect(await screen.findAllByText('Escribe un número, con punto decimal.')).not.toHaveLength(0);
     expect(screen.getByRole('button', { name: 'Invitar' })).toBeDisabled();
 
@@ -418,7 +473,7 @@ describe('«Invitar tercero»: atributos del vínculo del tipo elegido', () => {
     );
     await llenarSinTipo(usuario);
     await elegir(usuario, /Tipo de vínculo/, 'Proveedor');
-    await elegir(usuario, /nivelRiesgo/, 'Medio');
+    await elegir(usuario, /Nivel riesgo/, 'Medio');
     await usuario.click(screen.getByRole('button', { name: 'Invitar' }));
 
     expect(await screen.findByText('El valor del atributo «nivelRiesgo» no es válido: escribe una de estas opciones: Bajo, Medio, Alto.')).toBeInTheDocument();

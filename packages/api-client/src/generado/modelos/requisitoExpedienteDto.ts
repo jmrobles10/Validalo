@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { AreaDeRequisitoDto } from './areaDeRequisitoDto';
+import type { ConclusionDeRevisionDto } from './conclusionDeRevisionDto';
 import type { EstadoRequisito } from './estadoRequisito';
 import type { ExencionDto } from './exencionDto';
 import type { MotivoDeExigenciaDto } from './motivoDeExigenciaDto';
@@ -35,4 +36,5 @@ export interface RequisitoExpedienteDto {
   persona?: null | PersonaDelRequisitoDto;
   /** @nullable */
   porQue?: MotivoDeExigenciaDto[] | null;
+  conclusionDeRevision?: null | ConclusionDeRevisionDto;
 }

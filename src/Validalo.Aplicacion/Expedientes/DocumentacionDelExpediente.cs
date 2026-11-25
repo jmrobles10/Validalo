@@ -2,6 +2,7 @@ using Marten;
 using Validalo.Aplicacion.Comun;
 using Validalo.Aplicacion.Documentos;
 using Validalo.Aplicacion.Ficha;
+using Validalo.Aplicacion.Revision;
 using Validalo.Contratos;
 using Validalo.Dominio.Documentos;
 using Validalo.Dominio.Expedientes;
@@ -22,6 +23,9 @@ public sealed record DocumentacionDelExpediente(
 {
     /// <summary>Cruces sección ↔ documento que ve la empresa (F5); solo en la vista de la empresa, nunca en la del tercero.</summary>
     public CrucesDelExpediente? Cruces { get; init; }
+
+    /// <summary>Lo que la IA concluye de cada documento (aprobar, revisar o sin análisis) en cualquier nivel de revisión de la empresa; solo en la vista de la empresa.</summary>
+    public ConclusionesDelExpediente? Conclusiones { get; init; }
 
     /// <summary>Ayuda que la empresa del expediente escribió para cada tipo (OP-15); manda sobre la del grupo (<c>TextoAyuda</c> del tipo).</summary>
     public IReadOnlyDictionary<Guid, string>? Ayudas { get; init; }

@@ -14,7 +14,7 @@ import { usePaises } from '../configuracion/empresas/api';
 import { useFlujos } from '../flujos/api';
 import { useTiposVinculo } from '../vinculos/api';
 import { CamposDeAtributos } from '../vinculos/atributos/CamposDeAtributos';
-import { validarAtributos, type ValorDeAtributo } from '../vinculos/atributos/modelo';
+import { etiquetaDeAtributo, validarAtributos, type ValorDeAtributo } from '../vinculos/atributos/modelo';
 import { useInvitarTercero } from './api';
 import { CamposInvitarTercero } from './CamposInvitarTercero';
 import {
@@ -203,7 +203,7 @@ export function DialogoInvitarTercero({ empresas, empresaInicial, onCerrar }: Pr
         </DialogContent>
         <DialogActions>
           {primero && <FaltaParaEnviar>{textoDe(primero.codigo)}</FaltaParaEnviar>}
-          {!primero && primerAtributo && <FaltaParaEnviar>{t('atributosVinculo.falta', { atributo: primerAtributo.clave })}</FaltaParaEnviar>}
+          {!primero && primerAtributo && <FaltaParaEnviar>{t('atributosVinculo.falta', { atributo: etiquetaDeAtributo(primerAtributo.clave) })}</FaltaParaEnviar>}
           <Button variant="text" onClick={onCerrar} disabled={invitar.isPending} sx={{ color: 'text.primary' }}>
             {t('invitaciones.invitarTercero.cancelar')}
           </Button>

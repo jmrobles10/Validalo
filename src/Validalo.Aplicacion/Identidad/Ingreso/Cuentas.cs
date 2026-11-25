@@ -92,7 +92,10 @@ public sealed class PoliticaDeIngreso(IDocumentStore store, IMemoryCache cache, 
     }
 }
 
-/// <summary>Una cuenta con la que se puede entrar: su documento, su grupo y lo que se le exige.</summary>
+/// <summary>
+/// Una cuenta con la que se puede entrar: su documento, su grupo y lo que se le exige. <see cref="ExigePasskey"/> es verdadero para un operador de Plataforma y para
+/// las personas de un grupo que activó «passkey para todos»; ningún rol la exige por sí mismo.
+/// </summary>
 public sealed record CuentaResuelta(
     CuentaDeIngreso Cuenta, string Nombre, string Correo, string? Grupo, bool ExigePasskey, Usuario? Usuario, OperadorDePlataforma? Operador, Tenant? Tenant,
     IReadOnlyList<ConcesionDeAcceso>? ConcesionesDeGrupos = null)
@@ -112,8 +115,9 @@ public sealed record CuentaResuelta(
 
 /// <summary>
 /// Busca las cuentas de una persona por su correo en todos los grupos que admiten el ingreso directo y entre los operadores de
-/// Plataforma de ingreso directo, y las vuelve a cargar con su estado al día (activa, grupo que admite el modo, roles que exigen
-/// passkey). Un operador de Plataforma siempre exige passkey (ING-4).
+/// Plataforma de ingreso directo, y las vuelve a cargar con su estado al día (activa, grupo que admite el modo, grupo que exige
+/// passkey a todos). Un operador de Plataforma siempre exige passkey (ING-4); a una persona de un grupo solo se la exige el grupo, y
+/// únicamente si activó esa opción a propósito (PI-20).
 /// </summary>
 public sealed class CuentasDeIngreso(IDocumentStore store)
 {
@@ -182,7 +186,7 @@ public sealed class CuentasDeIngreso(IDocumentStore store)
     }
 
     private static CuentaResuelta DeUsuario(Usuario u, Tenant t, IReadOnlyList<ConcesionDeAcceso> concesiones) =>
-        new(new CuentaDeIngreso(TipoDePropietario.Usuario, t.Id, u.Id.ToString()), u.Nombre, u.Correo, t.Nombre, u.ExigePasskey(t.PasskeyParaTodos), u, null, t, concesiones);
+        new(new CuentaDeIngreso(TipoDePropietario.Usuario, t.Id, u.Id.ToString()), u.Nombre, u.Correo, t.Nombre, t.PasskeyParaTodos, u, null, t, concesiones);
 
     private static CuentaResuelta DeOperador(OperadorDePlataforma o) =>
         new(new CuentaDeIngreso(TipoDePropietario.Operador, null, o.Id), o.Nombre, o.Correo, null, true, null, o, null);

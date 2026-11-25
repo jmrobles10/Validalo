@@ -16,6 +16,8 @@ export const fichaMaestra = {
   soportes: 'Soportes',
   sinSoportes: 'Sin soporte.',
   soporteVisible: '{{tipo}} · versión {{n}}',
+  // El tipo del documento (`Registro Único Tributario`, `Otro soporte`) aunque la empresa no lo haya recibido: la API lo trae con el soporte (FD-10).
+  soporteNombrado: '{{nombre}} · versión {{n}}',
   soporteDelTercero: 'Soporte del tercero · versión {{n}}',
   soporteNoCompartido: 'El tercero no lo compartió con {{empresa}}, por eso no se puede abrir aquí.',
   soporteSinPermisoDeLectura: 'Tu rol no puede leer los documentos del vínculo, por eso no se puede abrir aquí.',

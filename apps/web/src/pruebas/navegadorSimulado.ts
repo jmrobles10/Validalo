@@ -4,9 +4,9 @@ import { vi } from 'vitest';
  * Un navegador con passkeys para las pruebas: `PublicKeyCredential` y `navigator.credentials` falsos. `get` devuelve una firma de verdad (con binarios) para que
  * el código que la serializa corra completo; los tests ven lo que se le pidió (`mediation`, `signal`) en `llamadas`.
  *
- * Imita a Chrome en lo que importa para el ingreso: solo admite una petición de passkey a la vez. Mientras otra no se haya asentado (resuelta o rechazada),
- * una nueva se rechaza con `OperationError: A request is already pending.`; abortar la señal de una condicional no la libera al instante, sino cuando el
- * navegador termina de cancelarla (una tarea después), así que quien quiera pedir otra debe esperar a que se asiente.
+ * Imita a Chrome en lo que importa para el ingreso: solo admite una petición de passkey a la vez. Mientras el autenticador tenga una abierta, una nueva se
+ * rechaza al instante con `NotAllowedError: A request is already pending.` (la persona no decidió nada). Al abortar la señal de una condicional, Chrome rechaza
+ * su promesa de inmediato pero libera la petición por dentro una tarea después: quien pida otra enseguida choca y debe reintentar.
  */
 export interface NavegadorSimulado {
   llamadas: { mediation: string | undefined; conSenal: boolean }[];
@@ -37,6 +37,13 @@ export interface OpcionesDelNavegadorSimulado {
   esperaLaFirma?: boolean;
   /** La primera petición modal (sin `mediation`) falla con este error del navegador (p. ej. `NotAllowedError` si la persona cierra la ventana). */
   falloDeLaModal?: string;
+  /**
+   * Milisegundos que tarda en llegar el fallo de la modal: la persona cierra la ventana pasado un rato. Sin esto el fallo es inmediato, como cuando el
+   * navegador rechaza sin haber abierto ninguna ventana.
+   */
+  demoraDelFallo?: number;
+  /** El fallo de la modal se repite en cada petición con ventana, no solo en la primera (la persona cierra la ventana siempre). */
+  repetirElFallo?: boolean;
 }
 
 export function simularNavegadorConPasskeys(opciones: OpcionesDelNavegadorSimulado = {}): NavegadorSimulado {
@@ -56,24 +63,27 @@ export function simularNavegadorConPasskeys(opciones: OpcionesDelNavegadorSimula
     llamadas.push({ mediation: peticion.mediation, conSenal: peticion.signal !== undefined });
     if (peticion.signal) senales.push(peticion.signal);
     if (peticion.signal?.aborted) return Promise.reject(new DOMException('abortada', 'AbortError'));
-    if (sinAsentar > 0) return Promise.reject(new DOMException('A request is already pending.', 'OperationError'));
+    if (sinAsentar > 0) return Promise.reject(new DOMException('A request is already pending.', 'NotAllowedError'));
     const condicional = peticion.mediation === 'conditional';
-    // Como el navegador: la petición condicional queda abierta hasta que la persona elige o se aborta; al abortar, se libera una tarea después.
+    // Como Chrome: la petición condicional queda abierta hasta que la persona elige o se aborta; al abortar, la promesa se rechaza al instante y la
+    // petición se libera por dentro una tarea después.
     if (opciones.esperaLaFirma && condicional) {
       sinAsentar += 1;
       return new Promise((_resolver, rechazar) => {
-        peticion.signal?.addEventListener('abort', () =>
+        peticion.signal?.addEventListener('abort', () => {
+          rechazar(new DOMException('abortada', 'AbortError'));
           setTimeout(() => {
             sinAsentar -= 1;
-            rechazar(new DOMException('abortada', 'AbortError'));
-          }, 0),
-        );
+          }, 0);
+        });
       });
     }
     if (!condicional && modalPorFallar) {
       const nombre = modalPorFallar;
-      modalPorFallar = undefined;
-      return Promise.reject(new DOMException('rechazada', nombre));
+      if (!opciones.repetirElFallo) modalPorFallar = undefined;
+      const fallo = new DOMException('rechazada', nombre);
+      if (!opciones.demoraDelFallo) return Promise.reject(fallo);
+      return new Promise((_resolver, rechazar) => setTimeout(() => rechazar(fallo), opciones.demoraDelFallo));
     }
     return Promise.resolve(new CredencialFalsa());
   });

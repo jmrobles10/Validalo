@@ -1,4 +1,5 @@
 import { abrirEmbebido } from '../../soporte/embebido';
+import { agregarSeccion } from '../../soporte/editorDeFlujos';
 import { crearEscenario } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -28,9 +29,7 @@ recorrido(
     await app.getByRole('option', { name: 'Proveedor', exact: true }).click();
     await app.getByRole('region', { name: 'Etapa 1' }).getByRole('combobox', { name: 'Área' }).click();
     await app.getByRole('option', { name: /^Revisión/ }).click();
-    await app.getByRole('button', { name: 'Agregar sección de la información' }).click();
-    await app.getByRole('combobox', { name: 'Sección de la información del tercero' }).nth(0).click();
-    await app.getByRole('option', { name: 'Información general', exact: true }).click();
+    await agregarSeccion(app, 'Información general');
     await paso(page, {
       titulo: 'Mira la vigencia del vínculo antes de llenarla',
       explicacion:

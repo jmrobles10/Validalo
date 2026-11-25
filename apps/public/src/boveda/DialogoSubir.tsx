@@ -26,5 +26,5 @@ export function DialogoSubir({ solicitud, onCerrar }: { solicitud: SolicitudDeSu
   }
   // Si la revisión no carga o el requisito ya no está, se sube con las reglas globales (como la página).
   const delRequisito = destinoFijo(parametros) ? (contexto.data ?? null) : null;
-  return <SubirArchivo parametros={parametros} delRequisito={delRequisito} onCerrar={onCerrar} />;
+  return <SubirArchivo parametros={parametros} delRequisito={delRequisito} onCerrar={onCerrar} alSubir={solicitud.alSubir} />;
 }

@@ -15,7 +15,7 @@ import { Dropzone } from './Dropzone';
 import { EstadoDeSubida } from './EstadoDeSubida';
 import { MarcoDelDialogoSubir } from './MarcoDelDialogoSubir';
 import { destinoFijo, rutaSegura } from './parametrosSubida';
-import { REGLAS_GLOBALES, type DestinoCarga } from './subida';
+import { REGLAS_GLOBALES, type DestinoCarga, type VersionSubida } from './subida';
 import { useSubida } from './useSubida';
 
 /**
@@ -28,11 +28,14 @@ export function SubirArchivo({
   parametros,
   delRequisito,
   onCerrar,
+  alSubir,
 }: {
   parametros: URLSearchParams;
   delRequisito: RequisitoEnContexto | null;
   /** Presente solo en el diálogo: lo cierra. */
   onCerrar?: () => void;
+  /** Presente solo en el diálogo: se llama con la versión que quedó en la bóveda cuando la subida termina bien. */
+  alSubir?: (subida: VersionSubida) => void;
 }) {
   const { t } = useTranslation();
   const documentoId = parametros.get('documento');
@@ -42,7 +45,7 @@ export function SubirArchivo({
   const boveda = useBoveda(Boolean(documentoId));
   const [tipoElegido, setTipoElegido] = useState(parametros.get('tipo') ?? '');
   const aislada = useSesionTercero((s) => s.sesion?.aislada === true);
-  const { estado, subir, cancelar, reiniciar } = useSubida();
+  const { estado, subir, cancelar, reiniciar } = useSubida(alSubir);
   const tipoRequisito = delRequisito?.requisito.tipoDocumento ?? null;
   const campos = modoDe(tipoRequisito) === 'ArchivoYFormulario' ? camposDe(tipoRequisito) : [];
   const formulario = useFormulario(campos, true, valoresIniciales(campos, delRequisito?.requisito.versionActual?.datosDeclarados));

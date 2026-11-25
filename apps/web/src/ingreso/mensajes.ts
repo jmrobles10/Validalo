@@ -14,6 +14,8 @@ export function mensajeDeIngreso(error: unknown, t: TFunction): string {
         return t('ingreso.passkeyNoSoportada');
       case 'ya-registrada':
         return t('ingreso.passkeyYaRegistrada');
+      case 'conflicto':
+        return t('ingreso.passkeyConflicto');
       default:
         return t('ingreso.passkeyFallo');
     }

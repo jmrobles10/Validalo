@@ -1,6 +1,6 @@
 # Referencia de la API
 
-Todas las operaciones del contrato (469) agrupadas por recurso. Generada de `packages/api-client/openapi/v1.json` y del código de los endpoints con `pnpm manual`; no se edita a mano.
+Todas las operaciones del contrato (471) agrupadas por recurso. Generada de `packages/api-client/openapi/v1.json` y del código de los endpoints con `pnpm manual`; no se edita a mano.
 
 - [Convenciones](convenciones.md): autenticación, empresa activa, idempotencia, errores y límites.
 
@@ -20,7 +20,7 @@ Todas las operaciones del contrato (469) agrupadas por recurso. Generada de `pac
 - [Fuentes oficiales](fuentesoficiales.md) — Fuentes oficiales, Fuentes oficiales de plataforma (8)
 - [Habeas](habeas.md) — Exportación de bóveda, Plazos de habeas, Solicitudes habeas de la empresa, Solicitudes habeas de la plataforma, Solicitudes habeas del tercero (18)
 - [IA](ia.md) — Consumo de IA, Plan IA, Uso IA (8)
-- [Identidad](identidad.md) — Gestión de ingreso, Grupos de acceso, Ingreso, Mi cuenta, Mi cuenta seguridad, Orígenes embebido, Quien soy, Sesión actual del tercero, Sesiones tercero embebidas, Sesiones usuario, Sistemas, SSO configuración, SSO ingreso, Usuarios (66)
+- [Identidad](identidad.md) — Gestión de ingreso, Grupos de acceso, Ingreso, Mi cuenta, Mi cuenta seguridad, Orígenes embebido, Quien soy, Sesión actual del tercero, Sesiones tercero embebidas, Sesiones usuario, Sistemas, SSO configuración, SSO ingreso, Usuarios (68)
 - [Importación](importacion.md) — Importación (5)
 - [Informes](informes.md) — Exportación de expediente, Informe estado expedientes, Informe sagrilaft, Informe vínculos (9)
 - [Integración](integracion.md) — Consulta certificacion (1)

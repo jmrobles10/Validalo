@@ -232,7 +232,7 @@ describe('subir desde el diálogo', () => {
 
   it('un archivo que ya estaba, dice que es el mismo y deja elegir otro sin cerrar el diálogo', async () => {
     const usuario = userEvent.setup({ applyAccept: false });
-    subirDocumentoSimulado.mockResolvedValue({ tipo: 'duplicado', numero: 3 });
+    subirDocumentoSimulado.mockResolvedValue({ tipo: 'duplicado', numero: 3, documentoId: 'd1' });
     const alCerrar = montar({ tipo: 'RUT', nombre: 'RUT' });
 
     const dialogo = await screen.findByRole('dialog', { name: 'Subir RUT' });

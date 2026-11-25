@@ -1,22 +1,25 @@
-import { Alert, Box, Button, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
+import { Box, Button } from '@mui/material';
 import { SCOPES, type EmpresaDto } from '@validalo/api-client';
-import { Dato, EstadoVacio, FilasEsqueleto, MarcoTabla, RejillaDatos, visualmenteOculto } from '@validalo/ui';
+import { EsqueletoTarjeta, EstadoVacio } from '@validalo/ui';
 import { Ban, Building2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DialogoConfirmacion, EncabezadoPagina, ErrorRecuperable, SinPermiso, Tarjeta } from '../../../shared/componentes';
 import { mensajeDeError } from '../../../shared/errores';
-import { MenuFila } from '../../../shared/MenuFila';
 import { usePermisos } from '../../../shared/usePermisos';
 import { useAvisos } from '../../../shared/useAvisos';
 import { useEmpresaActiva, useEmpresas } from '../../empresas/useEmpresas';
-import { EstadoActivo } from '../EstadoActivo';
 import { useDesactivarEmpresa } from './api';
+import { DetalleEmpresa } from './DetalleEmpresa';
 import { DialogoEmpresa } from './DialogoEmpresa';
-import { ejemploFolio, identificacionVisible } from './modelo';
-import { TextosLegalesEmpresa } from './TextosLegalesEmpresa';
+import { ListaEmpresas } from './ListaEmpresas';
+import { identificacionVisible } from './modelo';
 
-const COLUMNAS = 5;
+/**
+ * Lista a la izquierda y detalle a la derecha desde `lg` (con la barra de Configuración al lado, antes el detalle quedaría demasiado angosto para sus textos legales); por
+ * debajo, una sobre otra.
+ */
+const COLUMNAS = { xs: 'minmax(0, 1fr)', lg: '320px minmax(0, 1fr)' } as const;
 
 /** Razones sociales del grupo (ADR-0008): alta, desactivación y sus textos legales versionados. */
 export function PaginaEmpresas() {
@@ -35,7 +38,6 @@ export function PaginaEmpresas() {
 
   const empresas = [...(consulta.data ?? [])].sort((a, b) => Number(b.activa) - Number(a.activa) || a.nombre.localeCompare(b.nombre, 'es'));
   const elegida = empresas.find((e) => e.id === elegidaId) ?? empresas[0] ?? null;
-  const estado = (e: EmpresaDto) => <EstadoActivo activo={e.activa} texto={e.activa ? t('empresasGrupo.activa') : t('empresasGrupo.inactiva')} />;
 
   const confirmarDesactivar = (e: EmpresaDto) =>
     desactivar.mutate(e.id, {
@@ -60,97 +62,21 @@ export function PaginaEmpresas() {
           <ErrorRecuperable mensaje={mensajeDeError(consulta.error, t)} onReintentar={() => void consulta.refetch()} />
         </Box>
       )}
-      <MarcoTabla>
-        <TableContainer>
-          <Table size="small" aria-label={t('empresasGrupo.titulo')} aria-busy={consulta.isPending}>
-            <TableHead>
-              <TableRow>
-                <TableCell>{t('empresasGrupo.columnas.razonSocial')}</TableCell>
-                <TableCell sx={{ width: 200 }}>{t('empresasGrupo.columnas.identificacion')}</TableCell>
-                <TableCell sx={{ width: 130 }}>{t('empresasGrupo.columnas.prefijo')}</TableCell>
-                <TableCell sx={{ width: 110 }}>{t('empresasGrupo.columnas.estado')}</TableCell>
-                <TableCell sx={{ width: 48 }}>
-                  <Box component="span" sx={visualmenteOculto}>
-                    {t('comun.acciones')}
-                  </Box>
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {consulta.isPending && <FilasEsqueleto columnas={COLUMNAS} filas={3} />}
-              {consulta.data && empresas.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={COLUMNAS} sx={{ borderBottom: 0 }}>
-                    <EstadoVacio compacto icono={Building2} titulo={t('empresasGrupo.vacio')} texto={t('empresasGrupo.vacioAyuda')} />
-                  </TableCell>
-                </TableRow>
-              )}
-              {empresas.map((e) => (
-                <TableRow
-                  key={e.id}
-                  selected={e.id === elegida?.id}
-                  tabIndex={0}
-                  aria-label={t('empresasGrupo.ver', { nombre: e.nombre })}
-                  onClick={() => setElegidaId(e.id)}
-                  onKeyDown={(evento) => {
-                    if (evento.target === evento.currentTarget && (evento.key === 'Enter' || evento.key === ' ')) {
-                      evento.preventDefault();
-                      setElegidaId(e.id);
-                    }
-                  }}
-                  sx={{ cursor: 'pointer', opacity: e.activa ? 1 : 0.65, '&:focus-visible': { outlineOffset: -2 } }}
-                >
-                  <TableCell>
-                    <Typography variant="subtitle1" component="span" noWrap sx={{ display: 'block' }}>
-                      {e.nombre}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="monoTabla">{identificacionVisible(e.identificacion)}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="monoTabla">{e.prefijoFolio}</Typography>
-                  </TableCell>
-                  <TableCell>{estado(e)}</TableCell>
-                  <TableCell align="right">
-                    <MenuFila
-                      etiqueta={t('comun.accionesDe', { nombre: e.nombre })}
-                      acciones={e.activa ? [{ etiqueta: t('empresasGrupo.desactivar'), icono: Ban, destructiva: true, onClick: () => setPorDesactivar(e) }] : []}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </MarcoTabla>
-
+      {consulta.isPending && (
+        <Box role="status" aria-busy="true" aria-label={t('empresasGrupo.titulo')} sx={{ display: 'grid', gridTemplateColumns: COLUMNAS, gap: 2, alignItems: 'start' }}>
+          <EsqueletoTarjeta lineas={2} alto={140} />
+          <EsqueletoTarjeta lineas={5} alto={260} />
+        </Box>
+      )}
+      {consulta.data && empresas.length === 0 && (
+        <Tarjeta etiqueta={t('empresasGrupo.lista')}>
+          <EstadoVacio compacto icono={Building2} titulo={t('empresasGrupo.vacio')} texto={t('empresasGrupo.vacioAyuda')} />
+        </Tarjeta>
+      )}
       {elegida && (
-        <Box sx={{ mt: 1.5 }}>
-          <Tarjeta etiqueta={elegida.nombre} titulo={elegida.nombre}>
-            <Stack spacing={2}>
-              <RejillaDatos>
-                <Dato etiqueta={t('empresasGrupo.columnas.identificacion')}>
-                  <Typography component="span" variant="mono">
-                    {identificacionVisible(elegida.identificacion)} · {elegida.identificacion.pais}
-                  </Typography>
-                </Dato>
-                <Dato etiqueta={t('empresasGrupo.columnas.prefijo')}>
-                  <Typography component="span" variant="mono">
-                    {ejemploFolio(elegida.prefijoFolio, new Date().getFullYear())}
-                  </Typography>
-                </Dato>
-                <Dato etiqueta={t('empresasGrupo.columnas.estado')}>{estado(elegida)}</Dato>
-              </RejillaDatos>
-              {!elegida.activa && <Alert severity="info">{t('empresasGrupo.inactivaAyuda')}</Alert>}
-              <TextosLegalesEmpresa
-                key={elegida.id}
-                empresa={elegida}
-                puedeLeer={permisos.puede(SCOPES.configuracionLeer)}
-                puedeEscribir={elegida.activa && permisos.puede(SCOPES.configuracionEscribir)}
-              />
-            </Stack>
-          </Tarjeta>
+        <Box sx={{ display: 'grid', gridTemplateColumns: COLUMNAS, gap: 2, alignItems: 'start' }}>
+          <ListaEmpresas empresas={empresas} elegidaId={elegida.id} onElegir={setElegidaId} onDesactivar={setPorDesactivar} />
+          <DetalleEmpresa empresa={elegida} puedeLeerTextos={permisos.puede(SCOPES.configuracionLeer)} puedeEscribirTextos={permisos.puede(SCOPES.configuracionEscribir)} />
         </Box>
       )}
 

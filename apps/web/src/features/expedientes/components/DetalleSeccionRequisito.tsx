@@ -65,7 +65,11 @@ export function DetalleSeccionRequisito({ requisito, seccion, documentos, puedeV
                   <Stack component="li" key={`${s.documentoId}-${String(s.version)}`} direction="row" spacing={1} sx={{ alignItems: 'center', minHeight: 30 }}>
                     <FileText size={16} strokeWidth={1.75} aria-hidden style={{ flex: 'none', opacity: 0.7 }} />
                     <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
-                      {visor ? t('fichaEmpresa.requisito.soporte', { tipo: visor.tipo, n: String(s.version) }) : t('fichaEmpresa.requisito.soporteNoCompartido', { n: String(s.version) })}
+                      {visor
+                        ? t('fichaEmpresa.requisito.soporte', { tipo: visor.tipo, n: String(s.version) })
+                        : s.nombre
+                          ? t('fichaEmpresa.requisito.soporteNombradoNoCompartido', { nombre: s.nombre, n: String(s.version) })
+                          : t('fichaEmpresa.requisito.soporteNoCompartido', { n: String(s.version) })}
                     </Typography>
                     {visor && (puedeVer || visor.sinArchivo) && (
                       <Button

@@ -74,9 +74,9 @@ public class CorreoTests
     }
 
     [Fact]
-    public void El_codigo_de_acceso_y_el_de_ingreso_tambien_dicen_su_vencimiento_en_hora_local()
+    public void El_codigo_de_acceso_el_de_ingreso_y_el_de_reautenticacion_tambien_dicen_su_vencimiento_en_hora_local()
     {
-        foreach (var plantilla in new[] { PlantillaCorreo.CodigoOtp, PlantillaCorreo.CodigoDeIngreso })
+        foreach (var plantilla in new[] { PlantillaCorreo.CodigoOtp, PlantillaCorreo.CodigoDeIngreso, PlantillaCorreo.CodigoDeReautenticacion })
         {
             var mensaje = Redactor().Redactar(Acceso(plantilla), "482915");
 

@@ -1,4 +1,5 @@
 import { abrirEmbebido } from '../../soporte/embebido';
+import { agregarSeccion } from '../../soporte/editorDeFlujos';
 import { crearEscenario } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -28,15 +29,13 @@ recorrido(
     await app.getByRole('option', { name: 'Proveedor', exact: true }).click();
     await app.getByRole('region', { name: 'Etapa 1' }).getByRole('combobox', { name: 'Área' }).click();
     await app.getByRole('option', { name: /^Revisión/ }).click();
-    await app.getByRole('button', { name: 'Agregar sección de la información' }).click();
-    await app.getByRole('combobox', { name: 'Sección de la información del tercero' }).nth(0).click();
-    await app.getByRole('option', { name: 'Información financiera', exact: true }).click();
+    await agregarSeccion(app, 'Información financiera');
     await paso(page, {
       titulo: 'Agrega la sección financiera',
       explicacion:
-        '«Agregar sección de la información» pide al tercero una sección de «Mi información» en lugar de un documento: la diligencia una sola vez y la empresa la revisa con las áreas que elijas. ' +
+        '«Agregar» › «Sección de la información» abre un submenú con las secciones que el flujo aún no pide (las ya pedidas salen apagadas con «Ya se pide»). La que eliges queda en su sector de «Lo que pide el flujo» y pide al tercero esa sección de «Mi información» en lugar de un documento: la diligencia una sola vez y la empresa la revisa con las áreas que elijas. ' +
         'La sección financiera se diligencia por periodos: el campo «Periodos» dice cuántos cierres se piden, de 1 a 5. Vacío significa el último cierre.',
-      resaltar: app.getByRole('combobox', { name: 'Sección de la información del tercero' }).nth(0),
+      resaltar: app.getByRole('combobox', { name: 'Sección de la información del tercero' }),
       configuracion: {
         ajuste: 'Secciones de la información como requisito',
         ruta: 'Configuración › Flujos aprobatorios (/flujos)',
@@ -62,16 +61,14 @@ recorrido(
     });
 
     // 3. Segunda sección: solo personas jurídicas.
-    await app.getByRole('button', { name: 'Agregar sección de la información' }).click();
-    await app.getByRole('combobox', { name: 'Sección de la información del tercero' }).nth(1).click();
-    await app.getByRole('option', { name: 'Información legal', exact: true }).click();
+    await agregarSeccion(app, 'Información legal');
     await expect(app.getByRole('region', { name: 'Información legal' }).getByText('Legal y Financiera no aplican a persona natural', { exact: false })).toBeVisible();
     await paso(page, {
       titulo: 'Agrega la sección legal',
       explicacion:
         'La sección legal (socios, representante legal, revisor fiscal) solo aplica a personas jurídicas. Al elegirla, la pantalla recuerda que a una persona natural no se le pide: el tercero natural nunca la ve. ' +
-        'Las secciones de un flujo se pueden mezclar con documentos: cada fila se configura por separado.',
-      resaltar: app.getByRole('combobox', { name: 'Sección de la información del tercero' }).nth(1),
+        'Las secciones de un flujo se pueden mezclar con documentos: «Lo que pide el flujo» las agrupa por sector (la sección va primero, con su etiqueta) y cada fila se configura por separado, una abierta a la vez.',
+      resaltar: app.getByRole('combobox', { name: 'Sección de la información del tercero' }),
       variantes: [{ cuando: 'El tercero es persona natural', entonces: 'La sección legal no se le pide y no aparece en su lista.' }],
     });
 

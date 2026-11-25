@@ -8991,6 +8991,66 @@
         }
       }
     },
+    "/api/v1/mi-cuenta/reautenticacion/codigo": {
+      "post": {
+        "tags": [
+          "Validalo.Aplicacion.Identidad.MiCuentaSeguridadEndpoints"
+        ],
+        "summary": "POST_api_v1_mi_cuenta_reautenticacion_codigo",
+        "description": "POST_api_v1_mi_cuenta_reautenticacion_codigo",
+        "operationId": "POST_api_v1_mi_cuenta_reautenticacion_codigo",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodigoSolicitadoDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/v1/mi-cuenta/reautenticacion/codigo/verificar": {
+      "post": {
+        "tags": [
+          "Validalo.Aplicacion.Identidad.MiCuentaSeguridadEndpoints"
+        ],
+        "summary": "POST_api_v1_mi_cuenta_reautenticacion_codigo_verificar",
+        "description": "POST_api_v1_mi_cuenta_reautenticacion_codigo_verificar",
+        "operationId": "POST_api_v1_mi_cuenta_reautenticacion_codigo_verificar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificarCodigoDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReautenticacionDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
     "/api/v1/mi-cuenta/codigos-de-recuperacion": {
       "get": {
         "tags": [
@@ -22605,6 +22665,69 @@
           }
         }
       },
+      "ConclusionDeRevisionDto": {
+        "required": [
+          "sugerencia",
+          "nivel",
+          "motivos",
+          "cruzadoConLoDeclarado",
+          "antiguedadVerificada",
+          "sinVerificar",
+          "umbral",
+          "diferencias"
+        ],
+        "type": "object",
+        "properties": {
+          "sugerencia": {
+            "type": "string"
+          },
+          "nivel": {
+            "type": "string"
+          },
+          "motivos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MotivoDeRevisionDto"
+            }
+          },
+          "cruzadoConLoDeclarado": {
+            "type": "boolean"
+          },
+          "antiguedadVerificada": {
+            "type": "boolean"
+          },
+          "sinVerificar": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "umbral": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "diferencias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiferenciaDeCruceDto"
+            }
+          },
+          "persona": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PersonaVerificadaDto"
+              }
+            ]
+          }
+        }
+      },
       "CondicionDto": {
         "required": [
           "tipo"
@@ -26898,6 +27021,31 @@
           },
           "nombre": {
             "type": "string"
+          }
+        }
+      },
+      "DiferenciaDeCruceDto": {
+        "required": [
+          "etiqueta",
+          "declarado",
+          "extraido"
+        ],
+        "type": "object",
+        "properties": {
+          "etiqueta": {
+            "type": "string"
+          },
+          "declarado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "extraido": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -36422,6 +36570,24 @@
           }
         }
       },
+      "PersonaVerificadaDto": {
+        "required": [
+          "nombre",
+          "identificacion"
+        ],
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "identificacion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "PersonasDelTerceroDto": {
         "required": [
           "terceroId",
@@ -39184,6 +39350,16 @@
             "items": {
               "$ref": "#/components/schemas/MotivoDeExigenciaDto"
             }
+          },
+          "conclusionDeRevision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConclusionDeRevisionDto"
+              }
+            ]
           }
         }
       },

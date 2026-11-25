@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { simularNavegadorConPasskeys, OPCIONES_DE_FIRMA, type NavegadorSimulado } from '../pruebas/navegadorSimulado';
-import { esErrorDePasskey, firmarConPasskey, soportaPasskeysCondicional } from './passkeys';
+import { esErrorDePasskey, firmarConPasskey, firmarConPasskeyConReintento, soportaPasskeysCondicional, UMBRAL_SIN_DECISION_MS, type RelojDePasskeys } from './passkeys';
 
 let navegador: NavegadorSimulado | null = null;
 
 afterEach(() => {
   navegador?.restaurar();
   navegador = null;
+  vi.restoreAllMocks();
 });
 
 describe('UI condicional de passkeys (PI-14)', () => {
@@ -54,18 +55,74 @@ describe('UI condicional de passkeys (PI-14)', () => {
     expect(error).toMatchObject({ causa: 'cancelada' });
   });
 
-  it('el navegador (el simulador imita a Chrome) no admite dos peticiones a la vez: la ventana se rechaza hasta que la condicional abortada se asienta', async () => {
+  it('el navegador (el simulador imita a Chrome) no admite dos peticiones a la vez: abortar rechaza la promesa de la condicional pero la ventana pedida enseguida choca con «pending»', async () => {
     navegador = simularNavegadorConPasskeys({ condicional: true, esperaLaFirma: true });
     const control = new AbortController();
     const condicional = firmarConPasskey(OPCIONES_DE_FIRMA, control.signal, true).catch((e: unknown) => e);
 
-    // Abortar no libera al instante: la ventana pedida enseguida choca con la petición que sigue pendiente.
+    // Chrome rechaza la promesa al abortar, pero libera la petición por dentro un poco después: la ventana pedida justo ahí choca.
     control.abort();
-    await expect(firmarConPasskey(OPCIONES_DE_FIRMA)).rejects.toMatchObject({ causa: 'otra' });
-    await expect(navegador.get.mock.results[1]?.value).rejects.toMatchObject({ name: 'OperationError', message: 'A request is already pending.' });
-
-    // Una vez asentada la condicional, la ventana se abre sin problema.
     await expect(condicional).resolves.toMatchObject({ causa: 'cancelada' });
+    const choque = await firmarConPasskey(OPCIONES_DE_FIRMA).catch((e: unknown) => e);
+    expect(choque).toMatchObject({ causa: 'conflicto', origen: { nombre: 'NotAllowedError', mensaje: 'A request is already pending.' } });
+
+    // Una vez liberada, la ventana se abre sin problema.
+    await new Promise((r) => setTimeout(r, 10));
     await expect(firmarConPasskey(OPCIONES_DE_FIRMA)).resolves.toMatchObject({ id: 'cred-1' });
+  });
+
+  it('firmarConPasskeyConReintento espera a que Chrome libere la condicional abortada y la ventana entra, sin que la persona vea el choque', async () => {
+    navegador = simularNavegadorConPasskeys({ condicional: true, esperaLaFirma: true });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const control = new AbortController();
+    const condicional = firmarConPasskey(OPCIONES_DE_FIRMA, control.signal, true).catch((e: unknown) => e);
+    control.abort();
+    await condicional;
+    const esperas: number[] = [];
+    const reloj: RelojDePasskeys = {
+      ahora: () => performance.now(),
+      esperar: (ms) => {
+        esperas.push(ms);
+        return new Promise((r) => setTimeout(r, 10));
+      },
+    };
+
+    const respuesta = await firmarConPasskeyConReintento(OPCIONES_DE_FIRMA, { reloj });
+
+    expect(respuesta).toMatchObject({ id: 'cred-1' });
+    expect(esperas).toEqual([150]);
+    expect(navegador.llamadas.map((l) => l.mediation)).toEqual(['conditional', undefined, undefined]);
+  });
+
+  it('firmarConPasskeyConReintento no repite si la persona cierra la ventana: el fallo tarda más que el umbral', async () => {
+    navegador = simularNavegadorConPasskeys({ falloDeLaModal: 'NotAllowedError', demoraDelFallo: UMBRAL_SIN_DECISION_MS + 100 });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await expect(firmarConPasskeyConReintento(OPCIONES_DE_FIRMA)).rejects.toMatchObject({ causa: 'cancelada', origen: { nombre: 'NotAllowedError', mensaje: 'rechazada' } });
+
+    expect(navegador.llamadas).toHaveLength(1);
+  });
+
+  it('deja en la consola el nombre y el mensaje del error del navegador, y nada más', async () => {
+    navegador = simularNavegadorConPasskeys();
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    navegador.get.mockRejectedValueOnce(new DOMException('A request is already pending.', 'NotAllowedError'));
+
+    await firmarConPasskey(OPCIONES_DE_FIRMA).catch(() => undefined);
+
+    expect(aviso).toHaveBeenCalledTimes(1);
+    expect(aviso).toHaveBeenCalledWith('[passkeys] firmar: NotAllowedError: A request is already pending. (causa: conflicto)');
+  });
+
+  it('abortar la condicional es lo normal al salir de la pantalla: no se registra', async () => {
+    navegador = simularNavegadorConPasskeys({ condicional: true, esperaLaFirma: true });
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const control = new AbortController();
+    const condicional = firmarConPasskey(OPCIONES_DE_FIRMA, control.signal, true).catch((e: unknown) => e);
+
+    control.abort();
+    await condicional;
+
+    expect(aviso).not.toHaveBeenCalled();
   });
 });

@@ -15,7 +15,7 @@ using Validalo.Infraestructura.Seguridad;
 namespace Validalo.Integracion.Tests;
 
 /// <summary>
-/// Plataforma e identidad, segunda tanda (PI-7…PI-18): reautenticación con la passkey para las acciones sensibles, códigos de recuperación, avisos de seguridad por
+/// Plataforma e identidad, segunda tanda (PI-7…PI-18, PI-20): reautenticación con la passkey o con un código del correo para las acciones sensibles, códigos de recuperación, avisos de seguridad por
 /// correo, desactivar y reactivar sistemas y operadores, la clave de arranque, la auditoría de ingresos de los operadores, agregar empresas a un grupo, la idempotencia sin
 /// secretos y la invalidación de cachés entre servidores.
 /// </summary>
@@ -25,6 +25,7 @@ public sealed partial class IngresoApiTests
     private const string AsuntoPasskeyRevocada = "Se revocó una passkey de tu cuenta de Valídalo";
     private const string AsuntoPasskeyEliminada = "Eliminaste una passkey de tu cuenta de Valídalo";
     private const string AsuntoCodigosGenerados = "Generaste códigos de recuperación en Valídalo";
+    private const string AsuntoCodigoDeReautenticacion = "Tu código para confirmar una acción en Valídalo";
     private const string AsuntoRecuperacionUsada = "Usaste un código de recuperación en Valídalo";
 
     /// <summary>Confirma con la passkey la sesión del token: las acciones sensibles se aceptan unos minutos.</summary>
@@ -67,10 +68,13 @@ public sealed partial class IngresoApiTests
 
     private sealed record AdminConPasskey(Grupo Grupo, UsuarioDto Usuario, AutenticadorVirtual Autenticador, string Token);
 
-    /// <summary>Un grupo de ingreso directo con un administrador de todo el grupo que ya registró su passkey y tiene una sesión abierta.</summary>
-    private async Task<AdminConPasskey> AdministradorConPasskeyAsync(string[]? modos = null)
+/// <summary>
+    /// Un grupo de ingreso directo con un administrador de todo el grupo que ya registró su passkey y tiene una sesión abierta con ella. Con <paramref name="paraTodos"/> el
+    /// grupo exige passkey a todas sus personas (el código del correo solo sirve para registrarla; sin ella, la recuperación pasa por los códigos de recuperación).
+    /// </summary>
+    private async Task<AdminConPasskey> AdministradorConPasskeyAsync(string[]? modos = null, bool paraTodos = false)
     {
-        var g = await GrupoAsync(modos);
+        var g = await GrupoAsync(modos, passkeyParaTodos: paraTodos);
         var admin = await UsuarioAsync(g, "Administrador", deTodoElGrupo: true);
         var autenticador = await RegistrarPasskeyAsync(admin.Correo);
         return new AdminConPasskey(g, admin, autenticador, (await EntrarConPasskeyAsync(autenticador)).Token);
@@ -94,8 +98,9 @@ public sealed partial class IngresoApiTests
         {
             var resultado = await ComoPersonaAsync(metodo, url, cuerpo, a.Token, 403);
             var problema = await resultado.ReadAsJsonAsync<JsonElement>();
-            (problema.GetProperty("codigo").GetString(), problema.GetProperty("accion").GetString(), problema.GetProperty("minutos").GetInt32(), problema.GetProperty("tienePasskey").GetBoolean())
-                .ShouldBe(("reautenticacion-requerida", accion, 5, true));
+            (problema.GetProperty("codigo").GetString(), problema.GetProperty("accion").GetString(), problema.GetProperty("minutos").GetInt32(), problema.GetProperty("tienePasskey").GetBoolean(),
+                    problema.GetProperty("puedeConCodigo").GetBoolean())
+                .ShouldBe(("reautenticacion-requerida", accion, 5, true, true)); // con passkey o con un código del correo
         }
 
         await Exigida("POST", $"/api/v1/api-keys/{llave.Id}/rotar", new RotarApiKeyDto(), "rotar-api-key");
@@ -163,12 +168,219 @@ public sealed partial class IngresoApiTests
         await Anonimo("/api/v1/mi-cuenta/reautenticacion", null, 403, metodo: "GET", apiKey: g.Admin);
     }
 
+    // ---------- reautenticación con el código del correo (PI-20) ----------
+
+    private sealed record SesionConCodigo(Grupo Grupo, UsuarioDto Usuario, string Token, string Cookie);
+
+    /// <summary>Una persona con el rol dado que entró solo con el código del correo (el ingreso que ya no exige passkey a nadie).</summary>
+    private async Task<SesionConCodigo> EntroConCodigoAsync(string rol = "Administrador", Grupo? grupo = null)
+    {
+        var g = grupo ?? await GrupoAsync();
+        var usuario = await UsuarioAsync(g, rol, deTodoElGrupo: rol == "Administrador");
+        var (paso, resultado) = await IngresarConCodigoAsync(usuario.Correo);
+        return new SesionConCodigo(g, usuario, paso.Sesion!.Token, ValorCookie(resultado));
+    }
+
+    /// <summary>Pide el código de reautenticación y devuelve el desafío y el código tal como llegó al correo (el <paramref name="numero"/>-ésimo de ese asunto).</summary>
+    private async Task<(Guid Desafio, string Codigo)> PedirCodigoDeReautenticacionAsync(string token, string correo, int numero = 1)
+    {
+        var solicitado = await PostJsonAsync<CodigoSolicitadoDto>("/api/v1/mi-cuenta/reautenticacion/codigo", null, token);
+        var mensaje = await Correos.EsperarAsync(correo, c => c.Asunto == AsuntoCodigoDeReautenticacion, numero);
+        return (solicitado.Desafio, RegexCodigo().Match(mensaje.Texto).Groups[1].Value);
+    }
+
+    [Fact]
+    public async Task Sin_passkey_la_accion_sensible_se_confirma_con_un_codigo_enviado_al_correo_y_vale_cinco_minutos()
+    {
+        var a = await EntroConCodigoAsync();
+        var otro = await UsuarioAsync(a.Grupo, "Revisor");
+
+        // Sin confirmar: 403 que ofrece solo el código (no tiene passkey) y no cambia nada.
+        var problema = await (await ComoPersonaAsync("POST", $"/api/v1/usuarios/{otro.Id}/desactivar", null, a.Token, 403)).ReadAsJsonAsync<JsonElement>();
+        (problema.GetProperty("codigo").GetString(), problema.GetProperty("tienePasskey").GetBoolean(), problema.GetProperty("puedeConCodigo").GetBoolean())
+            .ShouldBe(("reautenticacion-requerida", false, true));
+        (await GetAsync<EstadoDeReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion", a.Token)).Vigente.ShouldBeFalse();
+
+        // Pide el código: llega al correo de la cuenta con su propio asunto (no el de un ingreso), solo trae el código y no abre sesión.
+        var (desafio, codigo) = await PedirCodigoDeReautenticacionAsync(a.Token, a.Usuario.Correo);
+        var mensaje = await Correos.EsperarAsync(a.Usuario.Correo, c => c.Asunto == AsuntoCodigoDeReautenticacion);
+        mensaje.Texto.ShouldContain(codigo);
+        mensaje.Texto.ShouldNotContain("/e/");
+        (await CodigoDeErrorAsync(await Anonimo("/api/v1/ingreso/codigo/verificar", new VerificarCodigoDto(desafio, codigo), 410))).ShouldBe("desafio-usado");
+
+        // Verificarlo deja la sesión reautenticada cinco minutos y la acción pasa.
+        var reautenticacion = await PostJsonAsync<ReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(desafio, codigo), a.Token);
+        reautenticacion.Minutos.ShouldBe(5);
+        (await GetAsync<EstadoDeReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion", a.Token)).Vigente.ShouldBeTrue();
+        await ComoPersonaAsync("POST", $"/api/v1/usuarios/{otro.Id}/desactivar", null, a.Token, 200);
+
+        // El código se gasta: no se repite, y pasados cinco minutos la acción vuelve a pedirlo.
+        (await CodigoDeErrorAsync(await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(desafio, codigo), a.Token, 410))).ShouldBe("desafio-usado");
+        try
+        {
+            fixture.Reloj.Desfase = TimeSpan.FromMinutes(5).Add(TimeSpan.FromSeconds(30));
+            await ComoPersonaAsync("POST", "/api/v1/api-keys", new CrearApiKeyDto("Otra", ["configuracion:leer"], null, null), a.Token, 403);
+        }
+        finally
+        {
+            fixture.Reloj.Desfase = TimeSpan.Zero;
+        }
+
+        // Quedó en la auditoría de identidad: el envío, la confirmación y el método, sin el código.
+        var rastro = await ApiAsync<PaginaDto<RegistroAuditoriaDto>>("GET", $"/api/v1/auditoria?tipo=Identidad&entidadId={a.Usuario.Id}&limite=200", a.Grupo.Admin, a.Grupo.Empresa.Id, null, 200);
+        rastro.Datos.Select(r => r.Accion).ShouldContain("CodigoEnviado");
+        rastro.Datos.Single(r => r.Accion == "ReautenticacionExitosa").Detalle!.ShouldContain("Código del correo");
+        rastro.Datos.ShouldAllBe(r => r.Detalle == null || !r.Detalle.Contains(codigo));
+    }
+
+    [Fact]
+    public async Task Con_passkey_registrada_el_codigo_del_correo_tambien_confirma_y_el_error_ofrece_las_dos_formas()
+    {
+        var a = await AdministradorConPasskeyAsync();
+        var (paso, _) = await IngresarConCodigoAsync(a.Usuario.Correo, numero: 2);
+        var token = paso.Sesion!.Token;
+        var otro = await UsuarioAsync(a.Grupo, "Revisor");
+
+        var problema = await (await ComoPersonaAsync("POST", $"/api/v1/usuarios/{otro.Id}/desactivar", null, token, 403)).ReadAsJsonAsync<JsonElement>();
+        (problema.GetProperty("tienePasskey").GetBoolean(), problema.GetProperty("puedeConCodigo").GetBoolean()).ShouldBe((true, true));
+        problema.GetProperty("detail").GetString().ShouldNotBeNull().ShouldContain("passkey");
+
+        var (desafio, codigo) = await PedirCodigoDeReautenticacionAsync(token, a.Usuario.Correo);
+        await PostJsonAsync<ReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(desafio, codigo), token);
+        await ComoPersonaAsync("POST", $"/api/v1/usuarios/{otro.Id}/desactivar", null, token, 200);
+
+        // La passkey sigue sirviendo como la otra forma de confirmar.
+        var (otraSesion, _) = await IngresarConCodigoAsync(a.Usuario.Correo, numero: 3);
+        await ReautenticarAsync(a.Autenticador, otraSesion.Sesion!.Token);
+        (await GetAsync<EstadoDeReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion", otraSesion.Sesion.Token)).Vigente.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task El_codigo_de_reautenticacion_incorrecto_descuenta_intentos_y_al_quinto_el_correcto_tampoco_sirve()
+    {
+        var a = await EntroConCodigoAsync();
+        var (desafio, codigo) = await PedirCodigoDeReautenticacionAsync(a.Token, a.Usuario.Correo);
+        var malo = codigo == "000000" ? "111111" : "000000";
+
+        for (var restantes = 4; restantes >= 0; restantes--)
+        {
+            var fallo = await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(desafio, malo), a.Token, 422);
+            var problema = await fallo.ReadAsJsonAsync<JsonElement>();
+            problema.GetProperty("codigo").GetString().ShouldBe("codigo-invalido");
+            problema.GetProperty("intentosRestantes").GetInt32().ShouldBe(restantes);
+        }
+
+        var bloqueado = await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(desafio, codigo), a.Token, 429);
+        (await CodigoDeErrorAsync(bloqueado)).ShouldBe("codigo-bloqueado");
+        (await GetAsync<EstadoDeReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion", a.Token)).Vigente.ShouldBeFalse();
+
+        // Cada fallo (y el bloqueo) quedó en la auditoría, con su motivo y sin el código.
+        var rastro = await ApiAsync<PaginaDto<RegistroAuditoriaDto>>("GET", $"/api/v1/auditoria?tipo=Identidad&entidadId={a.Usuario.Id}&limite=200", a.Grupo.Admin, a.Grupo.Empresa.Id, null, 200);
+        var fallidas = rastro.Datos.Where(r => r.Accion == "ReautenticacionFallida").ToList();
+        fallidas.Count.ShouldBe(6);
+        fallidas.Count(r => r.Detalle!.Contains("codigo-incorrecto")).ShouldBe(5);
+        fallidas.Count(r => r.Detalle!.Contains("codigo-bloqueado")).ShouldBe(1);
+        rastro.Datos.ShouldAllBe(r => r.Detalle == null || !r.Detalle.Contains(codigo));
+
+        // Pedir otro código sigue siendo posible y ese sí confirma.
+        var (nuevo, siguiente) = await PedirCodigoDeReautenticacionAsync(a.Token, a.Usuario.Correo, numero: 2);
+        (await PostJsonAsync<ReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(nuevo, siguiente), a.Token)).Minutos.ShouldBe(5);
+    }
+
+    [Fact]
+    public async Task El_codigo_de_reautenticacion_vence_a_los_cinco_minutos()
+    {
+        var a = await EntroConCodigoAsync();
+        var (desafio, codigo) = await PedirCodigoDeReautenticacionAsync(a.Token, a.Usuario.Correo);
+
+        try
+        {
+            fixture.Reloj.Desfase = TimeSpan.FromMinutes(5).Add(TimeSpan.FromSeconds(5));
+            // La sesión de acceso (15 min) sigue vigente; solo el código venció.
+            var vencido = await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(desafio, codigo), a.Token, 410);
+            (await CodigoDeErrorAsync(vencido)).ShouldBe("codigo-vencido");
+        }
+        finally
+        {
+            fixture.Reloj.Desfase = TimeSpan.Zero;
+        }
+
+        (await GetAsync<EstadoDeReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion", a.Token)).Vigente.ShouldBeFalse();
+        var rastro = await ApiAsync<PaginaDto<RegistroAuditoriaDto>>("GET", $"/api/v1/auditoria?tipo=Identidad&entidadId={a.Usuario.Id}&limite=200", a.Grupo.Admin, a.Grupo.Empresa.Id, null, 200);
+        rastro.Datos.Single(r => r.Accion == "ReautenticacionFallida").Detalle!.ShouldContain("codigo-vencido");
+    }
+
+    [Fact]
+    public async Task El_codigo_de_reautenticacion_es_de_la_sesion_que_lo_pidio_y_no_abre_otra_sesion()
+    {
+        var a = await EntroConCodigoAsync();
+        var (otraSesion, _) = await IngresarConCodigoAsync(a.Usuario.Correo, numero: 2);
+        var (desafio, codigo) = await PedirCodigoDeReautenticacionAsync(a.Token, a.Usuario.Correo);
+
+        // Otra sesión de la misma persona no puede usarlo, ni quien no tiene sesión (pide ingresar con él: tampoco).
+        (await CodigoDeErrorAsync(await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(desafio, codigo), otraSesion.Sesion!.Token, 410)))
+            .ShouldBe("desafio-usado");
+        (await CodigoDeErrorAsync(await Anonimo("/api/v1/ingreso/codigo/verificar", new VerificarCodigoDto(desafio, codigo), 410))).ShouldBe("desafio-usado");
+        await Anonimo("/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(desafio, codigo), 401);
+        (await GetAsync<EstadoDeReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion", otraSesion.Sesion.Token)).Vigente.ShouldBeFalse();
+
+        // Un desafío de ingreso o uno que no existe tampoco sirven aquí.
+        var deIngreso = await PedirCodigoAsync(a.Usuario.Correo);
+        (await CodigoDeErrorAsync(await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(deIngreso, "123456"), a.Token, 410))).ShouldBe("desafio-usado");
+        (await CodigoDeErrorAsync(await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(Guid.NewGuid(), "123456"), a.Token, 404)))
+            .ShouldBe("desafio-no-encontrado");
+
+        // Y el desafío de la sesión sigue sirviendo a su dueña.
+        (await PostJsonAsync<ReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(desafio, codigo), a.Token)).Minutos.ShouldBe(5);
+    }
+
+    [Fact]
+    public async Task Se_pueden_pedir_como_maximo_cinco_codigos_de_reautenticacion_por_hora_con_su_propio_cupo()
+    {
+        var a = await EntroConCodigoAsync();
+
+        for (var i = 0; i < 5; i++)
+            await PostJsonAsync<CodigoSolicitadoDto>("/api/v1/mi-cuenta/reautenticacion/codigo", null, a.Token);
+        await Correos.EsperarAsync(a.Usuario.Correo, c => c.Asunto == AsuntoCodigoDeReautenticacion, cuantos: 5);
+
+        var sexto = await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo", null, a.Token, 429);
+        (await CodigoDeErrorAsync(sexto)).ShouldBe("limite-de-envios");
+        await Task.Delay(1000);
+        Correos.Para(a.Usuario.Correo).Count(c => c.Asunto == AsuntoCodigoDeReautenticacion).ShouldBe(5);
+
+        // El cupo del ingreso es otro: pedir un código para entrar sigue funcionando.
+        await PedirCodigoAsync(a.Usuario.Correo);
+        await Correos.EsperarAsync(a.Usuario.Correo, c => c.Asunto == AsuntoCodigo, cuantos: 2);
+    }
+
+    [Fact]
+    public async Task Los_operadores_y_los_grupos_con_passkey_para_todos_confirman_solo_con_la_passkey()
+    {
+        // Un grupo que exige passkey a todos: el error ya no ofrece el código y pedirlo se rechaza.
+        var a = await AdministradorConPasskeyAsync(paraTodos: true);
+        var otro = await UsuarioAsync(a.Grupo, "Revisor");
+        var problema = await (await ComoPersonaAsync("POST", $"/api/v1/usuarios/{otro.Id}/desactivar", null, a.Token, 403)).ReadAsJsonAsync<JsonElement>();
+        (problema.GetProperty("tienePasskey").GetBoolean(), problema.GetProperty("puedeConCodigo").GetBoolean()).ShouldBe((true, false));
+        (await CodigoDeErrorAsync(await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo", null, a.Token, 403))).ShouldBe("reautenticacion-solo-con-passkey");
+        (await CodigoDeErrorAsync(await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo/verificar", new VerificarCodigoDto(Guid.NewGuid(), "123456"), a.Token, 403)))
+            .ShouldBe("reautenticacion-solo-con-passkey");
+
+        // Los operadores de Plataforma siguen como estaban: solo la passkey.
+        var (token, autenticador, operador) = await CrearOperadorAsync();
+        var delOperador = await (await ComoPersonaAsync("POST", $"/api/v1/plataforma/operadores/{Uri.EscapeDataString(operador.Id)}/desactivar", null, token, 403)).ReadAsJsonAsync<JsonElement>();
+        (delOperador.GetProperty("tienePasskey").GetBoolean(), delOperador.GetProperty("puedeConCodigo").GetBoolean()).ShouldBe((true, false));
+        (await CodigoDeErrorAsync(await ComoPersonaAsync("POST", "/api/v1/mi-cuenta/reautenticacion/codigo", null, token, 403))).ShouldBe("reautenticacion-solo-con-passkey");
+        await ReautenticarAsync(autenticador, token);
+        (await GetAsync<EstadoDeReautenticacionDto>("/api/v1/mi-cuenta/reautenticacion", token)).Vigente.ShouldBeTrue();
+
+    }
+
     // ---------- códigos de recuperación ----------
 
     [Fact]
     public async Task Los_codigos_de_recuperacion_respaldan_la_passkey_se_muestran_una_vez_y_cada_uno_sirve_una_sola_vez()
     {
-        var a = await AdministradorConPasskeyAsync();
+        var a = await AdministradorConPasskeyAsync(paraTodos: true);
         var correo = a.Usuario.Correo;
         (await GetAsync<EstadoDeRecuperacionDto>("/api/v1/mi-cuenta/codigos-de-recuperacion", a.Token)).Disponibles.ShouldBe(0);
 
@@ -188,7 +400,7 @@ public sealed partial class IngresoApiTests
             JsonSerializer.Serialize(documento).ShouldNotContain(generados.Codigos[0].Replace("-", string.Empty)); // solo hashes
         }
 
-        // Perdió el dispositivo: el código del correo no basta (hay passkey) y un código de recuperación incorrecto no sirve ni cuenta más de cinco.
+        // Perdió el dispositivo: en un grupo que exige passkey el código del correo no basta (hay passkey) y un código de recuperación incorrecto no sirve ni cuenta más de cinco.
         var desafio = await PedirCodigoAsync(correo);
         var paso = (await VerificarCodigoAsync(desafio, await CodigoDelCorreoAsync(correo, 2))).Paso; // el 1.º fue el del registro de la passkey
         paso.Estado.ShouldBe("PasskeyRequerida");
@@ -227,8 +439,8 @@ public sealed partial class IngresoApiTests
     [Fact]
     public async Task Un_codigo_de_recuperacion_no_sirve_sin_haber_verificado_el_correo_ni_para_otra_cuenta()
     {
-        var a = await AdministradorConPasskeyAsync();
-        var otra = await AdministradorConPasskeyAsync();
+        var a = await AdministradorConPasskeyAsync(paraTodos: true);
+        var otra = await AdministradorConPasskeyAsync(paraTodos: true);
         await ReautenticarAsync(a.Autenticador, a.Token);
         var codigos = (await PostJsonAsync<CodigosDeRecuperacionDto>("/api/v1/mi-cuenta/codigos-de-recuperacion", null, a.Token, 200)).Codigos;
 

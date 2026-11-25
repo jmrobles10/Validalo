@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { camposExtraidos, confianzaDe, estadoRevision, textoDelAnalisis, tipoNoCoincide, UMBRAL_CONFIANZA } from './revisionIa';
 import { CamposIa } from './CamposIa';
 import { EncabezadoDeLectura } from './EncabezadoDeLectura';
+import { LecturaAlPie } from './LecturaAlPie';
 import type { FilaDeDato } from './ListaDeDatos';
 
 /** El tipo canónico que pide el requisito y su nombre, para avisar si el archivo parece ser otro. */
@@ -31,6 +32,12 @@ export interface RevisionAutomaticaProps {
   enBloque?: boolean;
   /** Lo que va primero en el contenido del bloque, antes de lo que leyó la IA (el resumen del cruce, lo importante). */
   resumen?: ReactNode;
+  /** La conclusión de la IA (aprobar, revisar o sin análisis): abre el contenido del bloque, antes de sus razones; con ella, lo que leyó la IA queda plegado como detalle. */
+  conclusion?: ReactNode;
+  /** Lo que va en la zona de detalles del pie del bloque (lo que respalda el documento, `PieDelRequisito`), junto a «Legible · Tipo detectado» y «Ver lo que leyó la IA». */
+  pie?: ReactNode;
+  /** El umbral de confianza con el que concluyó la IA (el de la empresa o, en Manual, el del plan): bajo él la confianza se pinta en advertencia. Sin él, el 0,85 por omisión. */
+  umbral?: number;
 }
 
 const PORCENTAJE = new Intl.NumberFormat(LOCALE, { style: 'percent', maximumFractionDigits: 0 });
@@ -40,7 +47,7 @@ const PORCENTAJE = new Intl.NumberFormat(LOCALE, { style: 'percent', maximumFrac
  * manipulación y, en una sola lista alineada, legibilidad, tipo detectado y los datos extraídos. Sin análisis visible para la
  * empresa (`conIa` falso), una línea discreta que pide revisarla a mano. El modelo solo va en texto pequeño.
  */
-export function RevisionAutomatica({ hechos, tipoEsperado, limite, sinPie = false, plegarCampos = false, enBloque = false, resumen }: RevisionAutomaticaProps) {
+export function RevisionAutomatica({ hechos, tipoEsperado, limite, sinPie = false, plegarCampos = false, enBloque = false, resumen, conclusion, pie, umbral }: RevisionAutomaticaProps) {
   const { t } = useTranslation();
   const estado = estadoRevision(hechos);
   if (estado === 'nada' || !hechos) return null;
@@ -51,17 +58,19 @@ export function RevisionAutomatica({ hechos, tipoEsperado, limite, sinPie = fals
       </Typography>
     );
   }
-  return <ConAnalisis ia={hechos.ia} tipoEsperado={tipoEsperado} limite={limite} sinPie={sinPie} plegarCampos={plegarCampos} enBloque={enBloque} resumen={resumen} />;
+  return (
+    <ConAnalisis ia={hechos.ia} tipoEsperado={tipoEsperado} limite={limite} sinPie={sinPie} plegarCampos={plegarCampos} enBloque={enBloque} resumen={resumen} conclusion={conclusion} pie={pie} umbral={umbral} />
+  );
 }
 
-interface ConAnalisisProps extends Required<Pick<RevisionAutomaticaProps, 'sinPie' | 'plegarCampos' | 'enBloque'>>, Pick<RevisionAutomaticaProps, 'tipoEsperado' | 'limite' | 'resumen'> {
+interface ConAnalisisProps extends Required<Pick<RevisionAutomaticaProps, 'sinPie' | 'plegarCampos' | 'enBloque'>>, Pick<RevisionAutomaticaProps, 'tipoEsperado' | 'limite' | 'resumen' | 'conclusion' | 'pie' | 'umbral'> {
   ia: HechosIaDto;
 }
 
-function ConAnalisis({ ia, tipoEsperado, limite, sinPie, plegarCampos, enBloque, resumen }: ConAnalisisProps) {
+function ConAnalisis({ ia, tipoEsperado, limite, sinPie, plegarCampos, enBloque, resumen, conclusion, pie, umbral = UMBRAL_CONFIANZA }: ConAnalisisProps) {
   const { t } = useTranslation();
   const confianza = confianzaDe(ia);
-  const alta = confianza !== null && confianza >= UMBRAL_CONFIANZA;
+  const alta = confianza !== null && confianza >= umbral;
   const tipos: Readonly<Record<string, string>> = t('ia.revision.tipos', { returnObjects: true });
   const nombreTipo = (codigo: string) => tipos[codigo.toUpperCase()] ?? codigo;
   const textos = { nombres: t('ia.revision.nombresCampos', { returnObjects: true }), si: t('ia.revision.si'), no: t('ia.revision.no'), vacio: t('ia.revision.vacio') };
@@ -77,7 +86,7 @@ function ConAnalisis({ ia, tipoEsperado, limite, sinPie, plegarCampos, enBloque,
   return (
     <Box component="section" aria-label={t('ia.revision.titulo')}>
       {enBloque ? (
-        <EncabezadoDeLectura ia={ia} confianza={confianza} />
+        <EncabezadoDeLectura ia={ia} confianza={confianza} umbral={umbral} />
       ) : (
         <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 0.75 }}>
           <Sparkles size={14} strokeWidth={1.75} aria-hidden />
@@ -85,7 +94,7 @@ function ConAnalisis({ ia, tipoEsperado, limite, sinPie, plegarCampos, enBloque,
             {t('ia.revision.titulo')}
           </Typography>
           {confianza !== null && (
-            <Tooltip title={t('ia.revision.confianzaAyuda', { umbral: PORCENTAJE.format(UMBRAL_CONFIANZA) })}>
+            <Tooltip title={t('ia.revision.confianzaAyuda', { umbral: PORCENTAJE.format(umbral) })}>
               <Chip size="small" variant="outlined" color={alta ? 'success' : 'warning'} label={t('ia.revision.confianza', { porcentaje: PORCENTAJE.format(confianza) })} />
             </Tooltip>
           )}
@@ -93,6 +102,7 @@ function ConAnalisis({ ia, tipoEsperado, limite, sinPie, plegarCampos, enBloque,
         </Stack>
       )}
       <Stack spacing={1}>
+        {conclusion}
         {resumen}
         {otroTipo && tipoEsperado && (
           <Alert severity="warning">{t('ia.revision.tipoNoCoincide', { detectado: nombreTipo(ia.tipoDetectado), esperado: tipoEsperado.nombre })}</Alert>
@@ -107,21 +117,24 @@ function ConAnalisis({ ia, tipoEsperado, limite, sinPie, plegarCampos, enBloque,
             </Box>
           </Alert>
         )}
-        <CamposIa campos={campos} titulo={t('ia.revision.campos')} limite={limite} previas={previas} plegados={plegarCampos} />
-        {campos.length === 0 && (
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            {t('ia.revision.sinCampos')}
-          </Typography>
-        )}
-        {ia.observaciones && (
-          <Typography variant="body2">
-            {t('ia.revision.observaciones', { texto: ia.observaciones })}
-          </Typography>
-        )}
-        {recortado && (
-          <Typography component="p" variant="caption" sx={{ color: 'text.secondary' }}>
-            {t('ia.revision.paginasOmitidas', { count: ia.paginasEnviadas ?? 0 })}
-          </Typography>
+        {enBloque ? (
+          // En el bloque, los detalles de la lectura van al pie, compactos y en gris.
+          <LecturaAlPie ia={ia} nombreDelTipo={nombreTipo(ia.tipoDetectado)} campos={campos} limite={limite} pie={pie} recortado={recortado} />
+        ) : (
+          <>
+            <CamposIa campos={campos} titulo={t('ia.revision.campos')} limite={limite} previas={previas} plegados={plegarCampos} />
+            {campos.length === 0 && (
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {t('ia.revision.sinCampos')}
+              </Typography>
+            )}
+            {ia.observaciones && <Typography variant="body2">{t('ia.revision.observaciones', { texto: ia.observaciones })}</Typography>}
+            {recortado && (
+              <Typography component="p" variant="caption" sx={{ color: 'text.secondary' }}>
+                {t('ia.revision.paginasOmitidas', { count: ia.paginasEnviadas ?? 0 })}
+              </Typography>
+            )}
+          </>
         )}
         {!sinPie && !enBloque && (
           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>

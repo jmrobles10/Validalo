@@ -42,7 +42,7 @@ En Configuración › Ingreso eliges cómo entran las personas del grupo. «Desd
 
 ## Paso 2. Exige passkey a todas las personas
 
-Activa «Exigir passkey a todas las personas del grupo» para que cada persona registre una passkey en su próximo ingreso. Los administradores, oficiales de cumplimiento y auditores ya la necesitan siempre; esta opción extiende la regla a revisores y demás personas.
+Activa «Exigir passkey a todas las personas del grupo» para que cada persona registre una passkey en su próximo ingreso. La passkey es opcional: sin esta opción, cualquier persona entra con el código de su correo, sea cual sea su rol. Esta opción, apagada por omisión, la exige a todas.
 
 > **Pantalla:** `/e/{empresa}/ingreso`
 

@@ -90,17 +90,18 @@ describe('«Editar atributos» del vínculo', () => {
     montarPantalla(<Anfitrion actual={vinculo({ nivelRiesgo: 'Alto', categorias: ['Servicios'], montoEstimado: 1500000, critico: false, nota: 'Revisar' })} />);
 
     const dialogo = screen.getByRole('dialog', { name: /Editar atributos del vínculo/ });
-    expect(within(dialogo).getByRole('combobox', { name: /nivelRiesgo/ })).toHaveTextContent('Alto');
+    // Las etiquetas son el código del atributo en texto legible («nivelRiesgo» → «Nivel riesgo»).
+    expect(within(dialogo).getByRole('combobox', { name: /Nivel riesgo/ })).toHaveTextContent('Alto');
     // Solo el obligatorio lleva asterisco.
     expect(dialogo.querySelectorAll('.MuiFormLabel-asterisk')).toHaveLength(1);
-    expect(within(dialogo).getByRole('combobox', { name: /nivelRiesgo/ }).closest('.MuiFormControl-root')?.querySelector('.MuiFormLabel-asterisk')).not.toBeNull();
+    expect(within(dialogo).getByRole('combobox', { name: /Nivel riesgo/ }).closest('.MuiFormControl-root')?.querySelector('.MuiFormLabel-asterisk')).not.toBeNull();
     expect(within(dialogo).getByText('Servicios')).toBeInTheDocument(); // el chip de la lista de opciones
-    expect(within(dialogo).getByRole('textbox', { name: 'montoEstimado' })).toHaveValue('1500000');
+    expect(within(dialogo).getByRole('textbox', { name: 'Monto estimado' })).toHaveValue('1500000');
     // La fecha es el selector por secciones (dd/mm/aaaa), no un input de fecha del navegador.
-    expect(within(within(dialogo).getByRole('group', { name: 'vigencia' })).getByRole('spinbutton', { name: 'Día' })).toBeInTheDocument();
+    expect(within(within(dialogo).getByRole('group', { name: 'Vigencia' })).getByRole('spinbutton', { name: 'Día' })).toBeInTheDocument();
     expect(dialogo.querySelector('input[type="date"]')).toBeNull();
-    expect(within(dialogo).getByRole('combobox', { name: 'critico' })).toHaveTextContent('No');
-    expect(within(dialogo).getByRole('textbox', { name: 'nota' })).toHaveValue('Revisar');
+    expect(within(dialogo).getByRole('combobox', { name: 'Critico' })).toHaveTextContent('No');
+    expect(within(dialogo).getByRole('textbox', { name: 'Nota' })).toHaveValue('Revisar');
     // Nada cambiado, nada que guardar.
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
   });
@@ -110,14 +111,14 @@ describe('«Editar atributos» del vínculo', () => {
     const peticiones = simular();
     montarPantalla(<Anfitrion actual={vinculo({ nivelRiesgo: 'Alto', montoEstimado: 1500000, nota: 'Revisar', desconocido: 'x' })} />);
 
-    await usuario.clear(screen.getByRole('textbox', { name: 'montoEstimado' }));
-    await usuario.type(screen.getByRole('textbox', { name: 'montoEstimado' }), '2000000.5');
-    await usuario.clear(screen.getByRole('textbox', { name: 'nota' }));
-    await elegir(usuario, 'critico', 'Sí');
-    await usuario.click(screen.getByRole('combobox', { name: 'categorias' }));
+    await usuario.clear(screen.getByRole('textbox', { name: 'Monto estimado' }));
+    await usuario.type(screen.getByRole('textbox', { name: 'Monto estimado' }), '2000000.5');
+    await usuario.clear(screen.getByRole('textbox', { name: 'Nota' }));
+    await elegir(usuario, 'Critico', 'Sí');
+    await usuario.click(screen.getByRole('combobox', { name: 'Categorias' }));
     await usuario.click(await screen.findByRole('option', { name: 'Equipos' }));
     await usuario.keyboard('{Escape}');
-    await usuario.click(within(screen.getByRole('group', { name: 'vigencia' })).getByRole('spinbutton', { name: 'Día' }));
+    await usuario.click(within(screen.getByRole('group', { name: 'Vigencia' })).getByRole('spinbutton', { name: 'Día' }));
     await usuario.keyboard('31122026');
     await usuario.click(screen.getByRole('button', { name: 'Guardar' }));
 
@@ -136,7 +137,7 @@ describe('«Editar atributos» del vínculo', () => {
     const peticiones = simular();
     montarPantalla(<Anfitrion actual={vinculo()} />);
 
-    await usuario.type(screen.getByRole('textbox', { name: 'montoEstimado' }), '12,5');
+    await usuario.type(screen.getByRole('textbox', { name: 'Monto estimado' }), '12,5');
     await usuario.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(await screen.findByText('Este atributo es obligatorio.')).toBeInTheDocument();
@@ -150,7 +151,7 @@ describe('«Editar atributos» del vínculo', () => {
     simular(() => json({ status: 422, codigo: 'atributo-invalido', detail: 'El valor del atributo «nivelRiesgo» no es un opcion válido.' }, 422));
     montarPantalla(<Anfitrion actual={vinculo({ nivelRiesgo: 'Alto' })} />);
 
-    await usuario.type(screen.getByRole('textbox', { name: 'nota' }), 'Hola');
+    await usuario.type(screen.getByRole('textbox', { name: 'Nota' }), 'Hola');
     await usuario.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();

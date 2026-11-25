@@ -108,14 +108,16 @@ describe('Tarjeta del requisito: la lectura del archivo y el cruce con lo que re
     expect(screen.getByText(/^Respalda:/)).toHaveTextContent('Respalda: Cuenta de Bancolombia ****5678');
   });
 
-  it('legible, tipo detectado y los datos leídos van en una sola lista, y el pie no se repite dentro de la revisión', () => {
+  it('legible y el tipo detectado van en una línea al pie y los datos leídos tras el enlace, y «Analizado el …» va una sola vez', async () => {
+    const usuario = userEvent.setup();
     montar(CERTIFICACION_SIN_CUENTA, LEIDO);
 
     const revision = within(screen.getByRole('region', { name: 'Revisión automática' }));
+    expect(revision.getByText(/^Legible: /).closest('[data-lectura-resumen]')).toHaveTextContent('Legible: Sí · Tipo detectado: Certificación bancaria');
+    expect(revision.queryByLabelText('Datos extraídos')).not.toBeInTheDocument();
+    await usuario.click(revision.getByRole('button', { name: 'Ver lo que leyó la IA' }));
     const lista = within(revision.getByLabelText('Datos extraídos'));
-    expect(lista.getAllByRole('term').map((t) => t.textContent)).toEqual(['Legible', 'Tipo detectado', 'Banco', 'Titular', 'Tipo de cuenta', 'Número', 'Fecha de expedición', 'Identificación del titular']);
-    expect(lista.getByText('Certificación bancaria')).toBeInTheDocument();
-    // Legible y el tipo detectado no cuentan para el límite de la tarjeta (6 datos): con seis datos leídos no hay «Ver más».
+    expect(lista.getAllByRole('term').map((t) => t.textContent)).toEqual(['Banco', 'Titular', 'Tipo de cuenta', 'Número', 'Fecha de expedición', 'Identificación del titular']);
     expect(revision.queryByRole('button', { name: /dato más/ })).not.toBeInTheDocument();
     // «Analizado el …» va una sola vez, en el encabezado de la revisión.
     expect(screen.getAllByText(/Analizado el/)).toHaveLength(1);
@@ -205,8 +207,8 @@ describe('Tarjeta del requisito: el bloque de la revisión automática', () => {
     montar(certificacionCruzada(), LEIDO, { cuentasEnSuTarjeta: true });
 
     const revision = within(screen.getByRole('region', { name: 'Revisión automática' }));
-    const lista = within(revision.getByLabelText('Datos extraídos'));
-    expect(lista.getAllByRole('term').map((t) => t.textContent)).toEqual(['Legible', 'Tipo detectado']);
+    expect(revision.getByText(/^Legible: /)).toBeInTheDocument();
+    expect(revision.queryByLabelText('Datos extraídos')).not.toBeInTheDocument();
     expect(revision.queryByText('Aceros del Norte S.A.S.')).not.toBeInTheDocument();
 
     await usuario.click(revision.getByRole('button', { name: 'Ver lo que leyó la IA' }));

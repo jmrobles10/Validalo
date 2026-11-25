@@ -115,7 +115,8 @@ public sealed class TareasDeRevisionAutomatica(IDocumentStore store, EmisorDeCer
             {
                 var entrada = Entrada(candidata, documentos, consumidas, cruces, config, plan, usoIa, ahora, out var esperando);
                 var politica = new PoliticaDeRevision(config.Nivel, config.UmbralEfectivo(plan?.UmbralConfianza ?? PlanDeIaEmpresa.UmbralConfianzaInicial),
-                    config.PorcentajeMuestreo, config.TiposAutorizados, (uso?.Aprobadas ?? 0) + aprobadasEnLaPasada, config.TopeMensualAprobaciones);
+                    config.PorcentajeMuestreo, config.TiposAutorizados, (uso?.Aprobadas ?? 0) + aprobadasEnLaPasada, config.TopeMensualAprobaciones,
+                    UmbralDelPlan: (plan?.UmbralConfianza ?? PlanDeIaEmpresa.UmbralConfianzaInicial) > config.UmbralConfianza);
                 // Lo que está fuera del alcance de la revisión automática se anota ya: no hay análisis que esperar.
                 if (esperando && MotorDeRevision.FueraDeAlcance(entrada, politica) is null)
                     continue;
@@ -141,35 +142,22 @@ public sealed class TareasDeRevisionAutomatica(IDocumentStore store, EmisorDeCer
     {
         var requisito = candidata.Requisito;
         var version = requisito.VersionActual!;
-        var visible = documentos.TryGetValue(version.DocumentoId, out var documento) && documento.Buscar(version.Numero) is { Ia: not null } &&
-                      consumidas.Contains((version.DocumentoId, version.Numero));
+        documentos.TryGetValue(version.DocumentoId, out var documento);
         var versionDocumento = documento?.Buscar(version.Numero);
-        var ia = visible ? versionDocumento!.Ia : null;
-        AnalisisParaRevisar? analisis = ia is null ? null : new AnalisisParaRevisar(ia.Confianza, ia.Legible, ia.Alertas.Count, ia.TipoDetectado, ia.CamposCriticosCambiados.Count);
 
-        // F5: el cruce de lo que la empresa ve de las secciones que respalda el documento.
-        var soporte = cruces.DeDocumento(requisito.Id);
-        var crucePendiente = analisis is not null && soporte is { SinAnalisis: false } && soporte.Secciones.Any(s => s.Version is not null && s.Cruce is null);
-        // Sin cupo (incluidas y adicional agotados) la empresa no consumirá la validación de esta versión: el análisis no le va a llegar, así que no se
-        // espera a que venza la espera de la empresa y la versión pasa de una vez a una persona (IA-4, IA-6). Si ya la consumió, el análisis viene en camino.
-        var sinCupo = !consumidas.Contains((version.DocumentoId, version.Numero)) && usoIa.CupoDisponible(plan) is null;
-        var iaPuedeLlegar = analisis is null && opcionesIa.Habilitada && plan is { Activo: true } && !sinCupo && versionDocumento is not null && versionDocumento.FalloIa is null;
+        // Lo que la empresa recibió del análisis y lo que cruza con lo declarado (F5: las secciones que respalda el documento; ADR-0010: la persona de un documento de persona): la
+        // misma lectura que le da al revisor su conclusión (EntradasDeRevision), para que haya una sola regla. Sin cupo (incluidas y adicional agotados) la empresa no consumirá la
+        // validación de esta versión: el análisis no le va a llegar, así que no se espera a que venza la espera de la empresa y la versión pasa de una vez a una persona
+        // (IA-4, IA-6). Si ya la consumió, el análisis viene en camino.
+        var lectura = EntradasDeRevision.Leer(versionDocumento, consumidas.Contains((version.DocumentoId, version.Numero)), plan, usoIa, opcionesIa.Habilitada);
+        var entrada = EntradasDeRevision.Armar(requisito, lectura, cruces.DeDocumento(requisito.Id), EntradasDeRevision.CruceDePersona(requisito, versionDocumento, lectura),
+            cruces.AntiguedadDe(requisito.Id), config.AreasAutorizadas.Contains(candidata.Area.AreaId), requisito.AprobadoresPara(candidata.Area) > 1);
 
         var inicio = candidata.Area.PendienteDesde is { } pendienteDesde && pendienteDesde > version.CargadaEn ? pendienteDesde : version.CargadaEn;
         var vencida = ahora >= inicio.AddMinutes(config.EsperaIaMinutos);
-        esperando = (iaPuedeLlegar || crucePendiente) && !vencida;
-
-        return new EntradaDeRevision(version.DocumentoId, version.Numero, requisito.TipoCanonico, requisito.Reenvios,
-            config.AreasAutorizadas.Contains(candidata.Area.AreaId), requisito.AprobadoresPara(candidata.Area) > 1, analisis, crucePendiente,
-            soporte?.DiscrepanciaCritica ?? false, soporte?.Secciones.Any(s => s.Cruce is { Discrepancias: > 0 }) ?? false, AntiguedadDe(cruces, requisito));
+        esperando = (lectura.IaPuedeLlegar || entrada.CrucePendiente) && !vencida;
+        return entrada;
     }
-
-    /// <summary>La antigüedad máxima del tipo (TD-10) frente a lo que leyó la IA y la empresa recibió, para el motor; nula si el tipo no la exige.</summary>
-    private static AntiguedadParaRevisar? AntiguedadDe(CrucesDelExpediente cruces, RequisitoDeExpediente requisito) =>
-        cruces.AntiguedadDe(requisito.Id) is { } antiguedad
-            ? new AntiguedadParaRevisar(antiguedad.Estado, AntiguedadDelDocumento.Detalle(antiguedad), AntiguedadDelDocumento.MensajeAlTercero(antiguedad, requisito.Nombre),
-                antiguedad.FechaDeclarada is not null)
-            : null;
 
     /// <summary>Registra las decisiones con el stream bloqueado y cuenta el uso del mes en la misma transacción.</summary>
     private async Task<int> EscribirAsync(Guid tenantId, Guid expedienteId, NivelDeRevisionAutomatica nivel, IReadOnlyList<PropuestaDeRevision> propuestas,

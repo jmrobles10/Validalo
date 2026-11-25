@@ -2,6 +2,7 @@ import { esErrorApi, type ErrorApi, type FaltanteSeccionDto, type JsonElement, t
 import { useState } from 'react';
 import { useGuardarSeccion } from './api';
 import { estaSenalado } from './etiquetas';
+import type { SoporteSubido } from './propuestas';
 import { claveDeRuta, type CodigoSeccion } from './secciones';
 import type { PersonaRelacionada } from './tipos';
 
@@ -59,6 +60,8 @@ export function useEditorSeccion(codigo: CodigoSeccion, periodo: number | null, 
   // Un soporte que el tercero retiró de su bóveda no se puede volver a enviar (422): queda fuera de lo editable y se avisa aparte (RT-4).
   const [soportes, setSoportes] = useState<SoporteSeccionDto[]>(() => inicial.soportes.filter((s) => !s.retirado));
   const [soportesRetirados, setSoportesRetirados] = useState<SoporteSeccionDto[]>(() => inicial.soportes.filter((s) => s.retirado));
+  // El documento que el tercero acaba de subir desde la sección y se está leyendo (FD-10); se olvida al guardar.
+  const [subido, setSubido] = useState<SoporteSubido | null>(null);
   const [faltantes, setFaltantes] = useState<FaltanteSeccionDto[]>(() => inicial.completitud?.faltantes ?? []);
   const [erroresCampo, setErroresCampo] = useState<ErrorDeCampo[]>([]);
   const errorCampo = erroresCampo[0] ?? null;
@@ -79,6 +82,18 @@ export function useEditorSeccion(codigo: CodigoSeccion, periodo: number | null, 
     setSoportes(nuevos);
     marcar(['soportes']);
     setSinGuardar(true);
+  };
+
+  /**
+   * El documento que el tercero acaba de subir con «Subir un soporte» (FD-10) queda elegido como soporte, en lugar de otra versión del mismo documento si la
+   * había. Con `lectura` (un documento que se lee: RUT, Cámara…) la sección también espera lo que la IA propone de él. Se llama cuando la subida termina,
+   * con el diálogo aún abierto: usa la función de `setSoportes` y no el valor de la última pintura.
+   */
+  const registrarSubida = (soporte: SoporteSeccionDto, lectura: Pick<SoporteSubido, 'tipo' | 'esperaLectura'> | null) => {
+    setSoportes((previos) => [...previos.filter((s) => s.documentoId !== soporte.documentoId), { documentoId: soporte.documentoId, version: soporte.version }]);
+    marcar(['soportes']);
+    setSinGuardar(true);
+    setSubido(lectura ? { documentoId: soporte.documentoId, version: soporte.version, desde: Date.now(), ...lectura } : null);
   };
 
   const mensaje = (ruta: string): string | null => {
@@ -119,6 +134,7 @@ export function useEditorSeccion(codigo: CodigoSeccion, periodo: number | null, 
           setEditados(new Set());
           setSinGuardar(false);
           setConPrellenado(false);
+          setSubido(null);
           alGuardar(respuesta);
         },
         onError: (error) => {
@@ -132,7 +148,7 @@ export function useEditorSeccion(codigo: CodigoSeccion, periodo: number | null, 
   // Un error que no es de un campo (sesión, red, 5xx…) va arriba del formulario.
   const errorGeneral = guardado.isError && !errorCampo ? guardado.error : null;
 
-  return { datos, conPrellenado, cambiar, soportes, soportesRetirados, cambiarSoportes, faltantes, errorCampo, errorGeneral, mensaje, hayEnRuta, errorEn, guardar, guardando: guardado.isPending, sinGuardar, cuerpo: JSON.stringify(cuerpo) };
+  return { datos, conPrellenado, cambiar, soportes, soportesRetirados, cambiarSoportes, subido, registrarSubida, olvidarSubido: () => setSubido(null), faltantes, errorCampo, errorGeneral, mensaje, hayEnRuta, errorEn, guardar, guardando: guardado.isPending, sinGuardar, cuerpo: JSON.stringify(cuerpo) };
 }
 
 export type EditorSeccion = ReturnType<typeof useEditorSeccion>;

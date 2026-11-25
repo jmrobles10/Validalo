@@ -112,10 +112,9 @@ export const invitaciones = {
       numeroAyudaDv: 'Sin puntos ni espacios; el dígito de verificación va aparte.',
       digito: 'DV',
       digitoAyuda: 'Si lo dejas vacío, se calcula.',
-      tipoPersona: 'Tipo de persona',
-      tipoPersonaAuto: 'Según el documento',
-      tipoPersonaAyuda: 'Jurídica con NIT; Natural con los demás tipos.',
-      personas: { Natural: 'Natural', Juridica: 'Jurídica', Consorcio: 'Consorcio' },
+      // El tipo de persona no se elige: lo dice el tipo de identificación y se muestra junto a él.
+      personaDerivada: { Natural: 'Persona natural', Juridica: 'Persona jurídica' },
+      personaSegunNumero: 'Persona natural o jurídica, según el número.',
       nombre: 'Razón social o nombres',
       nombreComercial: 'Nombre comercial',
       correo: 'Correo',

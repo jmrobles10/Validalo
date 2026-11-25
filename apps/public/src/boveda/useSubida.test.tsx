@@ -3,7 +3,7 @@ import type { VersionDocumentoDto } from '@validalo/api-client';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OpcionesSubida, ResultadoSubida } from './subida';
+import type { OpcionesSubida, ResultadoSubida, VersionSubida } from './subida';
 import { useSubida, type EstadoSubida } from './useSubida';
 
 const subirDocumentoSimulado = vi.hoisted(() => vi.fn<(opciones: OpcionesSubida) => Promise<ResultadoSubida>>());
@@ -28,11 +28,11 @@ function pendiente() {
   return { promesa, resolver, rechazar };
 }
 
-function montar() {
+function montar(alSubir?: (subida: VersionSubida) => void) {
   const cliente = new QueryClient();
   const invalidar = vi.spyOn(cliente, 'invalidateQueries');
   const envoltorio = ({ children }: { children: ReactNode }) => <QueryClientProvider client={cliente}>{children}</QueryClientProvider>;
-  return { ...renderHook(() => useSubida(), { wrapper: envoltorio }), invalidar };
+  return { ...renderHook(() => useSubida(alSubir), { wrapper: envoltorio }), invalidar };
 }
 
 /** La fase y el nombre del archivo que la pantalla está mostrando. */
@@ -157,5 +157,62 @@ describe('useSubida: solo la última subida manda sobre la pantalla', () => {
 
     expect(llamada(0).senal?.aborted).toBe(true);
     expect(result.current.estado).toEqual({ fase: 'inicio' });
+  });
+});
+
+describe('useSubida: le dice a quien abrió el diálogo qué versión quedó (FD-10)', () => {
+  it('con una versión lista avisa cuál es y si alguna empresa la recibió, y la bóveda se vuelve a pedir', async () => {
+    const compartidos = [{ documentoId: 'd1', tipo: 'RUT', version: 1, vinculoId: 'v1', empresaId: 'e1' }];
+    subirDocumentoSimulado.mockResolvedValueOnce({ tipo: 'lista', version, compartidos }).mockResolvedValueOnce(lista());
+    const alSubir = vi.fn<(subida: VersionSubida) => void>();
+    const { result, invalidar } = montar(alSubir);
+
+    act(() => result.current.subir(archivo('a.pdf'), DESTINO));
+    await vi.waitFor(() => expect(alSubir).toHaveBeenLastCalledWith({ documentoId: 'd1', version: 1, compartida: true }));
+    expect(invalidar).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.subir(archivo('b.pdf'), DESTINO));
+    await vi.waitFor(() => expect(alSubir).toHaveBeenLastCalledWith({ documentoId: 'd1', version: 1, compartida: false }));
+  });
+
+  it('un archivo que ya estaba avisa su versión, sin saber si se compartió', async () => {
+    subirDocumentoSimulado.mockResolvedValueOnce({ tipo: 'duplicado', numero: 3, documentoId: 'd9' });
+    const alSubir = vi.fn<(subida: VersionSubida) => void>();
+    const { result } = montar(alSubir);
+
+    act(() => result.current.subir(archivo('a.pdf'), DESTINO));
+    await vi.waitFor(() => expect(alSubir).toHaveBeenCalledExactlyOnceWith({ documentoId: 'd9', version: 3, compartida: null }));
+  });
+
+  it('una versión devuelta no sirve de documento: no se avisa', async () => {
+    subirDocumentoSimulado.mockResolvedValueOnce({ tipo: 'devuelta', version: { ...version, estado: 'Devuelta' } });
+    const alSubir = vi.fn<(subida: VersionSubida) => void>();
+    const { result } = montar(alSubir);
+
+    act(() => result.current.subir(archivo('a.pdf'), DESTINO));
+    await vi.waitFor(() => expect(result.current.estado.fase).toBe('resultado'));
+    expect(alSubir).not.toHaveBeenCalled();
+  });
+
+  it('si la subida fue reemplazada por otra, la vieja no avisa', async () => {
+    const a = pendiente();
+    const b = pendiente();
+    subirDocumentoSimulado.mockReturnValueOnce(a.promesa).mockReturnValueOnce(b.promesa);
+    const alSubir = vi.fn<(subida: VersionSubida) => void>();
+    const { result } = montar(alSubir);
+
+    act(() => result.current.subir(archivo('a.pdf'), DESTINO));
+    act(() => result.current.subir(archivo('b.pdf'), DESTINO));
+    await act(async () => {
+      a.resolver(lista());
+      await a.promesa;
+    });
+    expect(alSubir).not.toHaveBeenCalled();
+
+    await act(async () => {
+      b.resolver(lista());
+      await b.promesa;
+    });
+    expect(alSubir).toHaveBeenCalledTimes(1);
   });
 });

@@ -64,7 +64,7 @@ recorrido(
     // El soporte de la sección va en la tarjeta del RUT, que está en «Información tributaria».
     await irASector(sofia, 'Información tributaria');
     const soporte = sofia.getByRole('region', { name: 'Soporte de la información' });
-    await expect(soporte).toContainText('Información general (versión 1)');
+    await expect(soporte).toContainText('Información general · versión 1');
     await paso(paginaSofia, {
       titulo: 'Confirma qué soporta la información',
       explicacion:

@@ -8,8 +8,9 @@ import { codigo, esperarCorreo, mensajesDe } from '../soporte/correo';
 import { irASeccion } from '../soporte/empresa';
 
 /**
- * Ingreso directo sin contraseñas (ING-1…ING-4): correo → código → passkey, ingreso solo con passkey (autenticador virtual del navegador por CDP),
- * Mi cuenta (passkeys y sesiones), invitación y gestión por el administrador, y operadores de Plataforma. Deja capturas de las pantallas de ingreso y
+ * Ingreso directo sin contraseñas (ING-1…ING-4, PI-20): correo → código (la passkey es opcional: solo la exige el grupo que activa «passkey para todos» y los
+ * operadores de Plataforma), ingreso solo con passkey (autenticador virtual del navegador por CDP), Mi cuenta (passkeys y sesiones), invitación y gestión por
+ * el administrador, y operadores de Plataforma. Deja capturas de las pantallas de ingreso y
  * de Mi cuenta en `E2E_CAPTURAS` (por omisión `test-results/ingreso`).
  */
 
@@ -133,14 +134,53 @@ test('un código incorrecto dice cuántos intentos quedan y un correo sin cuenta
   await expect(page.getByText('El código no es correcto. Te quedan 4 intentos.')).toBeVisible();
 });
 
-test('un administrador registra su passkey en el primer ingreso y después entra solo con ella', async ({ page }) => {
+test('un administrador entra solo con el código, registra una passkey desde Mi cuenta si quiere y después entra con ella o con el código', async ({ page }) => {
   const g = await crearGrupoDirecto();
   const virtual = await autenticadorVirtual(page);
 
   await page.goto('/app/');
   await entrarConCodigo(page, g.correoAdmin);
 
-  // Su rol exige passkey: el código solo sirve para registrar la primera.
+  // Ningún rol exige passkey: el código basta para abrir la sesión (aun a un administrador) y solo se le sugiere registrar una.
+  await expect(barraDeSecciones(page)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Registra tu passkey' })).toHaveCount(0);
+  await expect(page.getByText('Protege tu cuenta con una passkey')).toBeVisible();
+  expect(await credenciales(virtual)).toBe(0);
+
+  // La registra desde Mi cuenta cuando quiere.
+  await page.goto(`/app/#/e/${g.empresaId}/mi-cuenta`);
+  await expect(page.getByText('Aún no tienes passkeys')).toBeVisible();
+  await expect(page.getByText('La passkey es opcional')).toBeVisible();
+  await page.getByRole('button', { name: 'Agregar passkey' }).click();
+  await page.getByLabel('Nombre para reconocerla').fill('Mi teléfono');
+  await page.getByRole('dialog').getByRole('button', { name: 'Registrar passkey' }).click();
+  // Se espera la fila de la lista, no el texto «Mi teléfono»: la ayuda del campo del nombre («Por ejemplo, «Mi teléfono»…») ya lo trae y se vería antes de que termine el registro.
+  await expect(page.getByRole('button', { name: 'Cambiar nombre: Mi teléfono' })).toBeVisible();
+  expect(await credenciales(virtual)).toBe(1);
+
+  // Con una passkey registrada puede entrar solo con ella o, igual que antes, con el código del correo: la passkey no es un paso obligatorio.
+  await page.getByRole('button', { name: 'Menú de tu cuenta' }).click();
+  await page.getByRole('menuitem', { name: 'Cerrar sesión' }).click();
+  await expect(page.getByRole('heading', { name: 'Ingresa a Valídalo' })).toBeVisible();
+  await page.getByRole('button', { name: 'Entrar con una passkey' }).click();
+  await expect(barraDeSecciones(page)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Menú de tu cuenta' }).click();
+  await page.getByRole('menuitem', { name: 'Cerrar sesión' }).click();
+  await expect(page.getByRole('heading', { name: 'Ingresa a Valídalo' })).toBeVisible();
+  await entrarConCodigo(page, g.correoAdmin);
+  await expect(barraDeSecciones(page)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Confirma que eres tú' })).toHaveCount(0);
+});
+
+test('en un grupo que exige passkey a todos, el administrador la registra en el primer ingreso y después entra solo con ella', async ({ page }) => {
+  const g = await crearGrupoDirecto({ passkeyParaTodos: true });
+  const virtual = await autenticadorVirtual(page);
+
+  await page.goto('/app/');
+  await entrarConCodigo(page, g.correoAdmin);
+
+  // El grupo la exige a todos: el código solo sirve para registrar la primera.
   await expect(page.getByRole('heading', { name: 'Registra tu passkey' })).toBeVisible();
   await page.screenshot({ path: captura('ingreso-registrar-passkey'), fullPage: true });
   await page.getByLabel('Nombre para reconocerla').fill('Mi teléfono');
@@ -162,7 +202,8 @@ test('un administrador registra su passkey en el primer ingreso y después entra
 });
 
 test('Mi cuenta: ver y cerrar sesiones, agregar, renombrar y eliminar passkeys', async ({ page }) => {
-  const g = await crearGrupoDirecto();
+  // Un grupo que exige passkey a todos: no deja eliminar la última (en uno que no la exige, sí se puede).
+  const g = await crearGrupoDirecto({ passkeyParaTodos: true });
 
   const virtual = await autenticadorVirtual(page);
   await page.goto('/app/');
@@ -193,7 +234,7 @@ test('Mi cuenta: ver y cerrar sesiones, agregar, renombrar y eliminar passkeys',
   await expect(page.getByText('Llave USB')).toBeVisible();
   await page.screenshot({ path: captura('mi-cuenta-passkeys'), fullPage: true });
 
-  // Con dos se puede eliminar una; la última no (el rol de Ana la exige).
+  // Con dos se puede eliminar una; la última no (el grupo la exige).
   await page.getByRole('button', { name: 'Eliminar: Llave USB' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Eliminar' }).click();
   await expect(page.getByText('Llave USB')).toHaveCount(0);
@@ -205,7 +246,8 @@ test('Mi cuenta: ver y cerrar sesiones, agregar, renombrar y eliminar passkeys',
 });
 
 test('un administrador invita por correo, ve el acceso de la persona y revoca su passkey', async ({ page, browser }) => {
-  const g = await crearGrupoDirecto();
+  // Con «passkey para todos» el primer ingreso de cada persona registra su passkey y confirmar una acción sensible exige la passkey.
+  const g = await crearGrupoDirecto({ passkeyParaTodos: true });
   const virtual = await autenticadorVirtual(page);
   await page.goto('/app/');
   await entrarConCodigo(page, g.correoAdmin);
@@ -229,7 +271,7 @@ test('un administrador invita por correo, ve el acceso de la persona y revoca su
   expect(invitacion.texto).toContain('Auditor');
   await expect(page.getByText('Carla Auditora')).toBeVisible();
 
-  // Carla entra desde otro navegador: su rol exige passkey, la registra y queda con una sesión abierta.
+  // Carla entra desde otro navegador: el grupo exige passkey, la registra y queda con una sesión abierta.
   const contexto = await browser.newContext();
   const otra = await contexto.newPage();
   const virtualDeCarla = await autenticadorVirtual(otra);

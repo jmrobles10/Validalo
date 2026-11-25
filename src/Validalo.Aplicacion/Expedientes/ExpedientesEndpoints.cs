@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Validalo.Aplicacion.Comun;
 using Validalo.Aplicacion.Configuracion;
 using Validalo.Aplicacion.Interesado;
+using Validalo.Aplicacion.Revision;
 using Validalo.Contratos;
 using Validalo.Dominio.Comun;
 using Validalo.Dominio.Configuracion;
@@ -433,9 +434,13 @@ public static class ExpedientesEndpoints
         var expediente = await empresa.CargarExpedienteAsync(id, ct);
         var areas = expediente.AreaIds.Count == 0 ? [] : await empresa.Sesion.LoadManyAsync<Area>(ct, expediente.AreaIds.ToArray());
         await using var boveda = empresa.ConsultaBoveda();
-        var documentacion = await DocumentacionDelExpediente.CargarAsync(empresa.Sesion, boveda, expediente, empresa.Reglas, empresa.Hoy, ct) with
+        var cargada = await DocumentacionDelExpediente.CargarAsync(empresa.Sesion, boveda, expediente, empresa.Reglas, empresa.Hoy, ct);
+        var cruces = await CrucesDelExpediente.CargarAsync(empresa.Sesion, boveda, expediente, empresa.EmpresaId, empresa.Protector, ct);
+        // Lo que la IA concluye de cada documento (en cualquier nivel de revisión): sale de los mismos cruces y del mismo motor que la revisión automática.
+        var documentacion = cargada with
         {
-            Cruces = await CrucesDelExpediente.CargarAsync(empresa.Sesion, boveda, expediente, empresa.EmpresaId, empresa.Protector, ct)
+            Cruces = cruces,
+            Conclusiones = await ConclusionesDelExpediente.CargarAsync(empresa.Sesion, expediente, cargada.Documentos, cruces, empresa.Hoy, ct)
         };
         // Quien tiene una delegación vigente de un miembro del área también decide por ella (OP-8): el detalle lo trata como miembro.
         var empresaId = empresa.EmpresaId;

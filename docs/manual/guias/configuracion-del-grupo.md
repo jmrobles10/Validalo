@@ -12,7 +12,7 @@ El **grupo** (el tenant) es el cliente de Valídalo: una o varias empresas (razo
 
 > **Nota:** las rutas de la app son `/e/{empresa}/{sección}` dentro del hash de la app web (por ejemplo `/app/#/e/{empresa}/usuarios`); no existe el segmento `/configuracion/`. Una sección no aparece en la barra lateral si la persona no tiene su permiso. Los permisos de administración del grupo (`empresas:administrar`, `usuarios:administrar`, `api-keys:administrar`, `sistemas:administrar`, `sandbox:administrar`) solo los da un rol asignado a **todo el grupo**: un administrador de una sola empresa no los tiene.
 
-**Confirmar con passkey (reautenticación).** Estas acciones piden confirmar con la passkey en los últimos 5 minutos si la persona entró de forma directa: cambiar roles, desactivar a una persona, revocar una passkey, crear, rotar o revocar una API key, rotar la clave de un sistema, desactivarlo o reactivarlo, guardar el SSO y quitar un dominio del SSO. Las sesiones delegadas (iframe de un sistema integrado) no la piden.
+**Confirmar con passkey o con un código del correo (reautenticación).** Estas acciones piden confirmar con la passkey o con un código de 6 dígitos que llega al correo de la cuenta, en los últimos 5 minutos, si la persona entró de forma directa (si el grupo exige passkey a todos, solo con la passkey): cambiar roles, desactivar a una persona, revocar una passkey, crear, rotar o revocar una API key, rotar la clave de un sistema, desactivarlo o reactivarlo, guardar el SSO y quitar un dominio del SSO. Las sesiones delegadas (iframe de un sistema integrado) no la piden.
 
 ## Empresas del grupo
 
@@ -40,18 +40,18 @@ Ruta `/e/{empresa}/usuarios` · permiso `usuarios:administrar`.
 | Nombre y correo | El correo es la cuenta de ingreso. | Sin valor: debe configurarse | Correo en minúsculas, de 3 a 254 caracteres, único en el grupo (409 `usuario-duplicado`). |
 | Rol (una fila por rol) | Define los permisos (tabla siguiente). | Una persona nueva no tiene roles y no puede hacer nada; una fila nueva empieza en Revisor. | Administrador, Revisor, Oficial de cumplimiento, Auditor. |
 | Empresa (alcance del rol) | Dónde vale el rol. | Todo el grupo o la primera empresa, según la fila. | «Todo el grupo» vale en todas las empresas y es el único alcance que da los permisos de administración del grupo. Un rol de todo el grupo elimina el mismo rol por empresa. |
-| Passkey exigida (derivada del rol) | Administrador, Oficial de cumplimiento y Auditor deben registrar passkey; sin ella, el código del correo solo sirve para registrarla. | El Revisor no la exige, salvo «Exigir passkey a todas las personas» en Ingreso. | Solo se muestra si el grupo admite ingreso directo. |
+| Passkey exigida | Ningún rol la exige: el código del correo basta para entrar. Solo aparece «Exigida» si el grupo activó «Exigir passkey a todas las personas» en Ingreso. | Opcional | Solo se muestra si el grupo admite ingreso directo. |
 | Enviar una invitación por correo | Envía la dirección de la app a la persona. | Marcado si el grupo admite ingreso directo. | Con ingreso directo apagado: 422 `ingreso-directo-apagado` al crear (409 al reenviar). |
 | Passkeys y sesiones de la persona | Revocar una passkey la invalida, cierra todas las sesiones de la persona y le avisa por correo. | — | Motivo opcional; revocar pide reautenticación. |
 | Desactivar persona | No vuelve a entrar y se cierran sus sesiones directas; se conserva el historial. | Activa | No hay acción de reactivar. |
 | Límite de usuarios del plan | Con bloqueo suave y el tope alcanzado, el alta manual responde 409 `limite-del-plan-alcanzado`. | Sin límite si no hay plan | Cuentan los usuarios activos. El alta por SSO o por identidad delegada no pasa por este límite. |
 
-| Rol | Permisos | Passkey |
+| Rol | Permisos | Passkey (siempre opcional) |
 |---|---|---|
-| Administrador | Los 31 permisos del grupo (todos los de la tabla de API keys). | Sí |
+| Administrador | Los 31 permisos del grupo (todos los de la tabla de API keys). | No la exige |
 | Revisor | Lecturas (`configuracion:leer`, `terceros:leer`, `vinculos:leer`, `flujos:leer`, `expedientes:leer`, `documentos:leer`, `documentos:descargar`, `certificados:leer`, `consultas:leer`) más `vinculos:escribir` y `expedientes:revisar`. | No |
-| Oficial de cumplimiento | Lecturas más `vinculos:escribir`, `vinculos:bloquear`, `cuentas:aprobar`, `expedientes:revisar`, `expedientes:exportar`, `verificaciones:escribir`, `cumplimiento:decidir`, `auditoria:leer` y `supresiones:resolver`. | Sí |
-| Auditor | Lecturas más `auditoria:leer`, `auditoria:exportar` y `expedientes:exportar`. | Sí |
+| Oficial de cumplimiento | Lecturas más `vinculos:escribir`, `vinculos:bloquear`, `cuentas:aprobar`, `expedientes:revisar`, `expedientes:exportar`, `verificaciones:escribir`, `cumplimiento:decidir`, `auditoria:leer` y `supresiones:resolver`. | No la exige |
+| Auditor | Lecturas más `auditoria:leer`, `auditoria:exportar` y `expedientes:exportar`. | No la exige |
 
 Fuente: `src/Validalo.Dominio/Identidad/Usuario.cs`, `src/Validalo.Aplicacion/Comun/Permisos.cs`, `src/Validalo.Aplicacion/Identidad/IdentidadEndpoints.cs`.
 
@@ -62,10 +62,10 @@ Ruta `/e/{empresa}/ingreso` · permiso `usuarios:administrar`. Define cómo entr
 | Ajuste | Qué afecta | Por defecto | Variantes y límites |
 |---|---|---|---|
 | Desde el sistema integrado (modo Delegado) | El sistema integrado (SRM, Marco, Portal) autentica a la persona con una identidad firmada; es lo que usan las pantallas embebidas. | Marcado | Apagado, las sesiones delegadas responden 403 `modo-de-ingreso-no-admitido`. Esas sesiones duran 30 minutos fijos. |
-| Directo a Valídalo (modo Directo) | La persona entra con correo y código de 6 dígitos, y con passkey si aplica. | Desmarcado | Encenderlo completa el grupo de los usuarios antiguos; apagarlo cierra las sesiones directas abiertas. Debe haber al menos un modo (422 `modos-de-ingreso-invalidos`). Activar el SSO exige este modo. |
+| Directo a Valídalo (modo Directo) | La persona entra con correo y código de 6 dígitos, o con passkey si registró una. | Desmarcado | Encenderlo completa el grupo de los usuarios antiguos; apagarlo cierra las sesiones directas abiertas. Debe haber al menos un modo (422 `modos-de-ingreso-invalidos`). Activar el SSO exige este modo. |
 | Duración máxima de la sesión | Pasado ese tiempo hay que ingresar de nuevo; no se extiende al renovar. Solo vale para ingreso directo. | 8 horas | La pantalla ofrece 1, 2, 4, 8, 12 y 24 horas; la API acepta de 1 a 24 (422 `sesion-invalida`). |
 | Cerrar por inactividad | Cierra la sesión si no hay actividad en ese tiempo. | 30 minutos | La pantalla ofrece 5, 10, 15, 30, 60, 120, 240 y 480; la API acepta de 5 a 480 y no más que la sesión (422 `inactividad-invalida`). |
-| Exigir passkey a todas las personas del grupo | Todas deben registrar passkey en su próximo ingreso. | Apagado | Apagado: la exigen solo Administrador, Oficial y Auditor. Un ingreso por SSO con varios factores declarados no pide passkey. |
+| Exigir passkey a todas las personas del grupo | Opcional. Si se activa, todas deben registrar passkey en su próximo ingreso (el código del correo solo sirve para registrarla), no pueden quitar la última, las sesiones abiertas solo con el código se cierran al renovarse y las acciones sensibles se confirman solo con la passkey. | Apagado | Apagado: nadie la exige, sea cual sea su rol; el código del correo basta. Un ingreso por SSO con varios factores declarados no pide passkey. |
 
 Parámetros fijos, no configurables: el código del correo vence a los 5 minutos y admite 5 intentos; la ceremonia dura 10 minutos; un correo sin cuenta recibe un desafío señuelo para no revelar quién existe.
 
@@ -123,16 +123,14 @@ Ruta `/e/{empresa}/tipos-documento` · se ve con `configuracion:leer` y se crea 
 | Campos del formulario | Lo que llena el tercero, en orden. | Ninguno | Hasta 50. Clave en `snake_case`; tipo Texto, Número, Fecha, Lista o Sí/No (la lista exige opciones sin repetir). `fecha_expedicion` y `fecha_vencimiento` están reservadas y deben ser fechas. |
 | Formatos | Qué puede subir el tercero. | PDF, JPG, PNG o WebP | Con canónico, solo un subconjunto del suyo (RUT, CAMARA_COMERCIO, ESTADOS_FINANCIEROS y DECLARACION_RENTA: solo PDF). |
 | Peso máximo (MB) y páginas máximas | Tope por archivo y de páginas de un PDF. | Los generales: 20 MB y 50 páginas | Peso de 1 a 1024; páginas de 1 a 1000; no pueden superar el límite general ni el del canónico (422 `limite-sobre-el-global`). |
-| Antigüedad máxima al subirlo | El documento debe haberse expedido hace no más de N días cuando el tercero lo sube. La fecha de expedición es la que lee la IA (la que el tercero declara se coteja). Si es más viejo, o no trae fecha, la revisión automática lo observa con el siguiente paso («Sube el documento … expedido hace menos de 30 días») y el revisor lo ve como un dato crítico («Antigüedad del documento»). No define la vigencia. | Ninguna (con canónico, la sugerida por él: CAMARA_COMERCIO y CERTIFICACION_BANCARIA, 30 días) | Entero de 1 a 3650 días; vacío = no se exige. Solo la verifica quien tiene el análisis de IA: un tipo sin lectura de IA se evalúa con la fecha que declara el tercero. |
-| Revalidar cada | Cada cuántos días hay que volver a pedirlo: cuenta **desde que la empresa lo aprueba** (o desde que el tercero lo ratifica). Antes de la aprobación no hay fecha; el portal dice «Vence 1 año después de que la empresa lo apruebe». Al cambiarla se recalculan las vigencias de los documentos existentes. | Ninguna (con canónico, la sugerida por él: 365 días en el RUT, la Cámara de comercio y la certificación bancaria) | Entero de 1 a 3650 días, que en la pantalla se escribe en días o en meses (12 meses = 365 días). La vigencia es el menor entre el vencimiento declarado (`fecha_vencimiento`) y aprobación + N. |
-| Periodo mínimo (heredado) | Un texto; aún no calcula fecha. Solo se muestra si el tipo ya lo trae. | `Ninguna` | Los tipos guardados con `MaxDiasDesdeExpedicion(n)` o `MaxDiasDesdeAprobacion(n)` se migraron a las dos reglas anteriores al arrancar (antigüedad n y revalidar n; o solo revalidar n). |
+| Vale (regla de frescura) | Cuánto sirve el documento; al cambiarla se recalculan las vigencias de los documentos existentes. | `Ninguna` (con canónico, la sugerida por él) | `Ninguna` (no vence, salvo que declare `fecha_vencimiento`); `MaxDiasDesdeExpedicion` (n días desde `fecha_expedicion` o, si falta, desde la carga); `MaxDiasDesdeAprobacion` (n días desde la carga); `PeriodoMinimo` (un texto; aún no calcula fecha). La vigencia es el menor entre el vencimiento declarado y la regla; una ratificación del tercero reinicia el conteo. |
 | Avisar antes de vencer (días) | Días antes del vencimiento en que se escribe al tercero; el aviso sale a las 08:00 de la zona horaria configurada (13:00 UTC en Colombia). | 30, 15 y 5 (POLIZA y ESTADOS_FINANCIEROS: 60, 30 y 7) | Lista de enteros mayores que 0, ordenados de mayor a menor. |
 | Días de gracia | Siguen valiendo tras vencer, hasta que queda vencido. | 15 | Mayor o igual que 0. |
 | Plantilla para descargar | Formato que el tercero descarga, llena, firma y sube. | Sin plantilla | PDF, DOCX o XLSX hasta 20 MB; cada archivo distinto crea una versión nueva; retirarla conserva el historial. No aplica al modo Formulario. |
 | Días de revalidación | Plazo de revalidación del tipo; se ajusta por requisito en los flujos. | 15 | Entero mayor que 0; solo por API. |
 | Tipos sembrados al crear el grupo | — | RUT, CAMARA_COMERCIO, CEDULA, ESTADOS_FINANCIEROS, CERTIFICACION_BANCARIA, POLIZA | — |
 
-> **Ojo:** sin «Revalidar cada», un documento que declara `fecha_vencimiento` sí vence y sí genera avisos, aunque la pantalla diga «no pierde vigencia». No existen ajustes del tipo por empresa (los «overrides» de empresa que mencionan docs/02 y docs/03 no están construidos): lo único por empresa es la ayuda del documento y los ajustes del requisito dentro del flujo.
+> **Ojo:** con la regla `Ninguna`, un documento que declara `fecha_vencimiento` sí vence y sí genera avisos, aunque la pantalla diga «no pierde vigencia». No existen ajustes del tipo por empresa (los «overrides» de empresa que mencionan docs/02 y docs/03 no están construidos): lo único por empresa es la ayuda del documento y los ajustes del requisito dentro del flujo.
 
 Fuente: `src/Validalo.Dominio/Documentos/TipoDocumentoTenant.cs`, `src/Validalo.Dominio/Documentos/CatalogoCanonico.cs`, `src/Validalo.Dominio/Documentos/Vigencia.cs`, `src/Validalo.Dominio/Documentos/Formularios.cs`.
 

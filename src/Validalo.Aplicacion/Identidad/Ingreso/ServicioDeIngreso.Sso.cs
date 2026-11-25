@@ -280,7 +280,7 @@ public sealed partial class ServicioDeIngreso
             throw ReglaDeNegocioException.Prohibido("sso-obligatorio", $"Tu grupo ingresa con el inicio de sesión de su empresa ({configuracion.Nombre}). Usa «Ingresar con {configuracion.Nombre}».");
     }
 
-    /// <summary>La sesión directa tras un inicio de sesión de empresa con varios factores: no pide passkey, ni siquiera a los roles que la exigen.</summary>
+    /// <summary>La sesión directa tras un inicio de sesión de empresa con varios factores: no pide passkey, ni siquiera donde el grupo la exige a todos.</summary>
     private async Task<PasoDeIngresoDto> AbrirSesionDeSsoAsync(IDocumentSession sesion, DesafioDeIngreso desafio, CuentaResuelta cuenta, ContextoDeCliente cliente,
         HttpResponse respuesta, DateTimeOffset ahora, CancellationToken ct)
     {

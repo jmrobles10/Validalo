@@ -53,7 +53,7 @@ export const fichaGrupo = {
     nuncaIngreso: 'Aún no ha ingresado',
     passkeys_one: '{{count}} passkey',
     passkeys_other: '{{count}} passkeys',
-    sinPasskey: 'Sin passkey: la registra al ingresar',
+    sinPasskey: 'Sin passkey: entra con el código del correo',
     invitadoEl: 'Invitado el {{fecha}}',
     editar: 'Editar',
     editarA: 'Editar a {{nombre}}',
@@ -61,7 +61,7 @@ export const fichaGrupo = {
     reenviarA: 'Reenviar la invitación a {{nombre}}',
     reenviarTitulo: 'Reenviar la invitación',
     reenviarTexto:
-      'Enviamos a {{correo}} el correo con la dirección de Valídalo: ahí pide un código y entra, con una passkey si su rol la exige. No lleva ningún secreto.',
+      'Enviamos a {{correo}} el correo con la dirección de Valídalo: ahí pide un código y entra; la passkey es opcional. No lleva ningún secreto.',
     reenviarConfirmar: 'Enviar invitación',
     reenviada: 'Enviamos la invitación a {{correo}}.',
     dialogo: {

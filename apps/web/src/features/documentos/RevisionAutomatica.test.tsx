@@ -121,7 +121,7 @@ describe('Revisión automática de una versión', () => {
     expect(within(screen.getByRole('dialog')).getByText('Sin análisis automático: revísalo manualmente.')).toBeInTheDocument();
   });
 
-  it('en el expediente toma los hechos de los documentos del vínculo y limita los campos', async () => {
+  it('en el expediente toma los hechos de los documentos del vínculo y deja los datos leídos plegados al pie', async () => {
     const documentos: DocumentoVistaEmpresaDto[] = [
       {
         documentoId: 'doc-rut',
@@ -159,7 +159,7 @@ describe('Revisión automática de una versión', () => {
     expect(direcciones.some((d) => d.includes('/api/v1/vinculos/vin/documentos'))).toBe(true);
     expect(tarjeta.queryByRole('alert')).not.toBeInTheDocument();
     expect(tarjeta.queryByText('G')).not.toBeInTheDocument();
-    await userEvent.setup().click(tarjeta.getByRole('button', { name: 'Ver 1 dato más' }));
+    await userEvent.setup().click(tarjeta.getByRole('button', { name: 'Ver lo que leyó la IA' }));
     await waitFor(() => expect(tarjeta.getByText('G')).toBeInTheDocument());
   });
 });

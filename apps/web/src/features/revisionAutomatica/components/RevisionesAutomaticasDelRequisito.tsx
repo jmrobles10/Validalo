@@ -14,19 +14,24 @@ export interface RevisionesAutomaticasDelRequisitoProps {
   areas: ReadonlyMap<string, AreaExpedienteDto>;
   contexto: (area: AreaExpedienteDto | null) => ContextoRevisor;
   nombres: ReadonlyMap<string, string>;
+  /**
+   * La conclusión de la IA del documento ya está a la vista (arriba, en el bloque «Revisión automática») y viene de la misma regla de la sugerencia de Asistido: aquí no se repite la
+   * sugerencia. La aprobación del sistema y el pase a una persona (nivel Automático) siguen.
+   */
+  sinSugerencias?: boolean;
 }
 
 /**
  * Lo que la revisión automática hizo con un documento, por área (ADR-0012): la sugerencia del nivel Asistido, la aprobación
  * del sistema (con «Confirmar» y «Revertir» si falta que una persona la confirme por muestreo) o el pase a una persona con
  * sus motivos. Un área fuera del alcance de la revisión automática no dice nada. No cambia la decisión humana: es lo que
- * decidió el sistema, al lado de lo que decide cada área.
+ * decidió el sistema, al lado de lo que decide cada área. Con la conclusión de la IA a la vista (`sinSugerencias`), la sugerencia de Asistido no se repite.
  */
-export function RevisionesAutomaticasDelRequisito({ expediente, requisito, areas, contexto, nombres }: RevisionesAutomaticasDelRequisitoProps) {
+export function RevisionesAutomaticasDelRequisito({ expediente, requisito, areas, contexto, nombres, sinSugerencias = false }: RevisionesAutomaticasDelRequisitoProps) {
   const { t } = useTranslation();
   const filas = (requisito.revisionesAutomaticas ?? []).flatMap((revision) => {
     const vista = vistaDeRevision(revision);
-    return vista ? [{ revision, vista }] : [];
+    return vista && !(sinSugerencias && vista.tipo === 'sugerida') ? [{ revision, vista }] : [];
   });
   if (filas.length === 0) return null;
 

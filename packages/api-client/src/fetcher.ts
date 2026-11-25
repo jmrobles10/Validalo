@@ -46,7 +46,7 @@ export const RUTAS_QUE_CREAN: readonly string[] = [
   '/api/v1/cuestionarios',
 ];
 
-/** Código con el que la API pide confirmar con la passkey antes de una acción sensible (PI-13). */
+/** Código con el que la API pide confirmar (con la passkey o con un código del correo) antes de una acción sensible (PI-13, PI-20). */
 export const CODIGO_REAUTENTICACION = 'reautenticacion-requerida';
 
 export function construirUrl(baseUrl: string, ruta: string, params?: object): string {
@@ -133,7 +133,7 @@ async function enviar(config: ConfigPeticion, opciones: OpcionesPeticion, acepta
     const datos = await leerCuerpo(respuesta);
     const error = errorDesdeProblema(respuesta.status, datos, respuesta.headers.get('X-Correlation-Id') ?? correlationId);
     if (error.esNoAutenticado) cfg.alNoAutenticado?.(error, url);
-    // Acción sensible: la app pide la passkey y, si la persona confirma, se repite la petición (una sola vez).
+    // Acción sensible: la app pide confirmar (passkey o código del correo) y, si la persona confirma, se repite la petición (una sola vez).
     if (!reautenticada && error.codigo === CODIGO_REAUTENTICACION && cfg.alRequerirReautenticacion && (await cfg.alRequerirReautenticacion(error)))
       return enviar(config, opciones, aceptar, true);
     throw error;

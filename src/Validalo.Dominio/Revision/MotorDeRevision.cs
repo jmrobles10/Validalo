@@ -33,6 +33,12 @@ public enum SugerenciaDeRevision
 public sealed record MotivoDeRevision(string Codigo, string Texto);
 
 /// <summary>
+/// Lo que concluye la revisión de una versión para quien la mira, en cualquier nivel de la empresa (Manual incluido): <c>Aprobar</c> (ningún motivo) o <c>Revisar</c> (con
+/// ellos). Es la misma regla de la sugerencia del nivel Asistido (<see cref="MotorDeRevision.Concluir"/>): una sola tabla de motivos para mirar y para decidir.
+/// </summary>
+public sealed record ConclusionDeRevision(SugerenciaDeRevision Sugerencia, IReadOnlyList<MotivoDeRevision> Motivos, decimal? Confianza);
+
+/// <summary>
 /// La antigüedad máxima al subir del tipo frente a lo que leyó la IA (TD-10): <see cref="Estado"/>, el detalle para el revisor y lo que se le pide al tercero.
 /// <see cref="Declarada"/>: el tercero declaró una fecha de expedición (aunque la IA no la encontrara).
 /// </summary>
@@ -44,6 +50,8 @@ public sealed record AnalisisParaRevisar(decimal Confianza, bool Legible, int Al
 /// <summary>
 /// Todo lo que el motor necesita saber de un documento en un área: el análisis (nulo si la empresa no lo recibió) y el cruce
 /// con la ficha (F5). <see cref="CrucePendiente"/>: el documento respalda secciones ya diligenciadas y su cruce aún no existe.
+/// <see cref="ConDiscrepancias"/>: algún campo del cruce difiere (crítico o no); es informativo, no un motivo: solo la discrepancia <b>crítica</b> (<see cref="DiscrepanciaCritica"/>) lo es (IA-16).
+/// <see cref="DetalleDeLaDiscrepancia"/>: qué campos críticos difieren y con qué valores, para el texto del motivo (sin él, el texto genérico).
 /// </summary>
 public sealed record EntradaDeRevision(
     Guid DocumentoId,
@@ -56,7 +64,8 @@ public sealed record EntradaDeRevision(
     bool CrucePendiente,
     bool DiscrepanciaCritica,
     bool ConDiscrepancias,
-    AntiguedadParaRevisar? Antiguedad = null);
+    AntiguedadParaRevisar? Antiguedad = null,
+    string? DetalleDeLaDiscrepancia = null);
 
 /// <summary>
 /// Política de la empresa al decidir: nivel, umbral efectivo (el de la empresa, nunca bajo el del plan), muestreo, tipos
@@ -68,7 +77,8 @@ public sealed record PoliticaDeRevision(
     int PorcentajeMuestreo,
     IReadOnlyCollection<string> TiposAutorizados,
     int AprobadasEnElMes,
-    int? TopeMensual);
+    int? TopeMensual,
+    bool UmbralDelPlan = false);
 
 /// <summary>
 /// Lo que resolvió el motor. <see cref="ObservacionAlTercero"/>: con <c>Observada</c>, lo que se le pide al tercero (el siguiente paso accionable).
@@ -96,6 +106,7 @@ public static class MotivosDeRevision
     public const string TipoDetectadoDistinto = "tipo-detectado-distinto";
     public const string CampoCriticoCambiado = "campo-critico-cambiado";
     public const string DiscrepanciaCriticaFicha = "discrepancia-critica-ficha";
+    /// <summary>Histórico: ya no se emite (IA-16); una diferencia en un campo no crítico no manda el documento a una persona. Sigue en los registros anteriores.</summary>
     public const string DiscrepanciasConLaFicha = "discrepancias-con-la-ficha";
     public const string VersionReenviada = "version-reenviada";
     public const string SinPresupuesto = "sin-presupuesto";
@@ -137,7 +148,7 @@ public static class MotivosDeRevision
 /// muestreo: <c>AprobadaConMuestreo</c>. Si no: <c>AprobadaAutomaticamente</c>.</item>
 /// </list>
 /// Motivos (en este orden): sin análisis de IA o, con él, confianza baja, ilegible, alertas de manipulación, tipo detectado distinto y
-/// campo crítico cambiado; luego antigüedad excedida o sin fecha de expedición (TD-10), cruce pendiente, discrepancia crítica o discrepancias con la ficha (F5) y versión reenviada.
+/// campo crítico cambiado; luego antigüedad excedida o sin fecha de expedición (TD-10), cruce pendiente, discrepancia crítica con la ficha (F5; las diferencias en campos no críticos no son motivo, IA-16) y versión reenviada.
 /// </summary>
 public static class MotorDeRevision
 {
@@ -149,11 +160,11 @@ public static class MotorDeRevision
         if (FueraDeAlcance(entrada, politica) is { } fuera)
             return fuera;
 
-        var motivos = Motivos(entrada, politica.UmbralConfianza);
-        var confianza = entrada.Analisis?.Confianza;
+        var conclusion = Concluir(entrada, politica.UmbralConfianza, politica.UmbralDelPlan);
+        var motivos = conclusion.Motivos;
+        var confianza = conclusion.Confianza;
         if (politica.Nivel == NivelDeRevisionAutomatica.Asistido)
-            return new DecisionDeRevision(ResultadoDeRevision.Sugerida, motivos.Count == 0 ? SugerenciaDeRevision.Aprobar : SugerenciaDeRevision.Revisar, motivos,
-                confianza);
+            return new DecisionDeRevision(ResultadoDeRevision.Sugerida, conclusion.Sugerencia, motivos, confianza);
 
         // Antigüedad máxima incumplida (TD-10) como único hallazgo: el análisis es fiable y el tercero sabe qué hacer, así que el sistema lo observa sin pasar
         // por una persona. Con otro hallazgo (confianza baja, ilegible…) la fecha leída puede estar mal: lo decide una persona. Una fecha declarada que la IA
@@ -169,6 +180,17 @@ public static class MotorDeRevision
         return new DecisionDeRevision(EnMuestra(entrada.DocumentoId, entrada.Version, politica.PorcentajeMuestreo)
             ? ResultadoDeRevision.AprobadaConMuestreo
             : ResultadoDeRevision.AprobadaAutomaticamente, null, [], confianza);
+    }
+
+    /// <summary>
+    /// La conclusión de la revisión de una versión con el umbral dado, sin mirar el nivel de la empresa, el alcance ni el tope: <c>Aprobar</c> si no hay ningún motivo,
+    /// <c>Revisar</c> con los motivos si los hay (los de <see cref="MotivosDeRevision"/>, en el orden de la tabla). <paramref name="umbralDelPlan"/>: el umbral es el del plan de IA (en Manual la empresa no configura el suyo), y así lo dice el motivo. La usan el nivel Asistido (su sugerencia), el Automático
+    /// (sus excepciones y aprobaciones) y la vista del revisor en cualquier nivel: no hay otra regla. Función pura.
+    /// </summary>
+    public static ConclusionDeRevision Concluir(EntradaDeRevision entrada, decimal umbral, bool umbralDelPlan = false)
+    {
+        var motivos = Motivos(entrada, umbral, umbralDelPlan);
+        return new ConclusionDeRevision(motivos.Count == 0 ? SugerenciaDeRevision.Aprobar : SugerenciaDeRevision.Revisar, motivos, entrada.Analisis?.Confianza);
     }
 
     /// <summary>
@@ -203,7 +225,7 @@ public static class MotorDeRevision
 
     private static DecisionDeRevision SinAlcance(string codigo) => new(ResultadoDeRevision.SinAlcance, null, [MotivosDeRevision.De(codigo)], null);
 
-    private static List<MotivoDeRevision> Motivos(EntradaDeRevision entrada, decimal umbral)
+    private static List<MotivoDeRevision> Motivos(EntradaDeRevision entrada, decimal umbral, bool umbralDelPlan)
     {
         var motivos = new List<MotivoDeRevision>();
         if (entrada.Analisis is not { } analisis)
@@ -214,7 +236,7 @@ public static class MotorDeRevision
         {
             if (analisis.Confianza < umbral)
                 motivos.Add(new MotivoDeRevision(MotivosDeRevision.ConfianzaBaja,
-                    $"La confianza del análisis ({Porcentaje(analisis.Confianza)}) está bajo el umbral de la empresa ({Porcentaje(umbral)})."));
+                    $"La confianza del análisis ({Porcentaje(analisis.Confianza)}) está bajo el umbral {(umbralDelPlan ? "del plan" : "de la empresa")} ({Porcentaje(umbral)})."));
             if (!analisis.Legible)
                 motivos.Add(MotivosDeRevision.De(MotivosDeRevision.Ilegible));
             if (analisis.Alertas > 0)
@@ -235,9 +257,9 @@ public static class MotorDeRevision
         if (entrada.CrucePendiente)
             motivos.Add(MotivosDeRevision.De(MotivosDeRevision.CrucePendiente));
         if (entrada.DiscrepanciaCritica)
-            motivos.Add(MotivosDeRevision.De(MotivosDeRevision.DiscrepanciaCriticaFicha));
-        else if (entrada.ConDiscrepancias)
-            motivos.Add(MotivosDeRevision.De(MotivosDeRevision.DiscrepanciasConLaFicha));
+            motivos.Add(string.IsNullOrWhiteSpace(entrada.DetalleDeLaDiscrepancia)
+                ? MotivosDeRevision.De(MotivosDeRevision.DiscrepanciaCriticaFicha)
+                : new MotivoDeRevision(MotivosDeRevision.DiscrepanciaCriticaFicha, entrada.DetalleDeLaDiscrepancia));
         if (entrada.Reenvios > 0)
             motivos.Add(MotivosDeRevision.De(MotivosDeRevision.VersionReenviada));
         return motivos;

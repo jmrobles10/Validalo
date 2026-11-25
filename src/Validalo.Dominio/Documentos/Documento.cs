@@ -221,7 +221,18 @@ public sealed class Documento
 
     public Guid? TipoDocumentoTenantId { get; set; }
 
-    public string NombreTipo { get; set; } = string.Empty;
+    private string _nombreTipo = string.Empty;
+
+    /// <summary>
+    /// Nombre legible del tipo. El soporte genérico de una sección (<c>SOPORTE_FICHA</c>) se llamó «Soporte de la ficha» hasta FD-10 y esos
+    /// documentos lo guardaron con ese nombre: se leen siempre como «Otro soporte» (<see cref="CatalogoCanonico.NombreDelSoporteGenerico"/>),
+    /// sin migrar nada, en la bóveda, en la ficha y en lo que ven las empresas.
+    /// </summary>
+    public string NombreTipo
+    {
+        get => TipoCanonico == Ficha.CodigosDeSeccion.SoporteFicha ? CatalogoCanonico.NombreDelSoporteGenerico : _nombreTipo;
+        set => _nombreTipo = value;
+    }
 
     /// <summary>
     /// Documento en cuarentena: lo subió una persona con acceso aislado (su correo no es contacto conocido del tercero) para <b>una</b> empresa. Es

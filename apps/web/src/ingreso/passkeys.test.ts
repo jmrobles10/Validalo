@@ -1,14 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   base64UrlABytes,
   bytesABase64Url,
+  conReintentoSiNoHuboDecision,
   ErrorDePasskey,
+  esErrorDePasskey,
+  ESPERAS_DE_REINTENTO_MS,
   nombreSugeridoDePasskey,
   opcionesDeFirma,
   opcionesDeRegistro,
   respuestaDeFirma,
   respuestaDeRegistro,
   traducirFalloDelNavegador,
+  UMBRAL_SIN_DECISION_MS,
+  type RelojDePasskeys,
 } from './passkeys';
 
 describe('base64url', () => {
@@ -107,6 +112,187 @@ describe('fallos del navegador', () => {
     expect(traducirFalloDelNavegador(new Error('raro')).causa).toBe('otra');
     const propio = new ErrorDePasskey('cancelada', 'x');
     expect(traducirFalloDelNavegador(propio)).toBe(propio);
+  });
+
+  it('«A request is already pending» es un conflicto, no una cancelación, se llame como se llame el error del navegador', () => {
+    const mensaje = 'A request is already pending.';
+    expect(traducirFalloDelNavegador(new DOMException(mensaje, 'NotAllowedError')).causa).toBe('conflicto');
+    expect(traducirFalloDelNavegador(new DOMException(mensaje, 'OperationError')).causa).toBe('conflicto');
+    expect(traducirFalloDelNavegador(new DOMException(mensaje, 'InvalidStateError')).causa).toBe('conflicto');
+    expect(traducirFalloDelNavegador(new DOMException('The request is not allowed', 'NotAllowedError')).causa).toBe('cancelada');
+  });
+
+  it('conserva el nombre y el mensaje que dio el navegador', () => {
+    expect(traducirFalloDelNavegador(new DOMException('The operation either timed out or was not allowed.', 'NotAllowedError'))).toMatchObject({
+      causa: 'cancelada',
+      origen: { nombre: 'NotAllowedError', mensaje: 'The operation either timed out or was not allowed.' },
+    });
+    expect(traducirFalloDelNavegador(new TypeError('raro'))).toMatchObject({ causa: 'otra', message: 'raro', origen: { nombre: 'TypeError', mensaje: 'raro' } });
+    expect(new ErrorDePasskey('otra', 'x').origen).toBeNull();
+  });
+});
+
+/** Un reloj que no espera de verdad: cada espera solo suma su tiempo al reloj y queda anotada. */
+function relojFalso() {
+  let ms = 1_000;
+  const esperas: number[] = [];
+  const reloj: RelojDePasskeys = {
+    ahora: () => ms,
+    esperar: (espera) => {
+      esperas.push(espera);
+      ms += espera;
+      return Promise.resolve();
+    },
+  };
+  return {
+    reloj,
+    esperas,
+    pasar: (n: number) => {
+      ms += n;
+    },
+  };
+}
+
+describe('reintento cuando el navegador rechaza sin que la persona decida', () => {
+  const rechazo = (nombre: string, mensaje = 'x') => new DOMException(mensaje, nombre);
+
+  it('un NotAllowedError casi al instante (no hubo ventana) se repite con espera creciente hasta que entra', async () => {
+    const { reloj, esperas } = relojFalso();
+    const operacion = vi.fn().mockRejectedValueOnce(rechazo('NotAllowedError')).mockRejectedValueOnce(rechazo('NotAllowedError')).mockResolvedValue('firma');
+
+    await expect(conReintentoSiNoHuboDecision(operacion, { reloj })).resolves.toBe('firma');
+
+    expect(operacion).toHaveBeenCalledTimes(3);
+    expect(esperas).toEqual([150, 300]);
+  });
+
+  it('un InvalidStateError casi al instante también se repite', async () => {
+    const { reloj, esperas } = relojFalso();
+    const operacion = vi.fn().mockRejectedValueOnce(rechazo('InvalidStateError')).mockResolvedValue('firma');
+
+    await expect(conReintentoSiNoHuboDecision(operacion, { reloj })).resolves.toBe('firma');
+    expect(esperas).toEqual([150]);
+  });
+
+  it('un conflicto («pending») se repite aunque el navegador lo llame de otra forma', async () => {
+    const { reloj, esperas } = relojFalso();
+    const operacion = vi.fn().mockRejectedValueOnce(rechazo('OperationError', 'A request is already pending.')).mockResolvedValue('firma');
+
+    await expect(conReintentoSiNoHuboDecision(operacion, { reloj })).resolves.toBe('firma');
+    expect(esperas).toEqual([150]);
+  });
+
+  it('si el fallo llega pasado el umbral la persona cerró la ventana: es una cancelación y no se repite', async () => {
+    const { reloj, esperas, pasar } = relojFalso();
+    const operacion = vi.fn(() => {
+      pasar(UMBRAL_SIN_DECISION_MS + 100);
+      return Promise.reject(rechazo('NotAllowedError', 'The operation either timed out or was not allowed.'));
+    });
+
+    const error = await conReintentoSiNoHuboDecision(operacion, { reloj }).catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ causa: 'cancelada', origen: { nombre: 'NotAllowedError' } });
+    expect(operacion).toHaveBeenCalledTimes(1);
+    expect(esperas).toEqual([]);
+  });
+
+  it('el umbral se mide desde cada intento: tras un rechazo al instante, cerrar la ventana en el siguiente no se repite', async () => {
+    const { reloj, esperas, pasar } = relojFalso();
+    const operacion = vi
+      .fn()
+      .mockRejectedValueOnce(rechazo('NotAllowedError', 'A request is already pending.'))
+      .mockImplementationOnce(() => {
+        pasar(2_000);
+        return Promise.reject(rechazo('NotAllowedError'));
+      });
+
+    await expect(conReintentoSiNoHuboDecision(operacion, { reloj })).rejects.toMatchObject({ causa: 'cancelada' });
+
+    expect(operacion).toHaveBeenCalledTimes(2);
+    expect(esperas).toEqual([150]);
+  });
+
+  it('agota los reintentos y entrega el último fallo: tres reintentos (150, 300 y 600 ms) y un cuarto rechazo', async () => {
+    expect([...ESPERAS_DE_REINTENTO_MS]).toEqual([150, 300, 600]);
+    const { reloj, esperas } = relojFalso();
+    const operacion = vi.fn(() => Promise.reject(rechazo('NotAllowedError')));
+
+    await expect(conReintentoSiNoHuboDecision(operacion, { reloj })).rejects.toMatchObject({ causa: 'cancelada' });
+
+    expect(operacion).toHaveBeenCalledTimes(4);
+    expect(esperas).toEqual([150, 300, 600]);
+  });
+
+  it('si el conflicto no se va, el fallo que queda es un conflicto y no una cancelación', async () => {
+    const { reloj } = relojFalso();
+    const operacion = vi.fn(() => Promise.reject(rechazo('NotAllowedError', 'A request is already pending.')));
+
+    const error = await conReintentoSiNoHuboDecision(operacion, { reloj }).catch((e: unknown) => e);
+
+    expect(esErrorDePasskey(error)).toBe(true);
+    expect(error).toMatchObject({ causa: 'conflicto', origen: { nombre: 'NotAllowedError', mensaje: 'A request is already pending.' } });
+  });
+
+  it('los demás fallos no se repiten: sin soporte, otros errores y los propios de la ceremonia', async () => {
+    for (const fallo of [rechazo('NotSupportedError'), rechazo('SecurityError'), new TypeError('raro'), new ErrorDePasskey('otra', 'opciones incompletas')]) {
+      const { reloj, esperas } = relojFalso();
+      const operacion = vi.fn(() => Promise.reject(fallo));
+
+      await expect(conReintentoSiNoHuboDecision(operacion, { reloj })).rejects.toBeInstanceOf(ErrorDePasskey);
+
+      expect(operacion).toHaveBeenCalledTimes(1);
+      expect(esperas).toEqual([]);
+    }
+  });
+
+  it('un AbortError (la persona salió o eligió otro camino) no se repite', async () => {
+    const { reloj, esperas } = relojFalso();
+    const operacion = vi.fn(() => Promise.reject(rechazo('AbortError')));
+
+    await expect(conReintentoSiNoHuboDecision(operacion, { reloj })).rejects.toMatchObject({ causa: 'cancelada' });
+
+    expect(operacion).toHaveBeenCalledTimes(1);
+    expect(esperas).toEqual([]);
+  });
+
+  it('con la señal abortada no se repite, ni siquiera si se aborta durante la espera', async () => {
+    const control = new AbortController();
+    const { reloj } = relojFalso();
+    const operacion = vi.fn(() => Promise.reject(rechazo('NotAllowedError')));
+    const abortaAlEsperar: RelojDePasskeys = {
+      ...reloj,
+      esperar: (ms, senal) => {
+        control.abort();
+        return reloj.esperar(ms, senal);
+      },
+    };
+
+    await expect(conReintentoSiNoHuboDecision(operacion, { reloj: abortaAlEsperar, senal: control.signal })).rejects.toMatchObject({ causa: 'cancelada' });
+    expect(operacion).toHaveBeenCalledTimes(1);
+
+    await expect(conReintentoSiNoHuboDecision(operacion, { reloj, senal: control.signal })).rejects.toMatchObject({ causa: 'cancelada' });
+    expect(operacion).toHaveBeenCalledTimes(2);
+  });
+
+  it('con el reloj real espera de verdad entre intentos', async () => {
+    const operacion = vi.fn().mockRejectedValueOnce(rechazo('NotAllowedError')).mockResolvedValue('firma');
+    const inicio = performance.now();
+
+    await expect(conReintentoSiNoHuboDecision(operacion, { esperas: [30] })).resolves.toBe('firma');
+
+    expect(performance.now() - inicio).toBeGreaterThanOrEqual(25);
+  });
+
+  it('la espera real termina antes si la señal se aborta', async () => {
+    const control = new AbortController();
+    const operacion = vi.fn(() => Promise.reject(rechazo('NotAllowedError')));
+    const inicio = performance.now();
+    setTimeout(() => control.abort(), 20);
+
+    await expect(conReintentoSiNoHuboDecision(operacion, { esperas: [5_000], senal: control.signal })).rejects.toMatchObject({ causa: 'cancelada' });
+
+    expect(performance.now() - inicio).toBeLessThan(2_000);
+    expect(operacion).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -104,6 +104,12 @@ public static class CatalogoCanonico
     /// <summary>Certificación bancaria: es de <b>una cuenta</b> del tercero (documento propio de la cuenta, <see cref="Documento.CuentaBancariaId"/>) además del documento general sin cuenta de antes.</summary>
     public const string CertificacionBancaria = "CERTIFICACION_BANCARIA";
 
+    /// <summary>
+    /// Nombre del soporte genérico de una sección (<c>SOPORTE_FICHA</c>, «Otro documento» al subir). Los documentos de este tipo que se
+    /// crearon antes de FD-10 guardan «Soporte de la ficha»: <see cref="Documento.NombreTipo"/> los lee con este nombre, sin migrar nada.
+    /// </summary>
+    public const string NombreDelSoporteGenerico = "Otro soporte";
+
     /// <summary>Solo PDF: documentos que se expiden o descargan como PDF (RUT, Cámara, estados financieros, renta). Va antes de <see cref="Tipos"/>: los estáticos se inicializan en orden.</summary>
     private static readonly string[] SoloPdf = [InspectorDeArchivos.Pdf];
 
@@ -192,8 +198,10 @@ public static class CatalogoCanonico
             vencimiento: false, expedicion: true, ratificable: false, persona: false, ["emisor", "fecha", "concepto"], [],
             ReglasDeVigencia.Ambas(30, 365)),
         // Soporte ad hoc de una sección de la ficha maestra (FM-5): el tercero lo sube por la carga de siempre y lo refiere
-        // desde la versión de la sección. Global (es del tercero) y sin campos clave: no se pide en flujos.
-        Archivo("SOPORTE_FICHA", "Soporte de la ficha", AmbitoDocumento.Global, Sensibilidad.Personal, AplicaA.Ambas,
+        // desde la versión de la sección. Global (es del tercero) y sin campos clave: no se pide en flujos. Es la opción «Otro
+        // documento» de «Subir un soporte»: el tercero elige primero qué documento es (RUT, Cámara…) y solo cae aquí con lo que
+        // no es ninguno de los que respaldan la sección (FD-10). Hasta FD-10 se llamó «Soporte de la ficha».
+        Archivo("SOPORTE_FICHA", NombreDelSoporteGenerico, AmbitoDocumento.Global, Sensibilidad.Personal, AplicaA.Ambas,
             vencimiento: false, expedicion: false, ratificable: false, persona: false, [], [], ReglasDeVigencia.Ninguna),
         Archivo("FORMATO_VINCULACION", "Formato de vinculación", AmbitoDocumento.PorVinculo, Sensibilidad.Ninguna, AplicaA.Ambas,
             vencimiento: false, expedicion: false, ratificable: false, persona: false, ["versionPlantilla", "firma"], ["versionPlantilla"],

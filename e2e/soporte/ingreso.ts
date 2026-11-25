@@ -70,18 +70,30 @@ export async function entrarConCodigo(page: Page, correo: string): Promise<void>
   await page.keyboard.type(codigo(correoDelCodigo));
 }
 
-/** La primera entrada de una administradora: código y registro de su primera passkey con el autenticador virtual. */
+/**
+ * La primera entrada de una administradora: código y registro de su primera passkey con el autenticador virtual. Si el grupo exige passkey a todos, el código solo sirve
+ * para registrarla en el mismo ingreso; si no (lo normal, PI-20), el código abre la sesión y la registra después desde Mi cuenta.
+ */
 export async function entrarYRegistrarPasskey(page: Page, g: GrupoDirecto): Promise<AutenticadorVirtual> {
   const virtual = await autenticadorVirtual(page);
   await page.goto('/app/');
   await entrarConCodigo(page, g.correoAdmin);
-  await expect(page.getByRole('heading', { name: 'Registra tu passkey' })).toBeVisible();
-  await page.getByRole('button', { name: 'Registrar passkey' }).click();
-  await expect(page.getByRole('navigation', { name: 'Secciones' })).toBeVisible();
+  const registrar = page.getByRole('heading', { name: 'Registra tu passkey' });
+  const barra = page.getByRole('navigation', { name: 'Secciones' });
+  await expect(registrar.or(barra)).toBeVisible();
+  if (await registrar.isVisible()) {
+    await page.getByRole('button', { name: 'Registrar passkey' }).click();
+  } else {
+    await page.goto(`/app/#/e/${g.empresaId}/mi-cuenta`);
+    await page.getByRole('button', { name: 'Agregar passkey' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Registrar passkey' }).click();
+    await expect(page.getByText('Passkey registrada.')).toBeVisible();
+  }
+  await expect(barra).toBeVisible();
   return virtual;
 }
 
-/** Si la acción pidió confirmar con la passkey (step-up), la confirma con el autenticador virtual. */
+/** Si la acción pidió confirmar con la passkey (step-up), la confirma con el autenticador virtual (el diálogo también puede ofrecer el código del correo). */
 export async function confirmarConPasskey(page: Page): Promise<void> {
   const dialogo = page.getByRole('dialog', { name: 'Confirma que eres tú' });
   await expect(dialogo).toBeVisible();

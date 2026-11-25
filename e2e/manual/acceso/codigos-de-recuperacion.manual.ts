@@ -9,13 +9,13 @@ recorrido(
     resumen:
       'Ana genera diez códigos de recuperación en Mi cuenta. Cada uno sirve una sola vez. Si pierde su passkey, entra con el código del correo, usa uno de los códigos en lugar de la passkey y registra una nueva.',
     precondiciones: [
-      'Un grupo con ingreso directo y Ana como administradora de todo el grupo, con su passkey ya registrada.',
+      'Un grupo con ingreso directo que exige passkey a todas sus personas y Ana como administradora de todo el grupo, con su passkey ya registrada.',
       'Un autenticador de prueba que simula la huella o el PIN del dispositivo.',
     ],
     relacionados: ['acceso/ingreso-con-passkey', 'acceso/mi-cuenta-sesiones-y-codigos', 'acceso/ingreso-configuracion-del-grupo'],
   },
   async ({ page }) => {
-    const g = await crearGrupoDirecto();
+    const g = await crearGrupoDirecto({ passkeyParaTodos: true });
     const virtual = await entrarYRegistrarPasskey(page, g);
 
     await page.goto(`/app/#/e/${g.empresaId}/mi-cuenta`);

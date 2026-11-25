@@ -1,7 +1,8 @@
 import { MenuItem, Stack, TextField, Typography, type Theme } from '@mui/material';
 import type { EmpresaDto, FlujoDto, PaisDto, TipoIdentificacionDto, TipoVinculoDto } from '@validalo/api-client';
 import { useTranslation } from 'react-i18next';
-import { TIPOS_DE_PERSONA, type BorradorInvitacion, type CampoInvitacion, type TipoDePersona } from './modeloInvitar';
+import type { BorradorInvitacion, CampoInvitacion } from './modeloInvitar';
+import { decideElNumero, tipoDePersonaDe } from './tipoDePersona';
 
 /** Lo que ofrecen las listas del formulario: lo configurado en el sistema y en la empresa. */
 export interface CatalogosInvitacion {
@@ -31,11 +32,17 @@ interface Props {
 /** Estilo de un campo con la fuente de las identificaciones y los códigos. */
 const mono = (th: Theme) => ({ '& input': { fontFamily: th.typography.mono.fontFamily } });
 
-/** Los campos de «Invitar tercero»: identificación (país, tipo, número y DV), datos del tercero y vínculo (tipo y flujo), con los mismos nombres y reglas de una fila del lote. */
+/**
+ * Los campos de «Invitar tercero»: identificación (país, tipo, número y DV), datos del tercero y vínculo (tipo y flujo), con los mismos nombres y reglas de una fila del lote. El tipo de
+ * persona no se elige: lo dice el tipo de identificación (`tipoDePersonaDe`) y se muestra como texto junto a él.
+ */
 export function CamposInvitarTercero({ b, catalogos, empresaId, onEmpresa, cambiar, tocar, mensaje }: Props) {
   const { t } = useTranslation();
   const { paises, tipoIdentificacion: tipo, tiposVinculo, cargandoTipos, flujos, empresas } = catalogos;
   const tiposDelPais = paises?.find((p) => p.codigo === b.pais)?.tiposIdentificacion ?? [];
+  // El tipo de persona, solo de lectura: sale del tipo de identificación (y, en el RUC de Panamá y el RNC dominicano, también del número).
+  const persona = tipoDePersonaDe(tipo, b.numero);
+  const ayudaPersona = persona ? t(`invitaciones.invitarTercero.campos.personaDerivada.${persona}`) : decideElNumero(tipo) ? t('invitaciones.invitarTercero.campos.personaSegunNumero') : undefined;
   const e = (campo: CampoInvitacion) => mensaje(campo);
 
   return (
@@ -76,7 +83,7 @@ export function CamposInvitarTercero({ b, catalogos, empresaId, onEmpresa, cambi
           onChange={(ev) => cambiar({ tipoIdentificacion: ev.target.value, digito: '' })}
           onBlur={() => tocar('tipoIdentificacion')}
           error={e('tipoIdentificacion') !== null}
-          helperText={e('tipoIdentificacion')}
+          helperText={e('tipoIdentificacion') ?? ayudaPersona}
           sx={{ flex: 1.4, minWidth: 0 }}
         >
           {tiposDelPais.map((x) => (
@@ -114,33 +121,17 @@ export function CamposInvitarTercero({ b, catalogos, empresaId, onEmpresa, cambi
       <Typography variant="overline" component="h3" sx={{ color: 'text.secondary' }}>
         {t('invitaciones.invitarTercero.seccionTercero')}
       </Typography>
-      <TextField
-        required
-        label={t('invitaciones.invitarTercero.campos.nombre')}
-        value={b.nombre}
-        onChange={(ev) => cambiar({ nombre: ev.target.value })}
-        onBlur={() => tocar('nombre')}
-        error={e('nombre') !== null}
-        helperText={e('nombre')}
-      />
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
         <TextField
-          select
-          label={t('invitaciones.invitarTercero.campos.tipoPersona')}
-          value={b.tipoPersona}
-          onChange={(ev) => cambiar({ tipoPersona: ev.target.value as TipoDePersona | '' })}
-          error={e('tipoPersona') !== null}
-          helperText={e('tipoPersona') ?? t('invitaciones.invitarTercero.campos.tipoPersonaAyuda')}
-          slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+          required
+          label={t('invitaciones.invitarTercero.campos.nombre')}
+          value={b.nombre}
+          onChange={(ev) => cambiar({ nombre: ev.target.value })}
+          onBlur={() => tocar('nombre')}
+          error={e('nombre') !== null}
+          helperText={e('nombre')}
           sx={{ flex: 1, minWidth: 0 }}
-        >
-          <MenuItem value="">{t('invitaciones.invitarTercero.campos.tipoPersonaAuto')}</MenuItem>
-          {TIPOS_DE_PERSONA.map((x) => (
-            <MenuItem key={x} value={x}>
-              {t(`invitaciones.invitarTercero.campos.personas.${x}`)}
-            </MenuItem>
-          ))}
-        </TextField>
+        />
         <TextField
           label={t('invitaciones.invitarTercero.campos.nombreComercial')}
           value={b.nombreComercial}

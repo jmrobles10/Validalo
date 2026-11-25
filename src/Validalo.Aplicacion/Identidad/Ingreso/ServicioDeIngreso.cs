@@ -71,17 +71,18 @@ public sealed class ProveedorLocalDeCodigos(IProtectorDeSecretos protector) : IP
 }
 
 /// <summary>
-/// Ingreso directo sin contraseñas (ING-1…ING-4, ING-7): correo → código → cuenta → passkey, o solo passkey. Decisiones: (1) la passkey
-/// (credencial detectable con verificación de usuario obligatoria) vale por dos factores, así que con una passkey registrada se entra solo con
-/// ella (o con el código y luego la passkey si se empezó por el correo); el código del correo es un solo factor y, si la cuenta tiene passkey o
-/// su rol la exige, nunca abre sesión por sí solo; (2) sin passkey y con rol que la exige, el código solo sirve para registrar la primera; (3)
-/// un correo sin cuenta (o de un grupo que no admite el modo directo) recibe la misma respuesta que uno con cuenta. La sesión es la misma que
-/// emite la identidad delegada (JWT HS256 con los scopes efectivos del usuario) más un token de refresco en cookie.
+/// Ingreso directo sin contraseñas (ING-1…ING-4, ING-7): correo → código → cuenta, o solo passkey. Decisiones: (1) la passkey (credencial
+/// detectable con verificación de usuario obligatoria) vale por dos factores y es una forma más de entrar: con una registrada se entra solo con
+/// ella, sin correo ni código; (2) el código del correo basta para abrir sesión a cualquier persona de un grupo, sea cual sea su rol y tenga o no
+/// passkeys: la passkey no es un paso obligatorio después del código (PI-20); (3) solo la exige quien la necesita: un operador de Plataforma, o las
+/// personas de un grupo que activó a propósito «passkey para todos»: ahí el código no abre sesión por sí solo y, sin passkey, solo sirve para registrar
+/// la primera; (4) un correo sin cuenta (o de un grupo que no admite el modo directo) recibe la misma respuesta que uno con cuenta. La sesión es la misma
+/// que emite la identidad delegada (JWT HS256 con los scopes efectivos del usuario) más un token de refresco en cookie.
 /// </summary>
 public sealed partial class ServicioDeIngreso(
     ISesiones sesiones, IEnumerable<IProveedorDeIdentidad> proveedores, CuentasDeIngreso cuentas, IServicioDePasskeys passkeys, IEmisorDeSesiones emisor,
     CookieDeSesionDeUsuario cookie, ICacheDeSesionesDirectas cache, RegistroDeIngresos registro, IConfiguration configuracion, TimeProvider reloj,
-    ConfiguracionesDeSso sso, PoliticaDeIngreso politica, CookieDeSso cookieSso, OpcionesDeSso opcionesDeSso)
+    ConfiguracionesDeSso sso, PoliticaDeIngreso politica, CookieDeSso cookieSso, OpcionesDeSso opcionesDeSso, IProtectorDeSecretos protector)
 {
     /// <summary>El proveedor propio (código por correo); los federados (SSO) se eligen por la configuración del grupo.</summary>
     private IProveedorDeIdentidad Local => proveedores.First(p => p.Id == ProveedorLocalDeCodigos.Codigo);
@@ -120,7 +121,7 @@ public sealed partial class ServicioDeIngreso(
         DateTimeOffset ahora, CancellationToken ct)
     {
         await using var sesion = sesiones.Global(mensajes);
-        var enviar = disponibles.Count > 0 && await RegistrarEnvioAsync(sesion, correo, ahora, ct);
+        var enviar = disponibles.Count > 0 && await RegistrarEnvioAsync(sesion, correo, "ingreso", ahora, ct);
         var inicio = await Local.IniciarAsync(sesion, mensajes, correo, enviar, cliente, ahora, ct);
 
         if (enviar)
@@ -139,12 +140,12 @@ public sealed partial class ServicioDeIngreso(
         return inicio;
     }
 
-    /// <summary>Cabe un código más para ese correo en la última hora (5); registra el envío.</summary>
-    private static async Task<bool> RegistrarEnvioAsync(IDocumentSession sesion, string correo, DateTimeOffset ahora, CancellationToken ct)
+    /// <summary>Cabe un código más para ese correo en la última hora (5) para ese <paramref name="uso"/> (<c>ingreso</c> o <c>reautenticacion</c>, cada uno con su cupo); registra el envío.</summary>
+    private static async Task<bool> RegistrarEnvioAsync(IDocumentSession sesion, string correo, string uso, DateTimeOffset ahora, CancellationToken ct)
     {
-        var limite = await sesion.LoadAsync<LimiteDeAccesoPorCorreo>(LimiteDeAccesoPorCorreo.IdDe(correo, "ingreso"), ct);
+        var limite = await sesion.LoadAsync<LimiteDeAccesoPorCorreo>(LimiteDeAccesoPorCorreo.IdDe(correo, uso), ct);
         var esNuevo = limite is null;
-        limite ??= LimiteDeAccesoPorCorreo.Nuevo(correo, "ingreso");
+        limite ??= LimiteDeAccesoPorCorreo.Nuevo(correo, uso);
         if (!limite.IntentarRegistrar(ahora, LimiteDeAccesoPorCorreo.MaximoDeIngreso))
             return false;
 
@@ -164,6 +165,9 @@ public sealed partial class ServicioDeIngreso(
         var ahora = reloj.GetUtcNow();
         await using var sesion = sesiones.Global();
         var desafio = await CargarAsync(sesion, dto.Desafio, ct);
+        // El código de una reautenticación (step-up) solo confirma una acción de la sesión que lo pidió: nunca abre otra.
+        if (desafio.EsReautenticacion)
+            throw ReglaDeNegocioException.Expirado("desafio-usado", "Este código es para confirmar una acción dentro de Valídalo, no para ingresar. Pide uno nuevo.");
 
         IdentidadVerificada? identidad;
         try
@@ -245,41 +249,42 @@ public sealed partial class ServicioDeIngreso(
     }
 
     /// <summary>
-    /// Con la cuenta ya elegida: si tiene passkey, pide verificarla; si la exige y no la tiene, pide registrar una; si no, abre la sesión con
-    /// solo el código (un factor) y sugiere registrar una.
+    /// Con la cuenta ya elegida: si la cuenta exige passkey (un operador de Plataforma o un grupo con «passkey para todos»), pide verificar la que tiene o registrar
+    /// la primera; si no, abre la sesión con solo el código (un factor), tenga o no passkeys registradas, y a quien no tiene ninguna le sugiere registrar una.
     /// </summary>
     private async Task<PasoDeIngresoDto> ContinuarAsync(IDocumentSession sesion, DesafioDeIngreso desafio, CuentaResuelta cuenta, ContextoDeCliente cliente,
         HttpResponse respuesta, DateTimeOffset ahora, CancellationToken ct)
     {
         desafio.ElegirCuenta(cuenta.Cuenta, ahora);
 
-        // El proveedor de identidad del cliente declaró más de un factor (PI-3, PI-4): vale por sí solo, también para los roles que exigen passkey.
+        // El proveedor de identidad del cliente declaró más de un factor (PI-3, PI-4): vale por sí solo, también donde el grupo exige passkey.
         if (desafio.Sso is { Multifactor: true })
             return await AbrirSesionDeSsoAsync(sesion, desafio, cuenta, cliente, respuesta, ahora, ct);
 
         var registradas = await cuentas.PasskeysAsync(cuenta.Cuenta, ct);
 
-        if (registradas.Count > 0)
-        {
-            var opciones = passkeys.OpcionesDeAutenticacion([.. registradas.Select(p => p.CredencialId)]);
-            desafio.GuardarOpciones(opciones, ahora);
-            sesion.Store(desafio);
-            await sesion.SaveChangesAsync(ct);
-            return new PasoDeIngresoDto("PasskeyRequerida", desafio.Id, Opciones: MapeosDeIngreso.AJson(opciones));
-        }
-
         if (cuenta.ExigePasskey)
         {
-            var opciones = passkeys.OpcionesDeRegistro(ManejadorDe(cuenta.Cuenta), cuenta.Correo, cuenta.Nombre, []);
-            desafio.GuardarOpciones(opciones, ahora);
+            if (registradas.Count > 0)
+            {
+                var opciones = passkeys.OpcionesDeAutenticacion([.. registradas.Select(p => p.CredencialId)]);
+                desafio.GuardarOpciones(opciones, ahora);
+                sesion.Store(desafio);
+                await sesion.SaveChangesAsync(ct);
+                return new PasoDeIngresoDto("PasskeyRequerida", desafio.Id, Opciones: MapeosDeIngreso.AJson(opciones));
+            }
+
+            var opcionesDeRegistro = passkeys.OpcionesDeRegistro(ManejadorDe(cuenta.Cuenta), cuenta.Correo, cuenta.Nombre, []);
+            desafio.GuardarOpciones(opcionesDeRegistro, ahora);
             sesion.Store(desafio);
             await sesion.SaveChangesAsync(ct);
-            return new PasoDeIngresoDto("RegistrarPasskey", desafio.Id, Opciones: MapeosDeIngreso.AJson(opciones));
+            return new PasoDeIngresoDto("RegistrarPasskey", desafio.Id, Opciones: MapeosDeIngreso.AJson(opcionesDeRegistro));
         }
 
         desafio.Consumir(ahora);
         sesion.Store(desafio);
-        var abierta = AbrirSesion(sesion, cuenta, desafio.Sso is not null ? MetodoDeIngreso.Sso : MetodoDeIngreso.Codigo, cliente, respuesta, ahora);
+        var abierta = AbrirSesion(sesion, cuenta, desafio.Sso is not null ? MetodoDeIngreso.Sso : MetodoDeIngreso.Codigo, cliente, respuesta, ahora,
+            sugerirPasskey: desafio.Sso is null && registradas.Count == 0);
         await sesion.SaveChangesAsync(ct);
         await RegistrarUltimoAccesoAsync(cuenta, ahora, ct);
         return new PasoDeIngresoDto("Sesion", desafio.Id, Sesion: abierta);
@@ -449,7 +454,7 @@ public sealed partial class ServicioDeIngreso(
     /// con la duración y la inactividad de su grupo (las de <c>Validalo:Ingreso:Plataforma</c> para un operador) y el ingreso exitoso auditado.
     /// </summary>
     private SesionDirectaDto AbrirSesion(IDocumentSession sesion, CuentaResuelta cuenta, MetodoDeIngreso metodo, ContextoDeCliente cliente,
-        HttpResponse respuesta, DateTimeOffset ahora)
+        HttpResponse respuesta, DateTimeOffset ahora, bool sugerirPasskey = false)
     {
         var (horas, inactividad) = cuenta.Tenant is { } t
             ? (t.SesionHoras, t.InactividadMinutos)
@@ -463,7 +468,7 @@ public sealed partial class ServicioDeIngreso(
         var acceso = EmitirAcceso(cuenta, documento.Id, metodo, inactividad, ahora);
         cookie.Poner(respuesta, token, documento.ExpiraEn);
         return new SesionDirectaDto(acceso.Token, acceso.Expira, documento.Id, metodo.ToString(),
-            SugerirPasskey: metodo == MetodoDeIngreso.Codigo && !cuenta.ExigePasskey);
+            SugerirPasskey: sugerirPasskey);
     }
 
     /// <summary>Token de acceso: vence en <c>Validalo:Ingreso:MinutosAcceso</c> (15) y nunca después de la inactividad, para que renovar a tiempo mantenga la sesión.</summary>
@@ -479,7 +484,7 @@ public sealed partial class ServicioDeIngreso(
     /// Renueva el token de acceso con la cookie <c>vs_usuario</c> y la rota. Sin cookie o con una desconocida ⇒ 401 <c>sin-sesion</c>; reusar una cookie ya
     /// rotada revoca la familia (401 <c>sesion-revocada</c>); revocada ⇒ 401 <c>sesion-revocada</c>; pasada la duración del grupo ⇒ 401 <c>sesion-expirada</c>; sin
     /// renovar durante la inactividad ⇒ 401 <c>sesion-inactiva</c>. Los permisos del token se recalculan con los roles de ahora; si la persona ya no puede entrar
-    /// (desactivada, grupo sin modo directo, ahora exige passkey) la sesión se cierra.
+    /// (desactivada, grupo sin modo directo o con «passkey para todos» recién activado, y la sesión se abrió solo con el código) la sesión se cierra.
     /// </summary>
     public async Task<SesionDirectaDto> RenovarAsync(HttpContext http, ContextoDeCliente cliente, CancellationToken ct)
     {
@@ -524,7 +529,7 @@ public sealed partial class ServicioDeIngreso(
             cache.Olvidar(familia);
             cookie.Borrar(http.Response);
             throw ReglaDeNegocioException.NoAutenticado(motivo ?? "cuenta-no-disponible", motivo == "passkey-requerida"
-                ? "Tu rol ahora exige passkey: ingresa de nuevo y registra una."
+                ? "Tu grupo ahora exige passkey a todas sus personas: ingresa de nuevo y registra una."
                 : "Tu cuenta ya no puede ingresar directo. Pide ayuda a un administrador.");
         }
 

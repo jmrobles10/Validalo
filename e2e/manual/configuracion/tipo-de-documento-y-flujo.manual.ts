@@ -1,4 +1,5 @@
 import { abrirEmbebido } from '../../soporte/embebido';
+import { agregarDocumento } from '../../soporte/editorDeFlujos';
 import { crearEscenario } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -164,17 +165,15 @@ recorrido(
       configuracion: { ajuste: 'Áreas de la empresa y sus miembros', ruta: 'Configuración › Áreas (/areas)', efecto: 'Solo se pueden elegir áreas activas; quién decide en cada una sale de sus miembros.' },
     });
 
-    // 10. Documentos que pide.
-    await app.getByRole('button', { name: 'Agregar documento' }).click();
-    await app.getByRole('combobox', { name: 'Tipo de documento' }).click();
-    await app.getByRole('option', { name: new RegExp(NOMBRE_TIPO) }).click();
+    // 10. Lo que pide el flujo.
+    await agregarDocumento(app, new RegExp(NOMBRE_TIPO));
     await app.getByRole('combobox', { name: 'Lo revisan' }).click();
     await app.getByRole('option', { name: /^Revisión/ }).click();
     await page.keyboard.press('Escape');
     await paso(page, {
       titulo: 'Pide el documento nuevo en el flujo',
       explicacion:
-        '«Documentos que pide» lista lo que el tercero debe cargar. Al agregar uno eliges su tipo (el «Certificado de trabajo en alturas» recién creado ya aparece, con su resumen), qué áreas lo revisan, a quién se le pide, ' +
+        '«Lo que pide el flujo» lista lo que el tercero debe cargar, agrupado por sector de la ficha (un tipo propio de la empresa, como este, va en «Otros documentos»), con una fila cerrada por documento. Con «Agregar» › «Documento» el documento nuevo queda abierto en «Por completar» y eliges su tipo (el «Certificado de trabajo en alturas» recién creado ya aparece, con su resumen), qué áreas lo revisan, a quién se le pide, ' +
         'cuántos aprobadores necesita y si es obligatorio. Toda área debe revisar al menos un documento; sin documentos, cada área aprueba u observa el expediente completo.',
       resaltar: app.getByRole('combobox', { name: 'Tipo de documento' }),
       variantes: [

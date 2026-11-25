@@ -1,4 +1,5 @@
 import { abrirEmbebido } from '../../soporte/embebido';
+import { agregarDocumento } from '../../soporte/editorDeFlujos';
 import { crearEscenario, SST } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
 
@@ -30,15 +31,11 @@ recorrido(
     await app.getByRole('region', { name: 'Etapa 1' }).getByRole('combobox', { name: 'Área' }).click();
     await app.getByRole('option', { name: /^Revisión/ }).click();
     // El RUT se pide a todos: al menos un documento debe pedirse siempre.
-    await app.getByRole('button', { name: 'Agregar documento' }).click();
-    await app.getByRole('combobox', { name: 'Tipo de documento' }).nth(0).click();
-    await app.getByRole('option', { name: /^Registro Único Tributario/ }).click();
-    await app.getByRole('button', { name: 'Agregar documento' }).click();
-    await app.getByRole('combobox', { name: 'Tipo de documento' }).nth(1).click();
-    await app.getByRole('option', { name: new RegExp(SST.nombre) }).click();
+    await agregarDocumento(app, /^Registro Único Tributario/);
+    await agregarDocumento(app, new RegExp(SST.nombre));
 
-    // 2. El atajo «Según la ficha del tercero».
-    await app.getByRole('combobox', { name: 'Se pide a' }).nth(1).click();
+    // 2. El atajo «Según la ficha del tercero» (en el documento recién agregado, que es el que está abierto).
+    await app.getByRole('combobox', { name: 'Se pide a' }).click();
     await app.getByRole('option', { name: 'Según la ficha del tercero', exact: true }).click();
     await expect(app.getByRole('combobox', { name: 'Campo de la ficha' })).toHaveText('Especialidades');
     await paso(page, {
@@ -46,7 +43,7 @@ recorrido(
       explicacion:
         'Además de «Todos» y de los dos tipos de persona, «Se pide a» ofrece «Según la ficha del tercero»: el documento se pide según lo que el tercero declara en su ficha, no según su tipo de persona. ' +
         'El atajo arma la condición sobre las especialidades del tercero; si quieres otro dato de la ficha, cambias el «Campo de la ficha».',
-      resaltar: app.getByRole('combobox', { name: 'Se pide a' }).nth(1),
+      resaltar: app.getByRole('combobox', { name: 'Se pide a' }),
       configuracion: {
         ajuste: 'Se pide a (por documento del flujo)',
         ruta: 'Configuración › Flujos aprobatorios (/flujos)',

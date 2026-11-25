@@ -52,6 +52,27 @@ export function useNombresDeCatalogo(catalogo: string | null, codigos: readonly 
   return nombres;
 }
 
+/**
+ * Nombre de cada código en el catálogo de su campo, para varios campos a la vez (las condiciones compuestas miran más de uno): la clave es `catálogo|código`.
+ * Usa las mismas consultas, y por tanto la misma caché, que `useNombresDeCatalogo`; un campo sin catálogo no consulta.
+ */
+export function useNombresDeCodigos(pares: readonly { catalogo: string | null; codigo: string }[]): ReadonlyMap<string, string> {
+  const consultas = useQueries({
+    queries: pares.map(({ catalogo, codigo }) => ({
+      ...getBuscarEnCatalogoQueryOptions(catalogo ?? '', { q: codigo, limite: 20 }, { request: { empresa: null } }),
+      enabled: catalogo !== null,
+      staleTime: Infinity,
+    })),
+  });
+  const nombres = new Map<string, string>();
+  consultas.forEach((consulta, i) => {
+    const par = pares[i];
+    const entrada = par ? consulta.data?.datos.find((e) => e.codigo === par.codigo) : undefined;
+    if (par && entrada) nombres.set(`${par.catalogo ?? ''}|${par.codigo}`, entrada.nombre);
+  });
+  return nombres;
+}
+
 export function useFlujos(empresaId: string, tipoVinculo?: string, habilitado = true) {
   const opciones = getListarFlujosQueryOptions(tipoVinculo ? { tipoVinculo } : undefined, { request: { empresa: empresaId } });
   return useQuery({ ...opciones, queryKey: conEmpresa(opciones.queryKey, empresaId), enabled: habilitado });

@@ -1,7 +1,7 @@
 import { configurarCliente, ErrorApi, ErrorDeRed, reiniciarCliente, type VersionDocumentoDto } from '@validalo/api-client';
 import { sha256Hex } from '@validalo/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { enviarConXhr, ErrorSubida, falloDeSubida, formatearTamano, subirDocumento, TAMANO_MAXIMO_BYTES, TIPOS_PERMITIDOS, validarArchivo, type EnviarArchivo } from './subida';
+import { enviarConXhr, ErrorSubida, falloDeSubida, formatearTamano, subirDocumento, TAMANO_MAXIMO_BYTES, TIPOS_PERMITIDOS, validarArchivo, versionSubida, type EnviarArchivo } from './subida';
 
 const json = (estado: number, cuerpo: unknown) => new Response(JSON.stringify(cuerpo), { status: estado, headers: { 'Content-Type': 'application/json' } });
 
@@ -157,7 +157,7 @@ describe('subida en dos pasos', () => {
   it('si el archivo ya es una versión, el paso 1 lo dice y no se sube nada', async () => {
     api(() => json(200, { documentoId: 'd1', version: 1, duplicado: true, carga: null }));
     const enviar = vi.fn<EnviarArchivo>();
-    await expect(subirDocumento({ archivo: archivo(), destino: { tipoCanonico: 'RUT' }, enviar })).resolves.toEqual({ tipo: 'duplicado', numero: 1 });
+    await expect(subirDocumento({ archivo: archivo(), destino: { tipoCanonico: 'RUT' }, enviar })).resolves.toEqual({ tipo: 'duplicado', numero: 1, documentoId: 'd1' });
     expect(enviar).not.toHaveBeenCalled();
   });
 
@@ -200,5 +200,21 @@ describe('subida en dos pasos', () => {
     expect(falloDeSubida(new ErrorSubida(0))).toBe('red');
     expect(falloDeSubida(new ErrorSubida(403))).toBe('vencida');
     expect(falloDeSubida(new ErrorApi(422, 'hash-no-coincide', '', null, null))).toBe('otro');
+  });
+});
+
+describe('versionSubida: la versión que quedó en la bóveda tras subir (FD-10)', () => {
+  it('una versión lista dice cuál es y si alguna empresa la recibió', () => {
+    const compartido = { documentoId: 'd1', tipo: 'RUT', version: 2, vinculoId: 'v1', empresaId: 'e1' };
+    expect(versionSubida({ tipo: 'lista', version: version(), compartidos: [compartido] })).toEqual({ documentoId: 'd1', version: 2, compartida: true });
+    expect(versionSubida({ tipo: 'lista', version: version(), compartidos: [] })).toEqual({ documentoId: 'd1', version: 2, compartida: false });
+  });
+
+  it('un archivo que ya estaba trae su documento y su versión, sin saber si se compartió', () => {
+    expect(versionSubida({ tipo: 'duplicado', numero: 1, documentoId: 'd7' })).toEqual({ documentoId: 'd7', version: 1, compartida: null });
+  });
+
+  it('una versión devuelta no sirve: no hay versión que usar', () => {
+    expect(versionSubida({ tipo: 'devuelta', version: version({ estado: 'Devuelta' }) })).toBeNull();
   });
 });

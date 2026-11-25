@@ -40,5 +40,6 @@ export function avisoDelRequisito(requisito: RequisitoExpedienteDto, visor: Docu
     const texto = textoAvisoVigencia(vigencia, t);
     if (texto) return { severidad: severidadAviso(vigencia), texto };
   }
-  return archivoSinLeer(visor) ? { severidad: 'info', texto: t('vinculos.ficha.sinLectura') } : null;
+  // Con la empresa usando IA y sin análisis de este archivo, la conclusión del bloque «Revisión automática» ya lo dice («sin análisis»): no se repite como aviso.
+  return archivoSinLeer(visor) && requisito.conclusionDeRevision?.sugerencia !== 'SinAnalisis' ? { severidad: 'info', texto: t('vinculos.ficha.sinLectura') } : null;
 }

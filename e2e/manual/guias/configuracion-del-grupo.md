@@ -9,7 +9,7 @@ El **grupo** (el tenant) es el cliente de Valídalo: una o varias empresas (razo
 
 > **Nota:** las rutas de la app son `/e/{empresa}/{sección}` dentro del hash de la app web (por ejemplo `/app/#/e/{empresa}/usuarios`); no existe el segmento `/configuracion/`. Una sección no aparece en la barra lateral si la persona no tiene su permiso. Los permisos de administración del grupo (`empresas:administrar`, `usuarios:administrar`, `api-keys:administrar`, `sistemas:administrar`, `sandbox:administrar`) solo los da un rol asignado a **todo el grupo**: un administrador de una sola empresa no los tiene.
 
-**Confirmar con passkey (reautenticación).** Estas acciones piden confirmar con la passkey en los últimos 5 minutos si la persona entró de forma directa: cambiar roles, desactivar a una persona, revocar una passkey, crear, rotar o revocar una API key, rotar la clave de un sistema, desactivarlo o reactivarlo, guardar el SSO y quitar un dominio del SSO. Las sesiones delegadas (iframe de un sistema integrado) no la piden.
+**Confirmar con passkey o con un código del correo (reautenticación).** Estas acciones piden confirmar con la passkey o con un código de 6 dígitos que llega al correo de la cuenta, en los últimos 5 minutos, si la persona entró de forma directa (si el grupo exige passkey a todos, solo con la passkey): cambiar roles, desactivar a una persona, revocar una passkey, crear, rotar o revocar una API key, rotar la clave de un sistema, desactivarlo o reactivarlo, guardar el SSO y quitar un dominio del SSO. Las sesiones delegadas (iframe de un sistema integrado) no la piden.
 
 ## Empresas del grupo
 
@@ -37,18 +37,18 @@ Ruta `/e/{empresa}/usuarios` · permiso `usuarios:administrar`.
 | Nombre y correo | El correo es la cuenta de ingreso. | Sin valor: debe configurarse | Correo en minúsculas, de 3 a 254 caracteres, único en el grupo (409 `usuario-duplicado`). |
 | Rol (una fila por rol) | Define los permisos (tabla siguiente). | Una persona nueva no tiene roles y no puede hacer nada; una fila nueva empieza en Revisor. | Administrador, Revisor, Oficial de cumplimiento, Auditor. |
 | Empresa (alcance del rol) | Dónde vale el rol. | Todo el grupo o la primera empresa, según la fila. | «Todo el grupo» vale en todas las empresas y es el único alcance que da los permisos de administración del grupo. Un rol de todo el grupo elimina el mismo rol por empresa. |
-| Passkey exigida (derivada del rol) | Administrador, Oficial de cumplimiento y Auditor deben registrar passkey; sin ella, el código del correo solo sirve para registrarla. | El Revisor no la exige, salvo «Exigir passkey a todas las personas» en Ingreso. | Solo se muestra si el grupo admite ingreso directo. |
+| Passkey exigida | Ningún rol la exige: el código del correo basta para entrar. Solo aparece «Exigida» si el grupo activó «Exigir passkey a todas las personas» en Ingreso. | Opcional | Solo se muestra si el grupo admite ingreso directo. |
 | Enviar una invitación por correo | Envía la dirección de la app a la persona. | Marcado si el grupo admite ingreso directo. | Con ingreso directo apagado: 422 `ingreso-directo-apagado` al crear (409 al reenviar). |
 | Passkeys y sesiones de la persona | Revocar una passkey la invalida, cierra todas las sesiones de la persona y le avisa por correo. | — | Motivo opcional; revocar pide reautenticación. |
 | Desactivar persona | No vuelve a entrar y se cierran sus sesiones directas; se conserva el historial. | Activa | No hay acción de reactivar. |
 | Límite de usuarios del plan | Con bloqueo suave y el tope alcanzado, el alta manual responde 409 `limite-del-plan-alcanzado`. | Sin límite si no hay plan | Cuentan los usuarios activos. El alta por SSO o por identidad delegada no pasa por este límite. |
 
-| Rol | Permisos | Passkey |
+| Rol | Permisos | Passkey (siempre opcional) |
 |---|---|---|
-| Administrador | Los 31 permisos del grupo (todos los de la tabla de API keys). | Sí |
+| Administrador | Los 31 permisos del grupo (todos los de la tabla de API keys). | No la exige |
 | Revisor | Lecturas (`configuracion:leer`, `terceros:leer`, `vinculos:leer`, `flujos:leer`, `expedientes:leer`, `documentos:leer`, `documentos:descargar`, `certificados:leer`, `consultas:leer`) más `vinculos:escribir` y `expedientes:revisar`. | No |
-| Oficial de cumplimiento | Lecturas más `vinculos:escribir`, `vinculos:bloquear`, `cuentas:aprobar`, `expedientes:revisar`, `expedientes:exportar`, `verificaciones:escribir`, `cumplimiento:decidir`, `auditoria:leer` y `supresiones:resolver`. | Sí |
-| Auditor | Lecturas más `auditoria:leer`, `auditoria:exportar` y `expedientes:exportar`. | Sí |
+| Oficial de cumplimiento | Lecturas más `vinculos:escribir`, `vinculos:bloquear`, `cuentas:aprobar`, `expedientes:revisar`, `expedientes:exportar`, `verificaciones:escribir`, `cumplimiento:decidir`, `auditoria:leer` y `supresiones:resolver`. | No la exige |
+| Auditor | Lecturas más `auditoria:leer`, `auditoria:exportar` y `expedientes:exportar`. | No la exige |
 
 Fuente: `src/Validalo.Dominio/Identidad/Usuario.cs`, `src/Validalo.Aplicacion/Comun/Permisos.cs`, `src/Validalo.Aplicacion/Identidad/IdentidadEndpoints.cs`.
 
@@ -59,10 +59,10 @@ Ruta `/e/{empresa}/ingreso` · permiso `usuarios:administrar`. Define cómo entr
 | Ajuste | Qué afecta | Por defecto | Variantes y límites |
 |---|---|---|---|
 | Desde el sistema integrado (modo Delegado) | El sistema integrado (SRM, Marco, Portal) autentica a la persona con una identidad firmada; es lo que usan las pantallas embebidas. | Marcado | Apagado, las sesiones delegadas responden 403 `modo-de-ingreso-no-admitido`. Esas sesiones duran 30 minutos fijos. |
-| Directo a Valídalo (modo Directo) | La persona entra con correo y código de 6 dígitos, y con passkey si aplica. | Desmarcado | Encenderlo completa el grupo de los usuarios antiguos; apagarlo cierra las sesiones directas abiertas. Debe haber al menos un modo (422 `modos-de-ingreso-invalidos`). Activar el SSO exige este modo. |
+| Directo a Valídalo (modo Directo) | La persona entra con correo y código de 6 dígitos, o con passkey si registró una. | Desmarcado | Encenderlo completa el grupo de los usuarios antiguos; apagarlo cierra las sesiones directas abiertas. Debe haber al menos un modo (422 `modos-de-ingreso-invalidos`). Activar el SSO exige este modo. |
 | Duración máxima de la sesión | Pasado ese tiempo hay que ingresar de nuevo; no se extiende al renovar. Solo vale para ingreso directo. | 8 horas | La pantalla ofrece 1, 2, 4, 8, 12 y 24 horas; la API acepta de 1 a 24 (422 `sesion-invalida`). |
 | Cerrar por inactividad | Cierra la sesión si no hay actividad en ese tiempo. | 30 minutos | La pantalla ofrece 5, 10, 15, 30, 60, 120, 240 y 480; la API acepta de 5 a 480 y no más que la sesión (422 `inactividad-invalida`). |
-| Exigir passkey a todas las personas del grupo | Todas deben registrar passkey en su próximo ingreso. | Apagado | Apagado: la exigen solo Administrador, Oficial y Auditor. Un ingreso por SSO con varios factores declarados no pide passkey. |
+| Exigir passkey a todas las personas del grupo | Opcional. Si se activa, todas deben registrar passkey en su próximo ingreso (el código del correo solo sirve para registrarla), no pueden quitar la última, las sesiones abiertas solo con el código se cierran al renovarse y las acciones sensibles se confirman solo con la passkey. | Apagado | Apagado: nadie la exige, sea cual sea su rol; el código del correo basta. Un ingreso por SSO con varios factores declarados no pide passkey. |
 
 Parámetros fijos, no configurables: el código del correo vence a los 5 minutos y admite 5 intentos; la ceremonia dura 10 minutos; un correo sin cuenta recibe un desafío señuelo para no revelar quién existe.
 

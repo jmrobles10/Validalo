@@ -64,7 +64,8 @@ recorrido(
     await paso(page, {
       titulo: 'Sube un soporte si no lo tienes',
       explicacion:
-        'Si el documento que necesitas no está en tu bóveda, usa «Subir un soporte» dentro del mismo recuadro. Se abre una ventana para subirlo sin salir de la sección, así que tus cambios sin guardar siguen ahí; al terminar, eliges el archivo que subiste en la lista del recuadro.',
+        'Si el documento que necesitas no está en tu bóveda, usa «Subir un soporte» dentro del mismo recuadro: primero eliges qué documento es (por ejemplo, tu RUT) y se abre una ventana para subirlo sin salir de la sección, así que tus cambios sin guardar siguen ahí. ' +
+        'Al terminar, el documento queda marcado como soporte de la sección y, si es tu RUT o tu Cámara de comercio, la sección lo lee y te propone los datos para que los uses o los corrijas.',
       resaltar: subir,
     });
   },

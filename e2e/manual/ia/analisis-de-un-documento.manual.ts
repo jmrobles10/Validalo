@@ -43,7 +43,7 @@ recorrido(
     await paso(paginaSofia, {
       titulo: 'Lee el análisis del documento',
       explicacion:
-        'Debajo del documento aparece el bloque «Revisión automática» con la confianza de la lectura, la fecha y el modelo que lo analizó, si el archivo es legible y el tipo de documento detectado. Si el tipo no coincide con el que se pidió, un aviso lo señala para que revises que el tercero subió el documento correcto.',
+        'Debajo del documento aparece el bloque «Revisión automática»: arriba, en gris, la fecha, el modelo que lo analizó y la confianza de la lectura; luego la conclusión de la IA, que es lo único con color; y al pie, en una línea, si el archivo es legible y el tipo de documento detectado. Si el tipo no coincide con el que se pidió, un aviso lo señala para que revises que el tercero subió el documento correcto.',
       resaltar: panel,
       variantes: [
         { cuando: 'El archivo no es legible', entonces: 'El análisis dice «No: revisa el archivo a mano» y no se usa para decidir.' },
@@ -51,12 +51,12 @@ recorrido(
       ],
     });
 
-    const datos = panel.getByText(/Ver \d+ datos? más/).first();
+    const datos = panel.getByRole('button', { name: 'Ver lo que leyó la IA' });
     await paso(paginaSofia, {
       titulo: 'Revisa los datos que extrajo la IA',
       explicacion:
-        'La sección «Datos extraídos» lista los campos que la IA leyó del documento, como el NIT, la razón social, el representante legal o el tipo de contribuyente. Con «Ver más datos» despliegas el resto. Compara estos datos con lo que declaró el tercero antes de aprobar el área.',
-      resaltar: [panel.getByText('Datos extraídos', { exact: true }).first(), datos],
+        'Con «Ver lo que leyó la IA», al pie del bloque, despliegas los campos que la IA leyó del documento, como el NIT, la razón social, el representante legal o el tipo de contribuyente. Compara estos datos con lo que declaró el tercero antes de aprobar el área.',
+      resaltar: datos,
     });
   },
 );

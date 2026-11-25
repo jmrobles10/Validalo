@@ -9,7 +9,7 @@ import { IconoCarga } from '../shared/componentes';
 import { BotonSso } from './BotonSso';
 import { esCorreoPlausible } from './estado';
 import { mensajeDeIngreso } from './mensajes';
-import { firmarConPasskey, soportaPasskeys } from './passkeys';
+import { firmarConPasskeyConReintento, soportaPasskeys } from './passkeys';
 import { useIniciarSso, useSsoDelCorreo } from './useSso';
 import { useUiCondicionalDePasskeys } from './useUiCondicional';
 
@@ -46,9 +46,10 @@ export function PasoCorreo({ correoInicial = '', alCodigo, alResultado }: PasoCo
   const conPasskey = useMutation({
     mutationFn: async () => {
       const { desafio, opciones } = await obtenerOpcionesPasskeyIngreso(SIN_CREDENCIAL);
-      // El navegador solo admite una petición de passkey a la vez: la del autocompletado se libera antes de abrir la ventana.
+      // El navegador solo admite una petición de passkey a la vez: la del autocompletado se aborta antes de abrir la ventana. Chrome rechaza su promesa
+      // antes de liberarla por dentro, así que la ventana puede chocar un instante con «A request is already pending»: la firma reintenta sola.
       await detenerCondicional();
-      const respuesta = await firmarConPasskey(opciones);
+      const respuesta = await firmarConPasskeyConReintento(opciones);
       return verificarPasskeyIngreso({ desafio, respuesta }, SIN_CREDENCIAL);
     },
     onSuccess: alResultado,

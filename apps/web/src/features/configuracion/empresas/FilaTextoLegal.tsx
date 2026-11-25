@@ -43,8 +43,9 @@ export function FilaTextoLegal({ empresaId, empresaNombre, ruta, vigente, puedeE
 
   return (
     <Box component="li" sx={{ py: 1, '& + &': { borderTop: 1, borderColor: 'divider' } }}>
-      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', minHeight: 32 }}>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+      {/* En un detalle angosto (o en el celular) los botones pasan debajo del nombre en vez de apretarlo. */}
+      <Stack direction="row" sx={{ alignItems: 'center', minHeight: 32, flexWrap: 'wrap', columnGap: 1.5, rowGap: 0.5 }}>
+        <Box sx={{ flex: '1 1 220px', minWidth: 0 }}>
           <Typography variant="subtitle1" component="h4">
             {nombre}
           </Typography>
@@ -61,15 +62,19 @@ export function FilaTextoLegal({ empresaId, empresaNombre, ruta, vigente, puedeE
             </Typography>
           )}
         </Box>
-        {vigente && modo !== 'editar' && (
-          <Button variant="text" size="small" startIcon={modo === 'ver' ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />} onClick={() => setModo(modo === 'ver' ? 'cerrado' : 'ver')} aria-expanded={modo === 'ver'}>
-            {modo === 'ver' ? t('empresasGrupo.textos.ocultar') : t('empresasGrupo.textos.ver')}
-          </Button>
-        )}
-        {puedeEscribir && modo !== 'editar' && (
-          <Button variant="text" size="small" startIcon={<FilePen size={16} aria-hidden />} onClick={editar}>
-            {vigente ? t('empresasGrupo.textos.publicarNueva') : t('empresasGrupo.textos.publicarPrimera')}
-          </Button>
+        {modo !== 'editar' && (vigente !== null || puedeEscribir) && (
+          <Stack direction="row" sx={{ alignItems: 'center', flexWrap: 'wrap', columnGap: 1, rowGap: 0.5, ml: { xs: -1, sm: 'auto' } }}>
+            {vigente && (
+              <Button variant="text" size="small" startIcon={modo === 'ver' ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />} onClick={() => setModo(modo === 'ver' ? 'cerrado' : 'ver')} aria-expanded={modo === 'ver'}>
+                {modo === 'ver' ? t('empresasGrupo.textos.ocultar') : t('empresasGrupo.textos.ver')}
+              </Button>
+            )}
+            {puedeEscribir && (
+              <Button variant="text" size="small" startIcon={<FilePen size={16} aria-hidden />} onClick={editar}>
+                {vigente ? t('empresasGrupo.textos.publicarNueva') : t('empresasGrupo.textos.publicarPrimera')}
+              </Button>
+            )}
+          </Stack>
         )}
       </Stack>
 

@@ -1,6 +1,6 @@
 # API · Identidad
 
-66 operaciones en 14 recursos.
+68 operaciones en 14 recursos.
 
 ## Gestión de ingreso
 
@@ -1823,7 +1823,7 @@ curl -X POST "https://{host}/api/v1/mi-cuenta/sesiones/3fa85f64-5717-4562-b3fc-2
 
 ## Mi cuenta seguridad
 
-Seguridad de la cuenta de quien entró directo (Mi cuenta): reautenticación con la passkey para las acciones sensibles (step-up, PI-13) y códigos de recuperación de un solo uso que respaldan la passkey (PI-18). Solo con una sesión directa; con otra credencial, 403 `solo-ingreso-directo`.
+Seguridad de la cuenta de quien entró directo (Mi cuenta): reautenticación con la passkey o con un código del correo para las acciones sensibles (step-up, PI-13, PI-20) y códigos de recuperación de un solo uso que respaldan la passkey (PI-18). Solo con una sesión directa; con otra credencial, 403 `solo-ingreso-directo`.
 
 ### `GET /api/v1/mi-cuenta/codigos-de-recuperacion`
 
@@ -1973,6 +1973,91 @@ curl -X POST "https://{host}/api/v1/mi-cuenta/reautenticacion" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
   -d '{"desafio":"3fa85f64-5717-4562-b3fc-2c963f66afa6","respuesta":{}}'
+```
+
+Respuesta `200`:
+
+```json
+{
+  "hasta": "2026-11-12T15:00:00Z",
+  "minutos": 1
+}
+```
+
+</details>
+
+### `POST /api/v1/mi-cuenta/reautenticacion/codigo`
+
+**Enviar codigo de reautenticacion.** Me envía al correo un código de 6 dígitos para confirmar una acción sensible, como alternativa a la passkey (PI-20). Hasta 5 por hora. 403 `reautenticacion-solo-con-passkey` si mi cuenta debe confirmar con la passkey (operador de Plataforma, grupo con «passkey para todos»); 429 `limite-de-envios`.
+
+**Cualquier sesión autenticada · API (`/api/v1`) · SDK: `enviarCodigoDeReautenticacion`**
+
+**Respuestas**
+
+- `200` OK — CodigoSolicitadoDto
+- `404` No encontrado
+
+Campos de la respuesta `200`:
+
+| Campo | Tipo | Requerido | Detalle |
+|---|---|---|---|
+| `desafio` | uuid | sí |  |
+| `expira` | fecha y hora | sí |  |
+| `mensaje` | texto | sí |  |
+
+<details><summary>Ejemplo de petición y respuesta</summary>
+
+```bash
+curl -X POST "https://{host}/api/v1/mi-cuenta/reautenticacion/codigo" \
+  -H "Authorization: Bearer $TOKEN_DE_SESION" \
+  -H "Idempotency-Key: $(uuidgen)"
+```
+
+Respuesta `200`:
+
+```json
+{
+  "desafio": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "expira": "2026-11-12T15:00:00Z",
+  "mensaje": "Texto de ejemplo."
+}
+```
+
+</details>
+
+### `POST /api/v1/mi-cuenta/reautenticacion/codigo/verificar`
+
+**Confirmar reautenticacion con codigo.** Verifica el código del correo y deja la sesión reautenticada unos minutos, igual que la passkey. 422 `codigo-invalido` (con `intentosRestantes`); 410 `codigo-vencido` o `desafio-usado`; 429 `codigo-bloqueado`.
+
+**Cualquier sesión autenticada · API (`/api/v1`) · SDK: `confirmarReautenticacionConCodigo`**
+
+**Cuerpo de la petición** (`application/json`, VerificarCodigoDto)
+
+| Campo | Tipo | Requerido | Detalle |
+|---|---|---|---|
+| `desafio` | uuid | sí |  |
+| `codigo` | texto | sí |  |
+
+**Respuestas**
+
+- `200` OK — ReautenticacionDto
+- `404` No encontrado
+
+Campos de la respuesta `200`:
+
+| Campo | Tipo | Requerido | Detalle |
+|---|---|---|---|
+| `hasta` | fecha y hora | sí |  |
+| `minutos` | entero | sí |  |
+
+<details><summary>Ejemplo de petición y respuesta</summary>
+
+```bash
+curl -X POST "https://{host}/api/v1/mi-cuenta/reautenticacion/codigo/verificar" \
+  -H "Authorization: Bearer $TOKEN_DE_SESION" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"desafio":"3fa85f64-5717-4562-b3fc-2c963f66afa6","codigo":"CODIGO_EJEMPLO"}'
 ```
 
 Respuesta `200`:

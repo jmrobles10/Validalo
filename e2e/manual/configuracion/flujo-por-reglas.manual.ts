@@ -1,4 +1,5 @@
 import { abrirEmbebido } from '../../soporte/embebido';
+import { agregarDocumento } from '../../soporte/editorDeFlujos';
 import { abrirExpedienteManual } from '../../soporte/flujos';
 import { crearEscenario, expedienteAbierto, invitar, nuevoTercero } from '../../soporte/semilla';
 import { expect, paso, recorrido } from '../nucleo';
@@ -65,9 +66,7 @@ recorrido(
     });
 
     // 3. El RUT y la publicación.
-    await app.getByRole('button', { name: 'Agregar documento' }).click();
-    await app.getByRole('combobox', { name: 'Tipo de documento' }).nth(0).click();
-    await app.getByRole('option', { name: /Registro Único Tributario/ }).click();
+    await agregarDocumento(app, /Registro Único Tributario/);
     await app.getByRole('button', { name: 'Crear borrador' }).click();
     await expect(app.getByRole('button', { name: 'Publicar v1' })).toBeVisible();
     await app.getByRole('button', { name: 'Publicar v1' }).click();

@@ -365,27 +365,91 @@ public sealed class IngresoTests
         Codigo(() => tenant.FijarIngreso(ModoDeIngreso.Directo, 1, 90, false)).ShouldBe("inactividad-invalida"); // más que la sesión
     }
 
-    [Theory]
-    [InlineData(Rol.Administrador, true)]
-    [InlineData(Rol.OficialCumplimiento, true)]
-    [InlineData(Rol.Auditor, true)]
-    [InlineData(Rol.Revisor, false)]
-    public void Los_roles_que_exigen_passkey_son_administrador_cumplimiento_y_auditor(Rol rol, bool exige)
+    [Fact]
+    public void La_passkey_para_todos_nace_apagada_y_solo_el_grupo_la_enciende_a_proposito()
     {
-        var usuario = Usuario.Crear("Ana", "ana@aceros.co", null, Ahora);
-        usuario.AsignarRoles([new RolAsignado(rol, Guid.NewGuid())]);
+        // Antes la exigían los roles Administrador, OficialCumplimiento y Auditor (PI-20 lo retiró): ahora ningún rol la exige y solo cuenta la opción del grupo.
+        var tenant = Tenant.Crear("grupo-y", "Grupo Y", null, null, Ahora);
+        tenant.PasskeyParaTodos.ShouldBeFalse();
+        tenant.FijarIngreso(ModoDeIngreso.Directo, 8, 30, passkeyParaTodos: false);
+        tenant.PasskeyParaTodos.ShouldBeFalse();
 
-        usuario.ExigePasskey(paraTodosEnElGrupo: false).ShouldBe(exige);
-        usuario.ExigePasskey(paraTodosEnElGrupo: true).ShouldBeTrue();
+        tenant.FijarIngreso(ModoDeIngreso.Directo, 8, 30, passkeyParaTodos: true);
+        tenant.PasskeyParaTodos.ShouldBeTrue();
+        tenant.FijarIngreso(ModoDeIngreso.Directo, 8, 30, passkeyParaTodos: false);
+        tenant.PasskeyParaTodos.ShouldBeFalse();
+    }
+
+    // ---------- reautenticación con el código del correo (PI-20) ----------
+
+    private static (DesafioDeIngreso Desafio, string Codigo) CodigoDeReautenticacion(Guid? sesionId = null) =>
+        DesafioDeIngreso.ParaCodigoDeReautenticacion(new CuentaDeIngreso(TipoDePropietario.Usuario, Guid.NewGuid(), "u1"), "ana@aceros.co", sesionId ?? Guid.NewGuid(), Ahora,
+            "10.0.0.1", "Chrome");
+
+    [Fact]
+    public void El_codigo_de_reautenticacion_nace_de_una_sesion_con_la_mecanica_del_codigo_de_ingreso()
+    {
+        var sesionId = Guid.NewGuid();
+        var (desafio, codigo) = CodigoDeReautenticacion(sesionId);
+
+        codigo.ShouldMatch("^[0-9]{6}$");
+        desafio.CodigoHash.ShouldNotBeNull().ShouldNotContain(codigo);
+        desafio.EsReautenticacion.ShouldBeTrue();
+        desafio.SesionId.ShouldBe(sesionId);
+        desafio.Cuenta.ShouldNotBeNull();
+        desafio.EsSenuelo.ShouldBeFalse();
+        desafio.Etapa.ShouldBe(EtapaDeIngreso.CodigoEnviado);
+        desafio.Expira.ShouldBe(Ahora.AddMinutes(5));
     }
 
     [Fact]
-    public void Un_usuario_sin_roles_no_exige_passkey_salvo_que_el_grupo_la_pida_a_todos()
+    public void El_codigo_de_reautenticacion_correcto_consume_el_desafio_y_no_sirve_dos_veces()
     {
-        var usuario = Usuario.Crear("Ana", "ana@aceros.co", null, Ahora, tenantId: Guid.NewGuid());
-        usuario.TenantId.ShouldNotBeNull();
-        usuario.ExigePasskey(false).ShouldBeFalse();
-        usuario.ExigePasskey(true).ShouldBeTrue();
+        var (desafio, codigo) = CodigoDeReautenticacion();
+
+        desafio.VerificarCodigoDeReautenticacion(" " + codigo + " ", Ahora.AddMinutes(1)).ShouldBeTrue();
+
+        desafio.Etapa.ShouldBe(EtapaDeIngreso.Consumido);
+        desafio.CodigoHash.ShouldBeNull();
+        Codigo(() => desafio.VerificarCodigoDeReautenticacion(codigo, Ahora.AddMinutes(1))).ShouldBe("desafio-usado");
+    }
+
+    [Fact]
+    public void El_codigo_de_reautenticacion_incorrecto_cuenta_intentos_y_al_quinto_se_bloquea_aunque_luego_llegue_el_correcto()
+    {
+        var (desafio, codigo) = CodigoDeReautenticacion();
+        var malo = codigo == "000000" ? "111111" : "000000";
+
+        for (var i = 1; i <= DesafioDeIngreso.IntentosMaximos; i++)
+        {
+            desafio.VerificarCodigoDeReautenticacion(malo, Ahora).ShouldBeFalse();
+            desafio.IntentosRestantes.ShouldBe(DesafioDeIngreso.IntentosMaximos - i);
+            desafio.Etapa.ShouldBe(EtapaDeIngreso.CodigoEnviado);
+        }
+
+        var e = Should.Throw<ReglaDeNegocioException>(() => desafio.VerificarCodigoDeReautenticacion(codigo, Ahora));
+        e.Codigo.ShouldBe("codigo-bloqueado");
+        e.Tipo.ShouldBe(TipoFalla.DemasiadosIntentos);
+    }
+
+    [Fact]
+    public void El_codigo_de_reautenticacion_vencido_responde_410_aunque_sea_el_correcto()
+    {
+        var (desafio, codigo) = CodigoDeReautenticacion();
+
+        var e = Should.Throw<ReglaDeNegocioException>(() => desafio.VerificarCodigoDeReautenticacion(codigo, Ahora.AddMinutes(5)));
+        e.Codigo.ShouldBe("codigo-vencido");
+        e.Tipo.ShouldBe(TipoFalla.Expirado);
+    }
+
+    [Fact]
+    public void Un_desafio_que_no_es_de_reautenticacion_con_codigo_no_se_verifica_como_tal()
+    {
+        var (deIngreso, codigo) = ConCuenta();
+        Codigo(() => deIngreso.VerificarCodigoDeReautenticacion(codigo, Ahora)).ShouldBe("desafio-usado");
+
+        var porPasskey = DesafioDeIngreso.ParaReautenticacion(new CuentaDeIngreso(TipoDePropietario.Usuario, Guid.NewGuid(), "u1"), "ana@aceros.co", Guid.NewGuid(), Ahora, null, null);
+        Codigo(() => porPasskey.VerificarCodigoDeReautenticacion("123456", Ahora)).ShouldBe("desafio-usado");
     }
 
     // ---------- operadores directos y límites ----------
@@ -438,6 +502,19 @@ public sealed class IngresoTests
     }
 
     [Fact]
+    public void El_correo_del_codigo_de_reautenticacion_dice_para_que_es_y_no_lo_confunde_con_un_ingreso()
+    {
+        var mensaje = Redactor().Redactar(new CorreoDeAccesoPendiente(PlantillaCorreo.CodigoDeReautenticacion, "ana@aceros.co", "x", Ahora.AddMinutes(5), null, null), "482915");
+
+        mensaje.Asunto.ShouldBe("Tu código para confirmar una acción en Valídalo");
+        mensaje.Texto.ShouldContain("482915");
+        mensaje.Html.ShouldContain("482915");
+        mensaje.Texto.ShouldContain("Si no fuiste tú");
+        mensaje.Texto.ShouldNotContain("ingresar");
+        mensaje.Texto.ShouldNotContain("/e/");
+    }
+
+    [Fact]
     public void La_invitacion_a_entrar_remite_a_la_app_con_el_grupo_y_los_roles_y_no_lleva_secreto()
     {
         var mensaje = Redactor().Redactar(new CorreoDeAccesoPendiente(PlantillaCorreo.InvitacionDeUsuario, "ana@aceros.co", "x", Ahora, "Grupo Norte", "Administrador, Auditor"), "-");
@@ -446,6 +523,8 @@ public sealed class IngresoTests
         mensaje.Texto.ShouldContain("como Administrador, Auditor");
         mensaje.Texto.ShouldContain("https://valida.test/app/");
         mensaje.Texto.ShouldContain("contraseña", Case.Insensitive);
+        mensaje.Texto.ShouldNotContain("si tu rol lo exige"); // ningún rol exige passkey: es opcional
+        mensaje.Html.ShouldNotContain("si tu rol lo exige");
         mensaje.Html.ShouldContain("https://valida.test/app/");
     }
 }

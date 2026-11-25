@@ -25,21 +25,21 @@ recorrido(
     const e = await crearEscenario();
     const app = await abrirEmbebido(page, e, e.ana, e.sur, 'empresas');
     await expect(app.getByRole('heading', { level: 1, name: 'Empresas del grupo' })).toBeVisible();
-    await expect(app.getByRole('table', { name: 'Empresas del grupo' })).toBeVisible();
+    await expect(app.getByRole('list', { name: 'Razones sociales' })).toBeVisible();
 
     // 1. Las empresas del grupo.
     await paso(page, {
       titulo: 'Abre Configuración › Empresas del grupo',
       explicacion:
-        'La tabla lista las razones sociales del grupo con su identificación, su prefijo y si están activas. Cada empresa decide por su cuenta: no ve las decisiones de las otras, aunque compartan usuarios y configuración del grupo. ' +
-        'Al elegir una fila se abre debajo el detalle de esa empresa, con sus textos legales.',
-      resaltar: app.getByRole('table', { name: 'Empresas del grupo' }),
+        'La lista muestra las razones sociales del grupo con su identificación y su prefijo (y «Inactiva» en las que ya no operan). Cada empresa decide por su cuenta: no ve las decisiones de las otras, aunque compartan usuarios y configuración del grupo. ' +
+        'Al elegir una empresa de la lista se ve a su lado (o debajo, en pantallas angostas) su detalle, con su estado y sus textos legales.',
+      resaltar: app.getByRole('list', { name: 'Razones sociales' }),
       configuracion: {
         ajuste: 'Empresas del grupo',
         ruta: 'Configuración › Empresas del grupo (/empresas)',
         efecto: 'Cada empresa tiene sus propios flujos, áreas, textos legales y folios.',
       },
-      variantes: [{ cuando: 'Una empresa está inactiva', entonces: 'Su fila sale con el estado «Inactiva» y sus textos legales no se pueden publicar de nuevo.' }],
+      variantes: [{ cuando: 'Una empresa está inactiva', entonces: 'Su fila de la lista dice «Inactiva» y sus textos legales no se pueden publicar de nuevo.' }],
     });
 
     // 2. Datos de la empresa nueva.
@@ -62,12 +62,13 @@ recorrido(
     });
     await dialogo.getByRole('button', { name: 'Agregar empresa', exact: true }).click();
     await expect(app.getByText(`${RAZON_SOCIAL} quedó en el grupo.`, { exact: false })).toBeVisible();
-    const fila = app.getByRole('row', { name: `Ver ${RAZON_SOCIAL}` });
+    const fila = app.getByRole('button', { name: `Ver ${RAZON_SOCIAL}` });
     await expect(fila).toBeVisible();
-    await expect(fila).toContainText('Activa');
+    await expect(fila).toContainText(PREFIJO);
 
     // 3. La empresa nueva, sin textos todavía.
     await fila.click();
+    await expect(app.getByRole('region', { name: RAZON_SOCIAL })).toContainText('Activa');
     const textos = app.getByRole('list', { name: 'Textos legales' });
     await expect(textos).toBeVisible();
     await expect(textos.getByRole('listitem').filter({ hasText: 'Autorización de tratamiento de datos' })).toContainText('Sin publicar');
